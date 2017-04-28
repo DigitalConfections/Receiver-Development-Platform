@@ -31,8 +31,6 @@
 #define I2C_TIMEOUT_SUPPORT /* limit number of tries for i2c success */
 // #define SUPPORT_I2C_CLEARBUS_FUNCTION
 
-#define TRIES	10
-
 #ifndef BOOL
 typedef uint8_t BOOL;
 #endif
