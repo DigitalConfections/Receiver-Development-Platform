@@ -267,6 +267,14 @@ typedef uint16_t BatteryLevel; // in milliVolts
 #define VOLTS_3_19 (((319 * BATTERY_VOLTAGE_COEFFICIENT) / 100) - POWER_SUPPLY_VOLTAGE_DROP_MV) 
 #define VOLTS_3_0 ((3 * BATTERY_VOLTAGE_COEFFICIENT) - POWER_SUPPLY_VOLTAGE_DROP_MV) 
 
+typedef enum {
+	Minutes_Seconds, /* minutes up to 59 */
+	Hours_Minutes_Seconds, /* hours up to 23 */
+	Day_Month_Year_Hours_Minutes_Seconds, /* Year up to 99 */
+	Minutes_Seconds_Elapsed, /* minutes up to 99 */
+	Time_Format_Not_Specified
+} TimeFormat;
+
 #define NO_TIME_SPECIFIED (-1)
 
 #endif // DEFS_H

@@ -35,12 +35,32 @@
 
 #define LCD_I2C_SLAVE_ADDRESS	0x78
 
+/**
+*/
 void LCD_init(uint8_t num_lines, uint8_t num_col, uint8_t i2cAddr, ContrastType contrast );
+
+/**
+*/
 void LCD_print_screen(char buffer[NUMBER_OF_LCD_ROWS][DISPLAY_WIDTH_STRING_SIZE]);
+
+/**
+*/
 size_t LCD_print_row(char *buffer, LcdRowType row); // Print buffer at row, col=0
+
+/**
+*/
 size_t LCD_print_row_col(char *buffer, LcdRowType row, LcdColType col); // Print buffer at row, col
+
+/**
+*/
 void LCD_set_cursor_row_col(LcdRowType row, LcdColType col);
+
+/**
+*/
 void LCD_blink_cursor_row_col(BOOL on, LcdRowType row, LcdColType col); // Move cursor to row,col and turn blinking on/off
+
+/**
+*/
 void LCD_set_contrast(ContrastType contrast);
 
 #endif // #ifdef INCLUDE_ST7036_SUPPORT

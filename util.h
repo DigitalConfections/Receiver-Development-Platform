@@ -32,12 +32,35 @@
 
 #include "defs.h"
 
-/*
-EEPROM Helper Utility Functions
+/***********************************************************************************************
+EEPROM Utility Functions
+************************************************************************************************/
+
+/**
+Writes a short (byte) to the EEPROM memory location specified by ee_var only if that value
+differs from what is already stored in EEPROM.
+ee_var is the pointer to EE prom memory
+val = byte value to be written
 */
+void storeEEbyteIfChanged(uint8_t* ee_var, uint8_t val);
 
-void storeEEbyteIfChanged(uint8_t* ee_var, uint8_t global);
-void storeEEdwordIfChanged(uint32_t* ee_var, uint32_t global);
+/**
+Writes a long (4 bytes) to the EEPROM memory location specified by ee_var only if that value
+differs from what is already stored in EEPROM.
+ee_var is the pointer to EE prom memory
+val = long value to be written
+*/
+void storeEEdwordIfChanged(uint32_t* ee_var, uint32_t val);
 
+/***********************************************************************************************
+Print Formatting Utility Functions
+************************************************************************************************/
+
+/**
+str = pointer to char[] of size 10 or greater
+timerVal = time (in seconds) to be converted to a string
+tf = format to be applied in creating the string
+*/
+void timeValToString(char *str, int32_t timeVal, TimeFormat tf);
 
 #endif /* UTIL_H_ */

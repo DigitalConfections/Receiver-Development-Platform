@@ -431,27 +431,66 @@ typedef struct
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #ifdef INCLUDE_SI5351_SUPPORT
 
+/**
+*/
 	void si5351_init(Si5351_Xtal_load_pF, Frequency_Hz);
+
+/**
+*/
 	BOOL si5351_set_freq(Frequency_Hz, Si5351_clock);
+
+/**
+*/
 	Frequency_Hz si5351_get_frequency(Si5351_clock clock);
+
+/**
+*/
 	void si5351_clock_enable(Si5351_clock, BOOL);
+
+/**
+*/
 	void si5351_drive_strength(Si5351_clock, Si5351_drive);
+
+/**
+*/
 	void si5351_set_correction(int32_t);
+
+/**
+*/
 	int32_t si5351_get_correction(void);
+
+/**
+*/
 	void si5351_set_vcoB_freq(Frequency_Hz);
 
+/**
+*/
 	BOOL si5351_write(uint8_t, uint8_t);
+
+/**
+*/
 	void pll_reset(Si5351_pll);
 
-	#ifdef SUPPORT_STATUS_READS
+#ifdef SUPPORT_STATUS_READS
+/**
+*/
 	void si5351_read_status(void);
-	#endif
+#endif // #ifdef SUPPORT_STATUS_READS
 
-	#ifdef DEBUGGING_ONLY
+#ifdef DEBUGGING_ONLY
+/**
+*/
 	BOOL write_register_map(void);
+	
+/**
+*/
 	BOOL compare_with_register_map(void);
+	
+/**
+*/
 	void dump_registers(void);
-	#endif
+
+#endif // #ifdef DEBUGGING_ONLY
 
 #endif // #ifdef INCLUDE_SI5351_SUPPORT 
 

@@ -141,45 +141,6 @@ BOOL pcf2129_read_time(int32_t* val, char* buffer, TimeFormat format)
 	return osf;
 }
 
-void timeValToString(char *str, int32_t timeVal)
-{
-	int32_t temp;
-	uint8_t hold;
-	uint8_t index=7;
-	
-	if(timeVal < 0)
-	{
-		timeVal = -timeVal;
-		str[9] = '\0';
-		str[0] = '-';
-		index = 8;
-	}
-	else
-	{
-		str[8] = '\0';
-	}
-	
-	
-	str[index--] = '0' + (timeVal % 10); // seconds
-	temp = timeVal / 10;
-	str[index--] = '0' + (temp % 6); // 10s of seconds
-	temp /= 6;
-	
-	str[index--] = ':';
-	
-	str[index--] = '0' + (temp % 10); // minutes
-	temp /= 10;
-	str[index--] = '0' + (temp % 6); // 10s of minutes
-	temp /= 6;
-	
-	str[index--] = ':';
-	
-	hold = temp % 24;
-	str[index--] = '0' + (hold % 10); // hours
-	hold /= 10;
-	str[index--] = '0' + hold; // 10s of hours
-}
-
 void pcf2129_init(void)
 {
 	uint8_t d = 0;

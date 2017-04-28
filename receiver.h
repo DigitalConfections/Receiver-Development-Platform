@@ -118,14 +118,34 @@ typedef enum
 } FrequencySource;
 
 #ifdef INCLUDE_RECEIVER_SUPPORT
+/**
+*/
 	void init_receiver(Receiver* rx);
+
+/**
+*/
 	void rxSetBand(RadioBand band);
+
+/**
+*/
 	RadioBand rxGetBand(void);
+
+/**
+*/
 	BOOL rxSetFrequency(Frequency_Hz *freq);
+
+/**
+*/
 	Frequency_Hz rxGetFrequency(void);
+
+/**
+*/
 	void rxSetVFOConfiguration(RadioVFOConfig config);
+
 #endif // #ifdef INCLUDE_RECEIVER_SUPPORT
 
+/**
+*/
 RadioBand bandForFrequency(Frequency_Hz freq);
 
 #endif /* RECEIVER_H_ */

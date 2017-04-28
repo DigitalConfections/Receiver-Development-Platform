@@ -26,18 +26,100 @@
 
 #include "util.h"
 #include <avr/eeprom.h>
+#include <stdio.h>
 
-/* 
-EEPROM Helper Utility Functions
-*/
+/***********************************************************************************************
+EEPROM Utility Functions
+************************************************************************************************/
 
 
-void storeEEbyteIfChanged(uint8_t* ee_var, uint8_t global)
+void storeEEbyteIfChanged(uint8_t* ee_var, uint8_t val)
 {
-	if(eeprom_read_byte((uint8_t*)ee_var) != global) eeprom_write_byte(ee_var, global);
+	if(eeprom_read_byte((uint8_t*)ee_var) != val) eeprom_write_byte(ee_var, global);
 }
 
-void storeEEdwordIfChanged(uint32_t* ee_var, uint32_t global)
+void storeEEdwordIfChanged(uint32_t* ee_var, uint32_t val)
 {
-	if(eeprom_read_dword(ee_var) != global) eeprom_write_dword(ee_var, global);
+	if(eeprom_read_dword(ee_var) != val) eeprom_write_dword(ee_var, global);
+}
+
+
+/***********************************************************************************************
+Print Formatting Utility Functions
+************************************************************************************************/
+
+void timeValToString(char *str, int32_t timeVal, TimeFormat tf)
+{
+	int32_t temp;
+	uint8_t hold;
+	uint8_t index=7;
+	BOOL done = FALSE;
+	
+	if(tf == Minutes_Seconds_Elapsed)
+	{
+		if(timeVal < 0) timeVal += 86400L; /* account for midnight rollover */
+		
+		if(timeVal < 6000)
+		{
+			str[5] = '\0';
+			index = 4;		
+		}
+		else
+		{
+			if(timeVal < 60000)
+			{
+				sprintf(str, ">%ldm", timeVal/60);
+			}
+			else
+			{
+				sprintf(str, "%ld.%1ldh", timeVal/3600, (10*(timeVal % 3600)/3600));
+			}
+
+			done = TRUE;
+		}
+	}
+	else
+	{
+		if(timeVal < 0)
+		{
+			timeVal = -timeVal;
+			str[9] = '\0';
+			str[0] = '-';
+			index = 8;
+		}
+		else
+		{
+			str[8] = '\0';
+		}
+	}
+	
+	if(!done)
+	{
+		str[index--] = '0' + (timeVal % 10); // seconds
+		temp = timeVal / 10;
+		str[index--] = '0' + (temp % 6); // 10s of seconds
+		temp /= 6;
+	
+		str[index--] = ':';
+	
+		str[index--] = '0' + (temp % 10); // minutes
+		temp /= 10;
+
+		if(tf == Minutes_Seconds_Elapsed)
+		{
+			str[index--] = '0' + (temp % 10); // 10s of minutes
+		}
+		else
+		{
+			str[index--] = '0' + (temp % 6); // 10s of minutes
+			temp /= 6;
+	
+			str[index--] = ':';
+	
+			hold = temp % 24;
+			str[index--] = '0' + (hold % 10); // hours
+			hold /= 10;
+			str[index--] = '0' + hold; // 10s of hours		
+		}		
+	}
 }

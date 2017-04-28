@@ -40,7 +40,9 @@
 #define AD5245_SLAVE_ADDR_A0_0 0x58
 #define AD5245_SLAVE_ADDR_A0_1 0x59
 
-void ad5245_init(uint8_t);
+/**
+   Set the AD5345 potentiometer to the value passed in setting.
+*/
 void ad5245_set_potentiometer(uint8_t setting);
 
 

@@ -40,20 +40,16 @@
 
 #define PCF2129_BUS_BASE_ADDR				0xA2  /* corresponds to slave address = 0b1010001x */
 
-#ifndef TimeFormat
-
-typedef enum {
-	Minutes_Seconds,
-	Hours_Minutes_Seconds,
-	Day_Month_Year_Hours_Minutes_Seconds,
-	Time_Format_Not_Specified
-} TimeFormat;
-
-#endif // TimeFormat
-
+/**
+*/
 BOOL pcf2129_read_time(int32_t* val, char* buffer, TimeFormat format);
+
+/**
+*/
 void pcf2129_set_time(int32_t offset, BOOL applyAsOffset);
-void timeValToString(char *str, int32_t timeVal);
+
+/**
+*/
 void pcf2129_init(void);
 
 #endif // #ifdef INCLUDE_PCF2129_SUPPORT
