@@ -35,12 +35,12 @@ EEPROM Utility Functions
 
 void storeEEbyteIfChanged(uint8_t* ee_var, uint8_t val)
 {
-	if(eeprom_read_byte((uint8_t*)ee_var) != val) eeprom_write_byte(ee_var, global);
+	if(eeprom_read_byte((uint8_t*)ee_var) != val) eeprom_write_byte(ee_var, val);
 }
 
 void storeEEdwordIfChanged(uint32_t* ee_var, uint32_t val)
 {
-	if(eeprom_read_dword(ee_var) != val) eeprom_write_dword(ee_var, global);
+	if(eeprom_read_dword(ee_var) != val) eeprom_write_dword(ee_var, val);
 }
 
 
