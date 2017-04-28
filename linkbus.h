@@ -153,31 +153,85 @@ typedef struct {
 
 #define WAITING_FOR_UPDATE -1
 
+/**
+*/
 void linkbus_init(void);
+
+/**
+*/
 void linkbus_end_tx(void);
+
+/**
+*/
 void linkbus_reset_rx(void);
 
+/**
+*/
 LinkbusTxBuffer* nextEmptyTxBuffer(void);
+
+/**
+*/
 LinkbusTxBuffer* nextFullTxBuffer(void);
+
+/**
+*/
 BOOL linkbusTxInProgress(void);
+
+/**
+*/
 LinkbusRxBuffer* nextEmptyRxBuffer(void);
+
+/**
+*/
 LinkbusRxBuffer* nextFullRxBuffer(void);
 
+/**
+*/
 void lb_send_sync(void);
+
+/**
+*/
 void lb_send_ID(LBMessageType msgType, DeviceID myID, DeviceID otherID);
 
+/**
+*/
 void lb_send_SFQ(LBMessageType msgType, Frequency_Hz freq, BOOL isMemoryValue);
+
+/**
+*/
 void lb_send_TIM(LBMessageType msgType, int32_t time);
 
+/**
+*/
 void lb_send_BND(LBMessageType msgType, RadioBand band);
+
+/**
+*/
 void lb_send_VOL(LBMessageType msgType, VolumeType type, VolumeSetting volume);
+
+/**
+*/
 void lb_send_BCR(LBbroadcastType bcType, BOOL start);
+
+/**
+*/
 void lb_broadcast_bat(uint16_t data);
+
+/**
+*/
 void lb_broadcast_rssi(uint16_t data);
+
+/**
+*/
 void lb_broadcast_rf(uint16_t data);
+
+/**
+*/
 void lb_broadcast_temp(uint16_t data);
 
 #if PRODUCT_TEST_INSTRUMENT_HEAD
+/**
+*/
 void lb_send_CKn(LBMessageType msgType, Si5351_clock clock, Frequency_Hz freq, Si5351_clock_enable enabled, Si5351_drive drive);
 #endif // PRODUCT_TEST_INSTRUMENT_HEAD
 

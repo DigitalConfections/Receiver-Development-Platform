@@ -42,7 +42,12 @@
 #define PCF8574_SLAVE_ADDR_Ax_000 0x40
 #define RECEIVER_REMOTE_PORT_ADDR PCF8574_SLAVE_ADDR_Ax_000
 
+/**
+*/
 void writePort(uint8_t slaveAddress, uint8_t data);
+
+/**
+*/
 BOOL readPort(uint8_t slaveAddress, uint8_t *portData);
 
 

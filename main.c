@@ -2159,7 +2159,7 @@ int main( void )
 							{
 								if(g_remote_device_time)
 								{
-									timeValToString(g_tempBuffer, g_remote_device_time);
+									timeValToString(g_tempBuffer, g_remote_device_time, HourMinuteSecondFormat);
 									LCD_print_row_col(g_tempBuffer, ROW1, COL6);
 									g_remote_device_time = 0;
 								}
@@ -2203,8 +2203,8 @@ int main( void )
 								
 								g_time_update_countdown = 200;
 								ds3231_read_time(&now, NULL, Time_Format_Not_Specified);
-								timeValToString(g_tempBuffer, now-g_start_time);
-								LCD_print_row_col(&g_tempBuffer[3], ROW1, BUTTON4_COLUMN);
+								timeValToString(g_tempBuffer, now-g_start_time, Minutes_Seconds_Elapsed);
+								LCD_print_row_col(g_tempBuffer, ROW1, BUTTON4_COLUMN);
 								
 								if(!cursorOFF) // Put the data into the display buffer for printing by the cursor-using function
 								{
@@ -3152,11 +3152,11 @@ int8_t digitForColumn(LcdColType column)
 
 /*
 	Provides the correct column value for the frequency digit when the frequency is printed left-justified in the following format:
-	mmm.ttt.h where mmm is the MHz digits, ttt is the thousands digits, and h is the hundreds digit of Hertz
+	mmm.ttt.h where mmm is the MHz digits, ttt is the thousands digits, and h is the hundreds digit of Hertz. Handles time formats as well.
 */
 LcdColType columnForDigit(int8_t digit, TextFormat format)
 {
-	LcdColType result;
+	LcdColType result = INVALID_LCD_COLUMN;
 	
 	switch(format)
 	{
