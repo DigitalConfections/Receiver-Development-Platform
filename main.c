@@ -3156,7 +3156,7 @@ int8_t digitForColumn(LcdColType column)
 */
 LcdColType columnForDigit(int8_t digit, TextFormat format)
 {
-	LcdColType result;
+	LcdColType result = INVALID_LCD_COLUMN;
 	
 	switch(format)
 	{

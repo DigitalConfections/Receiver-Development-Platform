@@ -145,7 +145,7 @@ const uint8_t dispAddr[][3] =
     
     void setCursor(uint8_t Line, uint8_t Col);
     */
-	void st7036_setCursor(uint8_t Line, uint8_t Col);
+	void st7036_setCursor(LcdRowType row, LcdColType col);
  	
 	/**
 	Simple (and probably unnecessary) wrapper for _delay_ms()
@@ -265,6 +265,8 @@ void LCD_print_screen(char buffer[NUMBER_OF_LCD_ROWS][DISPLAY_WIDTH_STRING_SIZE]
 
 void LCD_blink_cursor_row_col(BOOL on, LcdRowType row, LcdColType col)
 {
+	if(col >= NUMBER_OF_LCD_COLS) return;
+	
 	if(!on)
 	{
 		st7036_cursor_off();
@@ -312,16 +314,18 @@ void st7036_blink_off()
 }
 
 
-void st7036_setCursor(uint8_t line_num, uint8_t x)
+void st7036_setCursor(LcdRowType row, LcdColType col)
 {
-   if(g_initialized)
-   {
+	if(col >= NUMBER_OF_LCD_COLS) return;
+
+	if(g_initialized)
+	{
 		uint8_t base;
 		// set the baseline address with respect to the number of lines of the display 
-		base = dispAddr[g_display_number_of_rows-1][line_num] + SET_DDRAM_CMD + x;
+		base = dispAddr[g_display_number_of_rows-1][row] + SET_DDRAM_CMD + col;
 		command(base);
 		delay(1);
-   }
+	}
 }
 
 void __attribute__((optimize("O1"))) delay(int millisecs)

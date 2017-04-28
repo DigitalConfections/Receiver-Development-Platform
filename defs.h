@@ -192,7 +192,8 @@ typedef enum lcdColumn
 	COL17,
 	COL18,
 	COL19,
-	NUMBER_OF_LCD_COLS
+	NUMBER_OF_LCD_COLS,
+	INVALID_LCD_COLUMN
 } LcdColType;
 
 typedef enum
