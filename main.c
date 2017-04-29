@@ -54,6 +54,14 @@
 #include <avr/eeprom.h>
 #include <avr/wdt.h>
 
+/************************************************************************/
+/* Global Variables & String Consts                                     */
+/*                                                                      */
+/* Identify each global with a "g_" prefix                              */
+/* Whenever possible limit globals' scope to this file using "static"   */
+/* Use "volatile" for globals shared between ISRs and foreground        */
+/************************************************************************/
+
 #if PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD
 
 	// LCD Defines
@@ -203,6 +211,11 @@ static uint16_t g_LB_broadcasts_enabled = 0;
 static volatile uint8_t g_main_volume;
 static volatile uint8_t g_tone_volume;
 
+#ifdef ENABLE_1_SEC_INTERRUPTS
+
+	static volatile uint16_t g_seconds_count = 0;
+
+#endif // #ifdef ENABLE_1_SEC_INTERRUPTS
 
 // ADC Defines
 #if PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD
@@ -254,9 +267,12 @@ extern volatile BOOL g_i2c_not_timed_out;
 static volatile BOOL g_sufficient_power_detected = FALSE;
 static volatile BOOL g_enableHardwareWDResets = FALSE;
 
-///////////////////////////////////////////////////////
-// PRIVATE FUNCTION PROTOTYPES
-///////////////////////////////////////////////////////
+/************************************************************************/
+/* Private Function Prototypes                                          */
+/*                                                                      */
+/* These functions are available only within this file                  */
+/************************************************************************/
+
 void initializeEEPROMVars(void);
 void setMsgGraph(uint8_t len, LcdRowType row);
 void saveAllEEPROM(void);
@@ -264,7 +280,6 @@ void printButtons(char buff[DISPLAY_WIDTH_STRING_SIZE], char* labels[]);
 void clearTextBuffer(LcdRowType);
 void updateLCDTextBuffer(char* buffer, char* text, BOOL preserveContents);
 void wdt_init(BOOL enableHWResets);
-int8_t digitForColumn(LcdColType column);
 LcdColType columnForDigit(int8_t digit, TextFormat format);
 
 
@@ -279,9 +294,12 @@ Frequency_Hz printFrequency(uint8_t index, uint8_t digit, BOOL increment);
 
 #endif // PRODUCT_TEST_INSTRUMENT_HEAD
 
-/*
-WARNING: Optimization must be enabled before watchdog can be set in C (WDCE). A workaround that might work is to use in-line assembly here.
-*/
+/************************************************************************/
+/* Watchdog Timer ISR                                                   */
+/*                                                                      */
+/* Notice: Optimization must be enabled before watchdog can be set      */
+/* in C (WDCE). Use __attribute__ to enforce optimization level.        */
+/************************************************************************/
 void __attribute__((optimize("O1"))) wdt_init(BOOL enableHWResets)
 {
 	wdt_reset();
@@ -309,13 +327,11 @@ void __attribute__((optimize("O1"))) wdt_init(BOOL enableHWResets)
 }
 
 
-///////////////////////////////////////////////////////
-///////////////////////////////////////////////////////
-//ISR( TIMER0_COMPB_vect )
-//{
-//}// ISR
-///////////////////////////////////////////////////////
-
+/************************************************************************/
+/* Timer/Counter2 Compare Match A ISR                                   */
+/*                                                                      */
+/* Handles periodic tasks not requiring precise timing.                 */
+/************************************************************************/
 ISR( TIMER2_COMPB_vect )
 {
 	static BOOL conversionInProcess = FALSE;
@@ -502,27 +518,32 @@ ISR( TIMER2_COMPB_vect )
 		conversionInProcess = FALSE;
 	}
 }// ISR
-///////////////////////////////////////////////////////
 
 
 #if PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD
 
-///////////////////////////////////////////////////////
-//
-/*
-The pin change interrupt PCI0 will trigger if any enabled PCINT[7:0] pin toggles. 
-The PCMSK0 Register controls which pins contribute to the pin change interrupts. 
-Pin change interrupts on PCINT23...0 are detected asynchronously. 
-This implies that these interrupts can be used for waking the part also from sleep modes other than Idle mode.
-
-The External Interrupts can be triggered by a falling or rising edge or a low level. This is set up as indicated in
-the specification for the External Interrupt Control Registers – EICRA (INT2:0). When the external interrupt is
-enabled and is configured as level triggered, the interrupt will trigger as long as the pin is held low. Low level
-interrupts and the edge interrupt on INT2:0 are detected asynchronously. This implies that these interrupts can
-be used for waking the part also from sleep modes other than Idle mode.
-
-Note: For quadrature reading the interrupt can be set for "Any logical change on INT0 generates an interrupt request."
-*/
+/************************************************************************/
+/* Pin Change Interrupt Request 0 ISR                                   */
+/*                                                                      */
+/* The pin change interrupt PCI0 will trigger if any enabled PCINT[7:0] */
+/* pin changes.                                                         */ 
+/* The PCMSK0 Register controls which pins contribute to the pin change */
+/* interrupts. Pin change interrupts on PCINT23...0 are detected        */
+/* asynchronously. This implies that these interrupts can be used for   */
+/* waking the part from sleep modes other than Idle mode.               */
+/*                                                                      */
+/* The External Interrupts can be triggered by a falling or rising edge */
+/* or a low level. This is set up as indicated in the specification for */
+/* the External Interrupt Control Registers – EICRA (INT2:0). When the  */
+/* external interrupt is enabled and is configured as level triggered,  */
+/* the interrupt will trigger as long as the pin is held low. Low level */
+/* interrupts and the edge interrupt on INT2:0 are detected             */
+/* asynchronously. This implies that these interrupts can be used for   */
+/* waking the part also from sleep modes other than Idle mode.          */
+/*                                                                      */
+/* Note: For quadrature reading the interrupt is set for "Any logical   */
+/* change on INT0 generates an interrupt request."                      */
+/************************************************************************/
 ISR( PCINT0_vect )
 {
 	static uint8_t portBhistory = 0xFF;     // default is high because the pull-up
@@ -538,14 +559,22 @@ ISR( PCINT0_vect )
 		return;
 	}
 
-	if(changedbits & (1 << PORTB4)) // INT1 Compass
+#ifdef ENABLE_1_SEC_INTERRUPTS
+
+	if(changedbits & (1 << PORTB0)) // RTC Interrupt
 	{
-		/* PCINT4 changed */
+		/* PCINT0 changed */
+		if(PINB & (1 << PORTB0)) // rising edge
+		{
+			g_seconds_count++;
+		}
 	}
 
-	if(changedbits & (1 << PORTB5)) // DRDY Compass
+#endif // #ifdef ENABLE_1_SEC_INTERRUPTS
+
+	if(changedbits & (1 << PORTB1)) // INT1 Compass
 	{
-		/* PCINT5 changed */
+		/* PCINT1 changed */
 	}
 
 	quad = changedbits & QUAD_MASK; // A and B for quadrature rotary encoder
@@ -588,16 +617,19 @@ ISR( PCINT0_vect )
 
 #endif // PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD
 
+
 #if PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD
 
-///////////////////////////////////////////////////////
-//
-/*
-The pin change interrupt PCI1 will trigger if any enabled PCINT[14:8] pin toggles. 
-The PCMSK1 Register controls which pins contribute to the pin change interrupts. 
-Pin change interrupts on PCINT23...0 are detected asynchronously. 
-This implies that these interrupts can be used for waking the part also from sleep modes other than Idle mode.
-*/
+/************************************************************************/
+/* Pin Change Interrupt Request 1 ISR                                   */
+/*                                                                      */
+/* The pin change interrupt PCI1 will trigger if any enabled            */
+/* PCINT[14:8] pin toggles.                                             */
+/* The PCMSK1 Register controls which pins contribute to the pin change */
+/* interrupts. Pin change interrupts on PCINT23...0 are detected        */
+/* asynchronously. This implies that these interrupts can be used for   */
+/* waking the part from sleep modes other than Idle mode.               */
+/************************************************************************/
 ISR( PCINT1_vect )
 {
 	static uint8_t portChistory = 0xFF;     // default is high because the pull-up
@@ -742,6 +774,16 @@ ISR( PCINT1_vect )
 
 #elif PRODUCT_DUAL_BAND_RECEIVER
 
+/************************************************************************/
+/* Pin Change Interrupt Request 1 ISR                                   */
+/*                                                                      */
+/* The pin change interrupt PCI1 will trigger if any enabled            */
+/* PCINT[14:8] pin toggles.                                             */
+/* The PCMSK1 Register controls which pins contribute to the pin change */
+/* interrupts. Pin change interrupts on PCINT23...0 are detected        */
+/* asynchronously. This implies that these interrupts can be used for   */
+/* waking the part from sleep modes other than Idle mode.               */
+/************************************************************************/
 ISR( PCINT1_vect )
 {
 	static uint8_t portChistory = 0xFF;     // default is high because the pull-up
@@ -773,24 +815,13 @@ ISR( PCINT1_vect )
 #endif // PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD
 
 
-/*
-*/
-//ISR( TWI_vect )
-//{
-//	
-//}
-
-
-//ISR (INT0_vect)
-//{
-//    /* interrupt code here */
-//}
-
-///////////////////////////////////////////////////////
-//
-/*
-	Watchdog timeout ISR
-*/
+/************************************************************************/
+/* Watchdog Timeout ISR                                                 */
+/*                                                                      */
+/* The Watchdog timer helps prevent lockups due to hardware problems.   */
+/* It is especially helpful in this application for preventing I2C bus  */
+/* errors from locking up the foreground process.                       */
+/************************************************************************/
 ISR(WDT_vect)
 {
 	static uint8_t limit = 10;
@@ -810,18 +841,19 @@ ISR(WDT_vect)
 }
 
 
-///////////////////////////////////////////////////////
-//
-/*
-	USART rx interrupt
-	
-	Message format:
-		$id,f1,f2... fn;
-		where
-			id = linkbus MessageID
-			fn = variable length fields
-			; = end of message flag
-*/
+/************************************************************************/
+/* USART Rx Interrupt ISR                                               */
+/*                                                                      */
+/* This ISR is responsible for reading characters from the USART        */
+/* receive buffer to implement the Linkbus.                             */
+/*                                                                      */
+/* 	Message format:                                                     */
+/* 		$id,f1,f2... fn;                                                */
+/* 		where                                                           */
+/* 			id = linkbus MessageID                                      */
+/* 			fn = variable length fields                                 */
+/* 			; = end of message flag                                     */
+/************************************************************************/
 ISR(USART_RX_vect)
 {
 	static LinkbusRxBuffer* buff = 0;
@@ -903,11 +935,13 @@ ISR(USART_RX_vect)
 	
 }
 
-///////////////////////////////////////////////////////
-//
-/*
-	USART tx UDRE interrupt
-*/
+
+/************************************************************************/
+/* USART Tx UDRE ISR                                                    */
+/*                                                                      */
+/* This ISR is responsible for filling the USART transmit buffer. It    */
+/* implements the transmit function of the Linkbus.                     */
+/************************************************************************/
 ISR(USART_UDRE_vect)
 {
 	static LinkbusTxBuffer* buff = 0;
@@ -929,12 +963,16 @@ ISR(USART_UDRE_vect)
 	}
 }
 
-/*
-The pin change interrupt PCI2 will trigger if any enabled PCINT[23:16] pin toggles. 
-The PCMSK2 Register controls which pins contribute to the pin change interrupts. 
-Pin change interrupts on PCINT23...0 are detected asynchronously. 
-This implies that these interrupts can be used for waking the part also from sleep modes other than Idle mode.
-*/
+/************************************************************************/
+/* Pin Change Interrupt 2 ISR                                           */
+/*                                                                      */
+/* The pin change interrupt PCI2 will trigger if any enabled            */
+/* PCINT[23:16] pin toggles. The PCMSK2 Register controls which pins    */
+/* contribute to the pin change interrupts. Pin change interrupts on    */
+/* PCINT23...0 are detected asynchronously. This implies that these     */
+/* interrupts can be used for waking the part from sleep modes other    */
+/* than Idle mode.                                                      */
+/************************************************************************/
 ISR( PCINT2_vect )
 {
 	static uint8_t portDhistory = 0xFF;     // default is high because the pull-up
@@ -1026,15 +1064,23 @@ ISR( PCINT2_vect )
 #endif
 }
 
-///////////////////////////////////////////////////////
-///////////////////////////////////////////////////////
+
+/************************************************************************/
+/* Main Foreground Task                                                 */
+/*                                                                      */
+/* main() is responsible for setting up registers and other             */
+/* initialization tasks. It also implements an infinite while(1) loop   */
+/* that handles all "foreground" tasks. All relatively slow processes   */
+/* need to be handled in the foreground, not in ISRs. This includes     */
+/* communications over the I2C bus, handling messages received over the */
+/* Linkbus, etc.                                                        */
+/************************************************************************/
 int main( void )
 {
 	
 #if PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD
 
 	BOOL cursorOFF = TRUE;
-//	uint8_t cursorColumn;
 	uint8_t selectedField = 2; // default to 10^2 (100s) digit
 	uint8_t displayedSubMenu[NUMBER_OF_BUTTONS] = {0, 0, 0, 0};
 	BOOL inhibitMenuExpiration = FALSE;
@@ -1062,8 +1108,8 @@ int main( void )
 
 	//////////////////////////////////////////////////////
 	// Set up PortB/TIMER1 for controlling backlight
-    DDRB |= (1 << DDB2) | (1 << DDB1) | (1 << DDB0); // outputs: PB2, PB1 and PB0; inputs: all the rest
-	PORTB |= (1 << QUAD_A) | (1 << QUAD_B) | (1 << PORTB1) | (1 << PORTB2); // Pull-ups enable ON quadrature input, and latch power on, turn off backlight
+    DDRB |= (1 << DDB2); // outputs: PB2 (backlight brightness); inputs: all the rest
+	PORTB |= (1 << QUAD_A) | (1 << QUAD_B) | (1 << PORTB0) | (1 << PORTB1) | (1 << PORTB2); // Pull-ups enabled ON quadrature input, and latch power on, turn off backlight, and RTC IRQ
 	
 	// Write high byte first of 16-bit registers
 	ICR1H = 0xFF; // set TOP and bottom to 16bit
@@ -1121,7 +1167,7 @@ int main( void )
 	OCR0A = 0x0C; // set frequency to ~300 Hz (0x0c)
     TCCR0A |= (1 << WGM01); // set CTC with OCRA
     TCCR0B |= (1 << CS02)|(1 << CS00); // 1024 Prescaler
-//	TIMSK0 |= (1 << OCIE0B); // enable compare interrupt
+//	TIMSK0 &= ~(1 << OCIE0B); // disable compare interrupt - disabled by default
 
 	//////////////////////////////////////////////////////
 	// TIMER2 is for periodic interrupts
@@ -1137,11 +1183,11 @@ int main( void )
 
 	/////////////////////////////////////////////////////
 	// Set up pin interrupts
-#if PRODUCT_CONTROL_HEAD
+#if PRODUCT_CONTROL_HEAD | PRODUCT_TEST_INSTRUMENT_HEAD
 	PCICR |= (1 << PCIE2) | (1 << PCIE1) | (1 << PCIE0); // Enable pin change interrupts PCI2, PCI1 and PCI0
 	PCMSK2 |= 0b01111100;  // Enable all port D pin change interrupts except PD0, PD1 and PD7
 	PCMSK1 |= 0b00000011;  // Enable port C pin change interrupts on pins 0 and 1
-	PCMSK0 |= (1 << QUAD_A) | (1 << QUAD_B) | 0x03; // Enable port B pin change interrupts on pins 0, 1, 7 and 8
+	PCMSK0 |= (1 << QUAD_A) | (1 << QUAD_B) | 0b00000011; // Enable port B pin change interrupts on pins 0, 1, 7 and 8
 #else
 	PCICR |= (1 << PCIE2) | (1 << PCIE1) | (1 << PCIE0); // Enable pin change interrupts PCI2, PCI1 and PCI0
 	PCMSK2 |= 0b00011100;  // Enable port D pin change interrupts PD2, PD3, and PD4
@@ -1194,6 +1240,10 @@ int main( void )
 #if PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD
 	lb_send_ID(LINKBUS_MSG_COMMAND, CONTROL_HEAD_ID, NO_ID);
 	ds3231_read_time(&g_start_time, NULL, Time_Format_Not_Specified);
+	#ifdef ENABLE_1_SEC_INTERRUPTS
+		g_seconds_count = 0; /* sync seconds count to clock */	
+	#endif // #ifdef ENABLE_1_SEC_INTERRUPTS
+	ds3231_1s_sqw(ON);
 #elif PRODUCT_DUAL_BAND_RECEIVER
 	lb_send_ID(LINKBUS_MSG_COMMAND, RECEIVER_ID, NO_ID);
 	pcf2129_init();
@@ -1224,8 +1274,10 @@ int main( void )
 					{
 						g_menu_state = MENU_POWER_OFF;
 						
-#if !PRODUCT_CONTROL_HEAD
+#if PRODUCT_DUAL_BAND_RECEIVER || PRODUCT_TEST_DIGITAL_INTERFACE
+
 						PORTD &= ~(1 << PORTD6);  // Disable audio power
+
 #endif
 
 						g_power_off_countdown = POWER_OFF_DELAY;
@@ -1238,10 +1290,14 @@ int main( void )
 						saveAllEEPROM();
 						
 #if PRODUCT_CONTROL_HEAD
+
 						PORTC &= ~(1 << PORTC2);  // Turn off remote power
 						PORTC &= ~(1 << PORTC3);  // latch power off
+						
 #elif PRODUCT_DUAL_BAND_RECEIVER || PRODUCT_TEST_DIGITAL_INTERFACE
+
 						PORTB &= ~(1 << PORTB1); // latch power off
+						
 #endif
 						
 						g_power_off_countdown = POWER_OFF_DELAY;
@@ -1259,8 +1315,11 @@ int main( void )
 						// Attempt to restart things as if nothing has happened.
 						wdt_reset();	// HW watchdog
 						g_menu_state = MENU_MAIN;
+						
 #if PRODUCT_CONTROL_HEAD
+
 						holdMenuState = NUMBER_OF_MENUS;
+						
 #endif
 					}						
 				}
@@ -1273,12 +1332,16 @@ int main( void )
 				g_power_off_countdown = POWER_OFF_DELAY; // restart countdown
 				
 #if PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD
+
 				PORTC |= (1 << PORTC2);  // Turn on remote power
 				PORTC |= (1 << PORTC3);  // latch power on
 				if(g_menu_state == MENU_POWER_OFF) g_menu_state = MENU_MAIN;
+				
 #elif PRODUCT_DUAL_BAND_RECEIVER || PRODUCT_TEST_DIGITAL_INTERFACE
+
 				PORTB |= (1 << PORTB1); // latch power on
 				PORTD |= (1 << PORTD6);  // Enable audio power
+				
 #endif
 			}
 			else
@@ -1293,15 +1356,19 @@ int main( void )
 					
 					if(!g_power_off_countdown)
 					{
-						#if PRODUCT_CONTROL_HEAD
+#if PRODUCT_CONTROL_HEAD
+
 							PORTC &= ~(1 << PORTC2); // Turn off remote power
 							PORTC &= ~(1 << PORTC3); // latch power off
 							OCR1BH = BL_OFF;		// turn off backlight
 							OCR1BL = 0xFF;
-						#elif PRODUCT_DUAL_BAND_RECEIVER || PRODUCT_TEST_DIGITAL_INTERFACE
+							
+#elif PRODUCT_DUAL_BAND_RECEIVER || PRODUCT_TEST_DIGITAL_INTERFACE
+						
 							PORTB &= ~(1 << PORTB1);	// latch power off
 							PORTD &= ~(1 << PORTD6);	// Disable audio power
-						#endif
+							
+#endif
 					
 						while(1) // wait for power-off
 						{
@@ -1311,9 +1378,12 @@ int main( void )
 						}
 						
 						wdt_reset();	// HW watchdog
+						
 #if PRODUCT_CONTROL_HEAD
+
 						g_menu_state = MENU_MAIN; // Recover if power is restored before power off
 						holdMenuState = NUMBER_OF_MENUS;
+						
 #endif
 					}
 				}
@@ -1371,6 +1441,7 @@ int main( void )
 				case MESSAGE_SET_FREQ:
 				{
 #if PRODUCT_CONTROL_HEAD
+
 					if(g_LB_attached_device == RECEIVER_ID)
 					{
 						if(lb_buff->fields[FIELD1][0])
@@ -1525,7 +1596,7 @@ int main( void )
 					
 					if(g_receiver_freq) lb_send_SFQ(LINKBUS_MSG_REPLY, g_receiver_freq, isMem);
 
-#endif		
+#endif // #if PRODUCT_CONTROL_HEAD
 				}
 				break;
 				
@@ -1578,7 +1649,8 @@ int main( void )
 							attach_success = TRUE; // stop any ongoing ID messages
 							g_send_ID_countdown = 0;
 						}
-#endif
+						
+#endif // #if PRODUCT_CONTROL_HEAD
 					}
 				}
 				break;
@@ -1591,8 +1663,10 @@ int main( void )
 					{
 						band = atoi(lb_buff->fields[FIELD1]);
 #if PRODUCT_DUAL_BAND_RECEIVER
+
 						rxSetBand(band);
-#endif
+						
+#endif // #if PRODUCT_DUAL_BAND_RECEIVER
 					}
 
 #if PRODUCT_CONTROL_HEAD
@@ -1627,7 +1701,8 @@ int main( void )
 						// Send a reply
 						lb_send_BND(LINKBUS_MSG_REPLY, band);
 					}
-#endif
+					
+#endif // #if PRODUCT_CONTROL_HEAD
 
 				}
 				break;
@@ -1676,10 +1751,13 @@ int main( void )
 					}
 							
 #if PRODUCT_TEST_INSTRUMENT_HEAD
+
 					if(g_menu_state == MENU_SI5351) holdMenuState = UPDATE_DISPLAY_WITH_LB_DATA; // Ensure the screen is updated
+					
 #else
 					saveAllEEPROM();
-#endif
+					
+#endif // #if PRODUCT_TEST_INSTRUMENT_HEAD
 						
 					if(lb_buff->type == LINKBUS_MSG_QUERY) // Query
 					{
@@ -1696,7 +1774,6 @@ int main( void )
 				case MESSAGE_VOLUME:
 				{
 					VolumeType volType;
-					//VolumeSetting volSet;
 					BOOL valid = FALSE;
 						
 					if(lb_buff->fields[FIELD1][0] == 'T') // volume type field
@@ -1766,10 +1843,14 @@ int main( void )
 						}
 						
 #if PRODUCT_CONTROL_HEAD
+
 						if(g_menu_state == MENU_VOLUME) holdMenuState = UPDATE_DISPLAY_WITH_LB_DATA; // Ensure the screen is updated
+						
 #else
+
 						saveAllEEPROM();
-#endif
+						
+#endif // #if PRODUCT_CONTROL_HEAD
 						
 						if(lb_buff->type == LINKBUS_MSG_QUERY) // Query
 						{
@@ -1845,7 +1926,7 @@ int main( void )
 //			}
 		}
 		
-#endif // PRODUCT_DUAL_BAND_RECEIVER
+#endif // #if PRODUCT_DUAL_BAND_RECEIVER
 		
 		//////////////////////////////////////
 		// Handle periodic tasks triggered by the tick count
@@ -2296,7 +2377,7 @@ int main( void )
 			}
 		}
 
-#endif // PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD
+#endif // #if PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD
 	
 #if PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD
 		
@@ -2987,7 +3068,6 @@ int main( void )
 			hold_button5_presses = g_button5_presses;
 		}
 
-		
 #endif // PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD
 
 	} // while(1)
@@ -3108,45 +3188,6 @@ void printFrequency(Frequency_Hz freq, uint8_t digit)
 		{
 			LCD_blink_cursor_row_col(ON, ROW1, columnForDigit(digit, FrequencyFormat));
 		}
-	}
-}
-
-/*
-	Provides the correct decimal digit value for the display column when the frequency is printed left-justified in the following format:
-	mmm.ttt.h where mmm is the MHz digits, ttt is the thousands digits, and h is the hundreds digit of Hertz
-*/
-int8_t digitForColumn(LcdColType column)
-{
-	switch(column)
-	{
-		case COL0:
-			return 8;
-			break;
-		
-		case COL1:
-			return 7;
-			break;
-			
-		case COL2:
-			return 6;
-			break;
-			
-		case COL4:
-			return 5;
-			break;
-			
-		case COL5:
-			return 4;
-			break;
-			
-		case COL6:
-			return 3;
-			break;
-			
-		case COL8:
-		default:
-			return 2;
-			break;
 	}
 }
 

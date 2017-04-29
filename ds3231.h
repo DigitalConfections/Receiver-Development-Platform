@@ -56,6 +56,11 @@ offset - time in seconds since midnight
  */
 void ds3231_set_time(int32_t offset);
 
+/**
+Turn on/off 1-second square wave on the INT/SQW pin. 
+*/
+void ds3231_1s_sqw(BOOL enable);
+
 #endif // #ifdef INCLUDE_DS3231_SUPPORT
 
 #endif /* DS3231_H_ */
