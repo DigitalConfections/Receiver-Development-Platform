@@ -32,8 +32,8 @@
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SET THE ONE PRODUCT TO BE BUILT TO NON-ZERO (ONE-AT-A-TIME PLEASE), OTHER PRODUCTS SHOULD BE DEFINED AS ZERO
-#define PRODUCT_CONTROL_HEAD 1
-#define PRODUCT_DUAL_BAND_RECEIVER 0
+#define PRODUCT_CONTROL_HEAD 0
+#define PRODUCT_DUAL_BAND_RECEIVER 1
 #define PRODUCT_TEST_INSTRUMENT_HEAD 0
 #define PRODUCT_TEST_DIGITAL_INTERFACE 0
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
