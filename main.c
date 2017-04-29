@@ -203,6 +203,11 @@ static uint16_t g_LB_broadcasts_enabled = 0;
 static volatile uint8_t g_main_volume;
 static volatile uint8_t g_tone_volume;
 
+#ifdef ENABLE_1_SEC_INTERRUPTS
+
+	static volatile uint16_t g_seconds_count = 0;
+
+#endif // #ifdef ENABLE_1_SEC_INTERRUPTS
 
 // ADC Defines
 #if PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD
@@ -538,14 +543,22 @@ ISR( PCINT0_vect )
 		return;
 	}
 
-	if(changedbits & (1 << PORTB4)) // INT1 Compass
+#ifdef ENABLE_1_SEC_INTERRUPTS
+
+	if(changedbits & (1 << PORTB0)) // RTC Interrupt
 	{
-		/* PCINT4 changed */
+		/* PCINT0 changed */
+		if(PINB & (1 << PORTB0)) // rising edge
+		{
+			g_seconds_count++;
+		}
 	}
 
-	if(changedbits & (1 << PORTB5)) // DRDY Compass
+#endif // #ifdef ENABLE_1_SEC_INTERRUPTS
+
+	if(changedbits & (1 << PORTB1)) // INT1 Compass
 	{
-		/* PCINT5 changed */
+		/* PCINT1 changed */
 	}
 
 	quad = changedbits & QUAD_MASK; // A and B for quadrature rotary encoder
@@ -1062,8 +1075,8 @@ int main( void )
 
 	//////////////////////////////////////////////////////
 	// Set up PortB/TIMER1 for controlling backlight
-    DDRB |= (1 << DDB2) | (1 << DDB1) | (1 << DDB0); // outputs: PB2, PB1 and PB0; inputs: all the rest
-	PORTB |= (1 << QUAD_A) | (1 << QUAD_B) | (1 << PORTB1) | (1 << PORTB2); // Pull-ups enable ON quadrature input, and latch power on, turn off backlight
+    DDRB |= (1 << DDB2); // outputs: PB2 (backlight brightness); inputs: all the rest
+	PORTB |= (1 << QUAD_A) | (1 << QUAD_B) | (1 << PORTB0) | (1 << PORTB1) | (1 << PORTB2); // Pull-ups enabled ON quadrature input, and latch power on, turn off backlight, and RTC IRQ
 	
 	// Write high byte first of 16-bit registers
 	ICR1H = 0xFF; // set TOP and bottom to 16bit
@@ -1137,11 +1150,11 @@ int main( void )
 
 	/////////////////////////////////////////////////////
 	// Set up pin interrupts
-#if PRODUCT_CONTROL_HEAD
+#if PRODUCT_CONTROL_HEAD | PRODUCT_TEST_INSTRUMENT_HEAD
 	PCICR |= (1 << PCIE2) | (1 << PCIE1) | (1 << PCIE0); // Enable pin change interrupts PCI2, PCI1 and PCI0
 	PCMSK2 |= 0b01111100;  // Enable all port D pin change interrupts except PD0, PD1 and PD7
 	PCMSK1 |= 0b00000011;  // Enable port C pin change interrupts on pins 0 and 1
-	PCMSK0 |= (1 << QUAD_A) | (1 << QUAD_B) | 0x03; // Enable port B pin change interrupts on pins 0, 1, 7 and 8
+	PCMSK0 |= (1 << QUAD_A) | (1 << QUAD_B) | 0b00000011; // Enable port B pin change interrupts on pins 0, 1, 7 and 8
 #else
 	PCICR |= (1 << PCIE2) | (1 << PCIE1) | (1 << PCIE0); // Enable pin change interrupts PCI2, PCI1 and PCI0
 	PCMSK2 |= 0b00011100;  // Enable port D pin change interrupts PD2, PD3, and PD4
@@ -1194,6 +1207,10 @@ int main( void )
 #if PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD
 	lb_send_ID(LINKBUS_MSG_COMMAND, CONTROL_HEAD_ID, NO_ID);
 	ds3231_read_time(&g_start_time, NULL, Time_Format_Not_Specified);
+	#ifdef ENABLE_1_SEC_INTERRUPTS
+		g_seconds_count = 0; /* sync seconds count to clock */	
+	#endif // #ifdef ENABLE_1_SEC_INTERRUPTS
+	ds3231_1s_sqw(ON);
 #elif PRODUCT_DUAL_BAND_RECEIVER
 	lb_send_ID(LINKBUS_MSG_COMMAND, RECEIVER_ID, NO_ID);
 	pcf2129_init();

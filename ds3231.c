@@ -152,5 +152,20 @@ void ds3231_set_time(int32_t offsetSeconds)
 	
 }
 
+void ds3231_1s_sqw(BOOL enable)
+{
+	if(enable)
+	{
+		uint8_t byte = 0x00;
+		i2c_device_write(DS3231_BUS_BASE_ADDR, RTC_CONTROL, &byte, 1);
+	}
+	else
+	{
+		uint8_t byte = 0x04;
+		i2c_device_write(DS3231_BUS_BASE_ADDR, RTC_CONTROL, &byte, 1);
+	}
+}
+
+
 #endif // #ifdef INCLUDE_DS3231_SUPPORT
 
