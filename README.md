@@ -12,12 +12,8 @@
 <p>Due to the limited memory resources of the target processor, all software in this project was written to minimize the size of the object file. Driver files are written to contain only the functionality required for this project, so they do not necessarily support all the features of the devices for which they are written. This is an embedded project, with limited opportunities for the user to enter illegal values or perform illegal actions, so error checking is often omitted in order to improve performance and reduce object file size.</p>
 <p>Main program entry and all interrupt service routines (ISRs) are contained in main.c. Most program control pre-compiler definitions are contained in defs.h. Certain major features are held in their own file modules, including:</p>
 <ul>
-	<li>
-		<strong>Linkbus</strong> (linkbus.c) - a simple serial inter-processor communication protocol
-	</li>
-	<li>
-		<strong>Receiver</strong> (receiver.c) - support specific to the dual-band ARDF receiver board
-	</li>
+<li><strong>Linkbus</strong> (linkbus.c) - a simple serial inter-processor communication protocol</li>
+<li><strong>Receiver</strong> (receiver.c) - support specific to the dual-band ARDF receiver board</li>
 </ul>
 <p>Minimalist driver support is contained in files named for the supported hardware device:</p>
 <ul>
