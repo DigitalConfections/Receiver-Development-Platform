@@ -1,4 +1,7 @@
-<h2>Receiver Development Platform</h2>
+﻿<h2>Receiver Development Platform</h2>
+
+![Docs/photo1.png](Docs/photo1.png)
+
 <p>
 	This project contains source code for the&nbsp;<a href="https://groups.google.com/forum/#!forum/receiver-development-platform">Receiver Development Platform</a>&nbsp;and&nbsp;<a href="http://openardf.org/index.php/ardf-open-equipment-project/">Open ARDF Equipment Project</a>. When this software is built using Atmel Studio 7 it will generate object code to run on the processors utilized in that project. The following project components utilize this software:
 </p>
