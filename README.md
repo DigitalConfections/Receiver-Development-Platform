@@ -1,6 +1,8 @@
 <h2>Receiver Development Platform</h2>
 <p>This project contains source code for the&nbsp;<a href="https://groups.google.com/forum/#!forum/receiver-development-platform">Receiver Development Platform</a>&nbsp;and&nbsp;<a href="http://openardf.org/index.php/ardf-open-equipment-project/">Open ARDF Equipment Project</a>. When this software is built using Atmel Studio 7 it will generate object code to run on the processors utilized in that project. The following project components utilize this software:</p>
-![Docs/photo1.png](Docs/photo1.png)<p style="text-align: center;"></p>
+
+![Docs/photo1.png](Docs/photo1.png)
+
 <p><strong>Control Head&nbsp;</strong>- A user interface device capable of communicating over a serial bus (Linkbus)</p>
 <p><strong>Digital Interface&nbsp;</strong>- A small board that provides a digital interface between a serial bus (Linkbus) to a radio receiver (or other device) to which it is connected.</p>
 <p>This project is written in the C programming language, using the Atmel Studio 7 integrated development environment, and is built to run on an ATmega328P microprocessor.</p>
