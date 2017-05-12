@@ -184,4 +184,48 @@ void pcf2129_set_time(int32_t offsetSeconds, BOOL applyAsOffset)
 }
 
 
+#ifdef USE_PCF2129_CLOCK_PIN
+
+	void pcf2129_1s_sqw(BOOL enable)
+	{
+		if(enable)
+		{
+			uint8_t byte = 0b00000110;
+			i2c_device_write(PCF2129_BUS_BASE_ADDR, RTC_CLKOUT_CTL, &byte, 1);
+		}
+		else
+		{
+			uint8_t byte = 0b00000111;
+			i2c_device_write(PCF2129_BUS_BASE_ADDR, RTC_CLKOUT_CTL, &byte, 1);
+		}
+	}
+
+#else
+
+	void pcf2129_1s_sqw(BOOL enable)
+	{
+		if(enable)
+		{
+			uint8_t byte = 0b00000001;
+			i2c_device_write(PCF2129_BUS_BASE_ADDR, RTC_CONTROL_1, &byte, 1);
+			byte = 0b00100000;
+			i2c_device_write(PCF2129_BUS_BASE_ADDR, RTC_WATCHDOG_TIME_CTL, &byte, 1);
+			pcf2129_clear_int();
+		}
+		else
+		{
+			uint8_t byte = 0b00100010;
+			i2c_device_write(PCF2129_BUS_BASE_ADDR, RTC_CONTROL_1, &byte, 1);
+		}
+	}
+	
+	void pcf2129_clear_int(void)
+	{
+		uint8_t	byte = 0x00;
+		i2c_device_write(PCF2129_BUS_BASE_ADDR, RTC_CONTROL_2, &byte, 1); // clear all interrupt flags
+	}
+
+#endif // #ifdef USE_PCF2129_CLOCK_PIN
+
+
 #endif // #ifdef INCLUDE_PCF2129_SUPPORT

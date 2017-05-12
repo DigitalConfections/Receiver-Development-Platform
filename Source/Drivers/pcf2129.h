@@ -41,12 +41,28 @@
 #define PCF2129_BUS_BASE_ADDR				0xA2  /* corresponds to slave address = 0b1010001x */
 
 /**
+Reads hours, minutes and seconds from the DS3231 and returns them in the memory location pointed to by
+the first two arguments.
+*val - if non-NULL will receive a dword value of the time in seconds since midnight.
+*char - if non-NULL will receive a string representation of the time
+format - specifies the string format to be used for the string time representation
 */
 BOOL pcf2129_read_time(int32_t* val, char* buffer, TimeFormat format);
 
 /**
-*/
+Set hours, minutes and seconds of the DS3231 to the time passed in the argument.
+offset - time in seconds since midnight
+ */
 void pcf2129_set_time(int32_t offset, BOOL applyAsOffset);
+
+/**
+Turn on/off 1-second square wave on the INT/SQW pin.
+*/
+void pcf2129_1s_sqw(BOOL enable);
+
+/**
+Clear all RTC interrupt flags.
+*/void pcf2129_clear_int(void);
 
 /**
 */

@@ -31,7 +31,7 @@
 #include "si5351.h"
 
 #define LINKBUS_MAX_MSG_LENGTH 50
-#define LINKBUS_MIN_MSG_LENGTH 4
+#define LINKBUS_MIN_MSG_LENGTH 3 /* shortest message: $TTY; */
 #define LINKBUS_MAX_MSG_FIELD_LENGTH 21
 #define LINKBUS_MAX_MSG_NUMBER_OF_FIELDS 3
 #define LINKBUS_NUMBER_OF_RX_MSG_BUFFERS 2
@@ -97,12 +97,13 @@ typedef enum
 	MESSAGE_BATTERY = 'B'*100 + 'A'*10 + 'T', // $BAT? / !BAT; // Subscribe to battery voltage reports
 	MESSAGE_VOLUME  = 'V'*100 + 'O'*10 + 'L', // $VOL,,; / $VOL? / !VOL,,; // Set volume: field1 = VolumeType; field2 = Setting
 	MESSAGE_BCR = 'B'*100 + 'C'*10 + 'R', // Broadcast Request: $BCR,? $BCR,; // Start and stop broadcasts of data identified in field1
+	MESSAGE_TTY = 'T'*100 + 'T'*10 + 'Y', // Adjust for PC communications interface (add crlf, etc.)
 	
 	// CONTROL HEAD MESSAGES
 //	MESSAGE_PRINT_FREQ = 'P'*100 + 'F'*10 + 'Q', // $PFQ,;
 	
 	//	DUAL-BAND RX MESSAGE FAMILY (FUNCTIONAL MESSAGING)
-	MESSAGE_SET_FREQ = 'S'*100 + 'F'*10 + 'Q', // $SFQ,Fhz; / $SFQ,FHz? / !SFQ,; // Set/request current receive frequency
+	MESSAGE_SET_FREQ = 'F'*100 + 'R'*10 + 'E', // $FRE,Fhz; / $FRE,FHz? / !FRE,; // Set/request current receive frequency
 	MESSAGE_TIME = 'T'*100 + 'I'*10 + 'M', // $TIM,time; / !TIM,time; / $TIM,? // Set/request RTC time
 	MESSAGE_BAT_BC = 'B', // Battery broadcast data
 	MESSAGE_RSSI_BC = 'S', // RSSI broadcast data
@@ -129,11 +130,11 @@ typedef enum
 
 typedef enum
 {
-	BATTERY_BROADCAST=1,
-	RSSI_BROADCAST=2,
-	RF_BROADCAST=4,
-	UPC_TEMP_BROADCAST=8,
-	ALL_BROADCASTS=15
+	BATTERY_BROADCAST=0x0001,
+	RSSI_BROADCAST=0x0002,
+	RF_BROADCAST=0x0004,
+	UPC_TEMP_BROADCAST=0x0008,
+	ALL_BROADCASTS=0x000FF
 } LBbroadcastType;
 
 typedef enum
@@ -191,11 +192,15 @@ void lb_send_sync(void);
 
 /**
 */
+BOOL linkbus_toggleCRLF(void);
+
+/**
+*/
 void lb_send_ID(LBMessageType msgType, DeviceID myID, DeviceID otherID);
 
 /**
 */
-void lb_send_SFQ(LBMessageType msgType, Frequency_Hz freq, BOOL isMemoryValue);
+void lb_send_FRE(LBMessageType msgType, Frequency_Hz freq, BOOL isMemoryValue);
 
 /**
 */
