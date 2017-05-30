@@ -27,6 +27,7 @@
 #include "util.h"
 #include <avr/eeprom.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 /***********************************************************************************************
  *  EEPROM Utility Functions
@@ -65,7 +66,7 @@ void timeValToString(char *str, int32_t timeVal, TimeFormat tf)
 	{
 		if(timeVal < 0)
 		{
-			timeVal += 86400L;         /* account for midnight rollover */
+			timeVal += 86400L;  /* account for midnight rollover */
 
 		}
 		if(timeVal < 6000)
@@ -111,24 +112,61 @@ void timeValToString(char *str, int32_t timeVal, TimeFormat tf)
 
 		str[index--] = ':';
 
-		str[index--] = '0' + (temp % 10); /* minutes */
+		str[index--] = '0' + (temp % 10);   /* minutes */
 		temp /= 10;
 
 		if(tf == Minutes_Seconds_Elapsed)
 		{
-			str[index--] = '0' + (temp % 10); /* 10s of minutes */
+			str[index--] = '0' + (temp % 10);   /* 10s of minutes */
 		}
 		else
 		{
-			str[index--] = '0' + (temp % 6); /* 10s of minutes */
+			str[index--] = '0' + (temp % 6);    /* 10s of minutes */
 			temp /= 6;
 
 			str[index--] = ':';
 
 			hold = temp % 24;
-			str[index--] = '0' + (hold % 10);       /* hours */
+			str[index--] = '0' + (hold % 10);   /* hours */
 			hold /= 10;
-			str[index--] = '0' + hold;              /* 10s of hours */
+			str[index--] = '0' + hold;          /* 10s of hours */
 		}
 	}
+}
+
+int32_t stringToTimeVal(char *str)
+{
+	int32_t time_sec = 0;
+	BOOL missingTens = FALSE;
+	uint8_t index = 0;
+	char field[3];
+
+	field[2] = '\0';
+	field[1] = '\0';
+
+	if(str[1] == ':')
+	{
+		missingTens = TRUE;
+	}
+
+	/* hh:mm:ss or h:mm:ss */
+	field[0] = str[index++];        /* tens of hours or hours */
+	if(!missingTens)
+	{
+		field[1] = str[index++];    /* hours */
+	}
+	
+	time_sec = SecondsFromHours(atol(field));
+	index++;
+
+	field[0] = str[index++];
+	field[1] = str[index++];    /* minutes */
+	time_sec += SecondsFromMinutes(atol(field));
+	index++;
+
+	field[0] = str[index++];
+	field[1] = str[index++];    /* seconds */
+	time_sec += atoi(field);
+
+	return(time_sec);
 }

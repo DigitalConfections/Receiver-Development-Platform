@@ -78,7 +78,7 @@
 		Frequency_Hz vfo;
 		RadioBand bandSet = BAND_INVALID;
 
-		if((*freq < RX_MAXIMUM_80M_FREQUENCY) && (*freq > RX_MINIMUM_80M_FREQUENCY)) /* 80m */
+		if((*freq < RX_MAXIMUM_80M_FREQUENCY) && (*freq > RX_MINIMUM_80M_FREQUENCY))    /* 80m */
 		{
 			g_freq_80m = *freq;
 
@@ -179,7 +179,7 @@
 		}
 
 		g_freq_bfo = RADIO_IF_FREQUENCY;
-		rxSetBand(g_activeBand); /* also sets Si5351 CLK0 to VFO frequency */
+		rxSetBand(g_activeBand);    /* also sets Si5351 CLK0 to VFO frequency */
 
 		si5351_set_freq(g_freq_bfo, SI5351_CLK1);
 		si5351_drive_strength(SI5351_CLK0, SI5351_DRIVE_8MA);
@@ -223,7 +223,7 @@
 	}
 
 
-#endif /*#ifdef INCLUDE_RECEIVER_SUPPORT */
+#endif  /*#ifdef INCLUDE_RECEIVER_SUPPORT */
 
 RadioBand bandForFrequency(Frequency_Hz freq)
 {
