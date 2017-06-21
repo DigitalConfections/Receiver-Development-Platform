@@ -30,6 +30,9 @@
 #ifndef ESP8266_H_
 #define ESP8266_H_
 
+#define WIFI_SW_VERSION ("0.1.1")
+#define USE_UDP_FOR_TIME_RETRIEVAL
+
 #ifndef SecondsFromHours
   #define SecondsFromHours(hours) ((hours) * 3600)
 #endif
@@ -54,15 +57,30 @@
   #define min(x, y)  ((x) < (y) ? (x) : (y))
 #endif
 
+#define HOTSPOT_SSID_DEFAULT "MyRouter"
+#define HOTSPOT_PW_DEFAULT "password"
+#define TIME_HOST_DEFAULT "time.nist.gov"
+#define TIME_HTTP_PORT_DEFAULT String("13")
+#define BRIDGE_IP_ADDR_DEFAULT "10.10.10.150"
+#define BRIDGE_SSID_DEFAULT "Fox_"
+#define BRIDGE_PW_DEFAULT "password"
+#define BRIDGE_TCP_PORT_DEFAULT String("73")
+#define LEDS_ENABLE_DEFAULT TRUE
+#define DEBUG_PRINTS_ENABLE_DEFAULT TRUE
+
+
 typedef enum
 {
 	HOTSPOT_SSID,
 	HOTSPOT_PW,
 	TIME_HOST,
 	TIME_HTTP_PORT,
+  BRIDGE_IP_ADDR,
 	BRIDGE_SSID,
 	BRIDGE_PW,
 	BRIDGE_TCP_PORT,
+  LEDS_ENABLE,
+  DEBUG_PRINTS_ENABLE,
 	NUMBER_OF_SETTABLE_VARIABLES
 } WiFiMemory;
 
