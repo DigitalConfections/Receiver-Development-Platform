@@ -170,7 +170,7 @@ static BOOL g_lb_terminal_mode = FALSE;
 #endif  /* #if PRODUCT_DUAL_BAND_RECEIVER || PRODUCT_TEST_DIGITAL_INTERFACE */
 
 #if PRODUCT_CONTROL_HEAD || PRODUCT_DUAL_BAND_RECEIVER
-	static Frequency_Hz g_receiver_freq = 0;
+	static volatile Frequency_Hz g_receiver_freq = 0;
 #endif  /* PRODUCT_CONTROL_HEAD || PRODUCT_DUAL_BAND_RECEIVER */
 
 #if PRODUCT_CONTROL_HEAD
@@ -1806,7 +1806,7 @@ int main( void )
 
 						if(lb_buff->fields[FIELD1][0])
 						{
-							int32_t time = -1;
+							static volatile int32_t time = -1; // prevent optimizer from breaking this
 
 							if(g_lb_terminal_mode)
 							{
@@ -1965,7 +1965,7 @@ int main( void )
 
 								if(eemem_location)
 								{
-									Frequency_Hz memFreq = 0;
+									static volatile Frequency_Hz memFreq = 0; // Prevent optimizer from breaking this
 									isMem = TRUE;
 
 									if(g_lb_terminal_mode)              /* Handle terminal mode message */
@@ -1993,10 +1993,11 @@ int main( void )
 									{
 										if(g_lb_terminal_mode)
 										{
-											if(rxSetFrequency(&memFreq))
+											Frequency_Hz m = memFreq;
+											if(rxSetFrequency(&m))
 											{
-												g_receiver_freq = memFreq;
-												f = memFreq;
+												g_receiver_freq = m;
+												f = m;
 											}
 											else
 											{
@@ -2017,10 +2018,13 @@ int main( void )
 							}
 							else
 							{
-								Frequency_Hz f = atol(lb_buff->fields[FIELD1]);
-								if(rxSetFrequency(&f))
+								static volatile Frequency_Hz f; // Prevent optimizer from breaking this
+								f = atol(lb_buff->fields[FIELD1]);
+								
+								Frequency_Hz ff = f;
+								if(rxSetFrequency(&ff))
 								{
-									g_receiver_freq = f;
+									g_receiver_freq = ff;
 								}
 							}
 						}
@@ -2108,31 +2112,21 @@ int main( void )
 
 						if(lb_buff->fields[FIELD1][0])  /* band field */
 						{
-							RadioBand b = atoi(lb_buff->fields[FIELD1]);
-
-							if(g_lb_terminal_mode)
+							static volatile int b; // Prevent optimizer from breaking this
+							b = atoi(lb_buff->fields[FIELD1]);
+							
+							if(b == 80)
 							{
-								if(b == 80)
-								{
-									b = BAND_80M;
-								}
-								if(b == 2)
-								{
-									b = BAND_2M;
-								}
-
-								if(lb_buff->fields[FIELD2][0] == 'W')
-								{
-									rxSetBand(b);
-								}
+								rxSetBand(BAND_80M);
 							}
-							else
+							else if(b == 2)
 							{
-								rxSetBand(b);
+								rxSetBand(BAND_2M);
 							}
 						}
 
 						band = rxGetBand();
+
 #else
 
 						band = BAND_INVALID;
@@ -2475,11 +2469,13 @@ int main( void )
 				case MESSAGE_ALL_INFO:
 				{
 					int32_t time;
+					cli(); wdt_reset(); /* HW watchdog */ sei();
 					linkbus_setLineTerm("\n");
 					lb_send_BND(LINKBUS_MSG_REPLY, rxGetBand());
 					lb_send_FRE(LINKBUS_MSG_REPLY, rxGetFrequency(), FALSE);
 					lb_send_value(g_main_volume, "MAIN VOL");
 					lb_send_value(g_tone_volume, "TONE VOL");
+					cli(); wdt_reset(); /* HW watchdog */ sei();
 					lb_broadcast_bat(g_lastConversionResult[BATTERY_READING]);
 					lb_broadcast_rssi(g_lastConversionResult[RSSI_READING]);
 					linkbus_setLineTerm("\n\n");

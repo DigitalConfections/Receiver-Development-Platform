@@ -28,6 +28,7 @@
 #include "util.h"
 #include <string.h>
 #include <stdio.h>
+#include <avr/wdt.h>
 
 /* Global Variables */
 static BOOL g_lb_terminal_mode = FALSE;
@@ -35,15 +36,27 @@ static const char crlf[] = "\n";
 static char lineTerm[8] = "\n";
 static const char textPrompt[] = "RDP> ";
 static const char textWDT[] = "*** WDT Reset! ***\n";
-static const char textHelp1[] = "\nCommands:\n";
-static const char textHelp2[] = ">  B                 - Battery\n";
-static const char textHelp3[] = ">  BND [2|80]        - Rx Band\n";
-static const char textHelp4[] = ">  FRE [Hz]          - Rx Freq\n";
-static const char textHelp5[] = ">  FRE M<1:5> [Hz]   - Rx Mem\n";
-static const char textHelp6[] = ">  S                 - RSSI\n";
-static const char textHelp7[] = ">  TIM [hh:mm:ss]    - RTC Time\n";
-static const char textHelp8[] = ">  VOL <M:T> [0-100] - Main/Tone Vol\n";
-static const char textHelp9[] = ">  ?                 - Info\n";
+//static const char textHelp1[] = "\nCommands:\n";
+//static const char textHelp2[] = ">  B                 - Battery\n";
+//static const char textHelp3[] = ">  BND [2|80]        - Rx Band\n";
+//static const char textHelp4[] = ">  FRE [Hz]          - Rx Freq\n";
+//static const char textHelp5[] = ">  FRE M<1:5> [Hz]   - Rx Mem\n";
+//static const char textHelp6[] = ">  S                 - RSSI\n";
+//static const char textHelp7[] = ">  TIM [hh:mm:ss]    - RTC Time\n";
+//static const char textHelp8[] = ">  VOL <M:T> [0-100] - Main/Tone Vol\n";
+//static const char textHelp9[] = ">  ?                 - Info\n";
+
+static const char textHelp[][40] = { "\nCommands:\n",
+">  B                 - Battery\n",
+">  BND [2|80]        - Rx Band\n",
+">  FRE [Hz]          - Rx Freq\n",
+">  FRE M<1:5> [Hz]   - Rx Mem\n",
+">  S                 - RSSI\n",
+">  TIM [hh:mm:ss]    - RTC Time\n",
+">  VOL <M:T> [0-100] - Main/Tone Vol\n",
+">  ?                 - Info\n"
+};
+	
 static char g_tempMsgBuff[LINKBUS_MAX_MSG_LENGTH];
 
 /* Local function prototypes */
@@ -172,7 +185,14 @@ LinkbusRxBuffer* nextFullRxBuffer(void)
 }
 
 
-BOOL linkbusTxInProgress(void)
+/***********************************************************************
+ * linkbusTxInProgress(void)
+ *
+ * Notice: Optimization is not handling this function properly, and
+ * will cause lockup and WDT resets.
+ * TODO: Diagnose optimizer issue
+ ************************************************************************/
+BOOL __attribute__((optimize("O0"))) linkbusTxInProgress(void)
 {
 	return(linkbus_tx_active);
 }
@@ -183,8 +203,8 @@ BOOL linkbus_start_tx(void)
 
 	if(success) /* message will be lost if transmit is busy */
 	{
-		UCSR0B |= (1 << UDRIE0);
 		linkbus_tx_active = TRUE;
+		UCSR0B |= (1 << UDRIE0);
 	}
 
 	return(success);
@@ -192,8 +212,11 @@ BOOL linkbus_start_tx(void)
 
 void linkbus_end_tx(void)
 {
-	UCSR0B &= ~(1 << UDRIE0);
-	linkbus_tx_active = FALSE;
+	if(linkbus_tx_active)
+	{
+		UCSR0B &= ~(1 << UDRIE0);
+		linkbus_tx_active = FALSE;
+	}
 }
 
 void linkbus_reset_rx(void)
@@ -272,58 +295,22 @@ void lb_send_WDTError(void)
 	linkbus_send_text((char*)textWDT);
 }
 
-
+/***********************************************************************
+ * lb_send_Help(void)
+ ************************************************************************/
 void lb_send_Help(void)
 {
-	char txt[50];
-
-	sprintf(txt, "\n*** %s Ver. %s ***", PRODUCT_NAME_LONG, SW_REVISION);
-	linkbus_send_text(txt); while(linkbus_tx_active)
+	sprintf(g_tempMsgBuff, "\n*** %s Ver. %s ***", PRODUCT_NAME_LONG, SW_REVISION);
+	
+	while(linkbus_send_text(g_tempMsgBuff)); 
+	while(linkbusTxInProgress());
+	
+	for(int i=0; i<9; i++)
 	{
-		;
+		while(linkbus_send_text((char*)textHelp[i])); 
+		while(linkbusTxInProgress());
 	}
 	
-	linkbus_send_text((char*)textHelp1); while(linkbus_tx_active)
-	{
-		;
-	}
-	
-	linkbus_send_text((char*)textHelp2); while(linkbus_tx_active)
-	{
-		;
-	}
-	
-	linkbus_send_text((char*)textHelp3); while(linkbus_tx_active)
-	{
-		;
-	}
-	
-	linkbus_send_text((char*)textHelp4); while(linkbus_tx_active)
-	{
-		;
-	}
-	
-	linkbus_send_text((char*)textHelp5); while(linkbus_tx_active)
-	{
-		;
-	}
-	
-	linkbus_send_text((char*)textHelp6); while(linkbus_tx_active)
-	{
-		;
-	}
-	
-	linkbus_send_text((char*)textHelp7); while(linkbus_tx_active)
-	{
-		;
-	}
-	
-	linkbus_send_text((char*)textHelp8); while(linkbus_tx_active)
-	{
-		;
-	}
-	
-	linkbus_send_text((char*)textHelp9);
 	lb_send_NewLine();
 }
 
