@@ -40,7 +40,7 @@
 
 /******************************************************
  * Set the text that gets displayed to the user */
-#define SW_REVISION "0.3"
+#define SW_REVISION "0.7.7"
 
 #if PRODUCT_CONTROL_HEAD
    #define PRODUCT_NAME_SHORT "Control Head"

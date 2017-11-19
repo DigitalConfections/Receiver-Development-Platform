@@ -33,12 +33,12 @@
 
 #ifdef INCLUDE_RECEIVER_SUPPORT
 
-	static BOOL g_rx_initialized = FALSE;
-	static Frequency_Hz g_freq_2m = DEFAULT_RX_2M_FREQUENCY;
-	static Frequency_Hz g_freq_80m = DEFAULT_RX_80M_FREQUENCY;
-	static Frequency_Hz g_freq_bfo = RADIO_IF_FREQUENCY;
-	static RadioVFOConfig g_vfo_configuration = VFO_2M_LOW_80M_HIGH;
-	static RadioBand g_activeBand = DEFAULT_RX_ACTIVE_BAND;
+	static volatile BOOL g_rx_initialized = FALSE;
+	static volatile Frequency_Hz g_freq_2m = DEFAULT_RX_2M_FREQUENCY;
+	static volatile Frequency_Hz g_freq_80m = DEFAULT_RX_80M_FREQUENCY;
+	static volatile Frequency_Hz g_freq_bfo = RADIO_IF_FREQUENCY;
+	static volatile RadioVFOConfig g_vfo_configuration = VFO_2M_LOW_80M_HIGH;
+	static volatile RadioBand g_activeBand = DEFAULT_RX_ACTIVE_BAND;
 
 /* EEPROM Defines */
    #define EEPROM_BAND_DEFAULT BAND_2M
@@ -144,25 +144,27 @@
 		g_vfo_configuration = config;
 	}
 
-	void rxSetBand(RadioBand band)
+	void rxSetBand(RadioBand band) 
 	{
 		if(band == BAND_80M)
 		{
 			g_activeBand = band;
 			PORTD |= (1 << PORTD7);
-			rxSetFrequency(&g_freq_80m);
+			Frequency_Hz f = g_freq_80m;
+			rxSetFrequency(&f);
 		}
 		else if(band == BAND_2M)
 		{
 			g_activeBand = band;
 			PORTD &= ~(1 << PORTD7);
-			rxSetFrequency(&g_freq_2m);
+			Frequency_Hz f = g_freq_80m;
+			rxSetFrequency(&f);
 		}
 	}
 
 	RadioBand rxGetBand(void)
 	{
-		return( g_activeBand);
+		return(g_activeBand);
 	}
 
 	void init_receiver(Receiver* rx)
@@ -181,12 +183,11 @@
 		g_freq_bfo = RADIO_IF_FREQUENCY;
 		rxSetBand(g_activeBand);    /* also sets Si5351 CLK0 to VFO frequency */
 
-		si5351_set_freq(g_freq_bfo, SI5351_CLK1);
+		si5351_set_freq(g_freq_bfo, SI5351_CLK2);
 		si5351_drive_strength(SI5351_CLK0, SI5351_DRIVE_8MA);
 		si5351_clock_enable(SI5351_CLK0, TRUE);
-		si5351_drive_strength(SI5351_CLK1, SI5351_DRIVE_8MA);
-		si5351_clock_enable(SI5351_CLK1, TRUE);
-/*	si5351_clock_enable(SI5351_CLK2, FALSE); */
+		si5351_drive_strength(SI5351_CLK2, SI5351_DRIVE_8MA);
+		si5351_clock_enable(SI5351_CLK2, TRUE);
 		g_rx_initialized = TRUE;
 	}
 
