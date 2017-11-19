@@ -138,7 +138,9 @@
  * been found to introduce run-time problems. Comment out the following #define if your compiler does not support
  * the syntax used in this library. 
  */
-#define SELECTIVELY_DISABLE_OPTIMIZATION
+#ifndef SELECTIVELY_DISABLE_OPTIMIZATION
+	#define SELECTIVELY_DISABLE_OPTIMIZATION
+#endif
 /*
  ****************************************************************************************************************/
 
