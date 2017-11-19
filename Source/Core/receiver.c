@@ -29,7 +29,6 @@
 
 #include <stdlib.h>
 #include "receiver.h"
-#include "si5351.h"
 
 #ifdef INCLUDE_RECEIVER_SUPPORT
 
@@ -88,7 +87,14 @@
 			}
 			else
 			{
-				vfo = labs(*freq - RADIO_IF_FREQUENCY);
+				if(*freq > RADIO_IF_FREQUENCY)
+				{
+					vfo = *freq - RADIO_IF_FREQUENCY;
+				}
+				else
+				{
+					vfo = RADIO_IF_FREQUENCY - *freq;
+				}
 			}
 
 			bandSet = BAND_80M;
@@ -103,7 +109,14 @@
 			}
 			else
 			{
-				vfo = labs(*freq - RADIO_IF_FREQUENCY);
+				if(*freq > RADIO_IF_FREQUENCY)
+				{
+					vfo = *freq - RADIO_IF_FREQUENCY;
+				}
+				else
+				{
+					vfo = RADIO_IF_FREQUENCY - *freq;
+				}
 			}
 
 			bandSet = BAND_2M;
@@ -115,7 +128,7 @@
 		}
 		else if(g_activeBand == bandSet)
 		{
-			si5351_set_freq(vfo, SI5351_CLK0);
+			si5351_set_freq(vfo, RX_CLOCK_VFO);
 			activeBandSet = TRUE;
 		}
 
@@ -157,7 +170,7 @@
 		{
 			g_activeBand = band;
 			PORTD &= ~(1 << PORTD7);
-			Frequency_Hz f = g_freq_80m;
+			Frequency_Hz f = g_freq_2m;
 			rxSetFrequency(&f);
 		}
 	}
@@ -167,7 +180,7 @@
 		return(g_activeBand);
 	}
 
-	void init_receiver(Receiver* rx)
+	void init_receiver(void)
 	{
 		si5351_init(SI5351_CRYSTAL_LOAD_6PF, 0);
 
@@ -175,19 +188,16 @@
 		g_freq_80m = DEFAULT_RX_80M_FREQUENCY;
 		g_activeBand = DEFAULT_RX_ACTIVE_BAND;
 
-		if(rx)
-		{
-			rx->bandSetting = g_activeBand;
-		}
-
 		g_freq_bfo = RADIO_IF_FREQUENCY;
-		rxSetBand(g_activeBand);    /* also sets Si5351 CLK0 to VFO frequency */
+		rxSetBand(g_activeBand);    /* also sets RX_CLOCK_VFO to VFO frequency */
 
-		si5351_set_freq(g_freq_bfo, SI5351_CLK2);
-		si5351_drive_strength(SI5351_CLK0, SI5351_DRIVE_8MA);
-		si5351_clock_enable(SI5351_CLK0, TRUE);
-		si5351_drive_strength(SI5351_CLK2, SI5351_DRIVE_8MA);
-		si5351_clock_enable(SI5351_CLK2, TRUE);
+		si5351_set_freq(g_freq_bfo, RX_CLOCK_BFO);
+		si5351_drive_strength(RX_CLOCK_BFO, SI5351_DRIVE_8MA);
+		si5351_clock_enable(RX_CLOCK_BFO, TRUE);
+		
+		si5351_drive_strength(RX_CLOCK_VFO, SI5351_DRIVE_8MA);
+		si5351_clock_enable(RX_CLOCK_VFO, TRUE);
+
 		g_rx_initialized = TRUE;
 	}
 

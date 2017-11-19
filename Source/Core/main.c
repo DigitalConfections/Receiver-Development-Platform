@@ -133,7 +133,9 @@ static volatile BatteryType g_battery_type = BATTERY_UNKNOWN;
 static volatile uint16_t g_send_ID_countdown = 0;
 static volatile BOOL g_initialization_complete = FALSE;
 
-static int32_t g_start_time;
+#ifdef INCLUDE_PCF2129_SUPPORT
+	static int32_t g_start_time;
+#endif
 
 /* Linkbus variables */
 static DeviceID g_LB_attached_device = NO_ID;
@@ -1533,7 +1535,7 @@ int main( void )
 	 * Initialize the receiver */
 
 #if PRODUCT_DUAL_BAND_RECEIVER
-		init_receiver(NULL);
+		init_receiver();
 #elif PRODUCT_CONTROL_HEAD
 #elif PRODUCT_TEST_INSTRUMENT_HEAD
 /*	g_si5351_clk0_freq =
@@ -1575,12 +1577,15 @@ int main( void )
    #endif                           /* #ifdef ENABLE_1_SEC_INTERRUPTS */
 #elif PRODUCT_DUAL_BAND_RECEIVER
 		lb_send_ID(LINKBUS_MSG_COMMAND, RECEIVER_ID, NO_ID);
-		pcf2129_init();
-		pcf2129_read_time(&g_start_time, NULL, Time_Format_Not_Specified);
-   #ifdef ENABLE_1_SEC_INTERRUPTS
-			g_seconds_count = 0;    /* sync seconds count to clock */
-			pcf2129_1s_sqw(ON);
-   #endif                           /* #ifdef ENABLE_1_SEC_INTERRUPTS */
+		
+		#ifdef INCLUDE_PCF2129_SUPPORT
+			pcf2129_init();
+			pcf2129_read_time(&g_start_time, NULL, Time_Format_Not_Specified);
+		   #ifdef ENABLE_1_SEC_INTERRUPTS
+					g_seconds_count = 0;    /* sync seconds count to clock */
+					pcf2129_1s_sqw(ON);
+		   #endif                           /* #ifdef ENABLE_1_SEC_INTERRUPTS */
+		#endif
 #endif
 
 	while(linkbusTxInProgress())
@@ -1806,7 +1811,7 @@ int main( void )
 
 						if(lb_buff->fields[FIELD1][0])
 						{
-							static volatile int32_t time = -1; // prevent optimizer from breaking this
+							volatile int32_t time = -1; // prevent optimizer from breaking this
 
 							if(g_lb_terminal_mode)
 							{
@@ -1822,15 +1827,19 @@ int main( void )
 
 							if(time >= 0)
 							{
-								pcf2129_set_time(time, FALSE);
+								#ifdef INCLUDE_PCF2129_SUPPORT
+									pcf2129_set_time(time, FALSE);
+								#endif
 							}
 						}
 
 						if(lb_buff->type == LINKBUS_MSG_QUERY)
 						{
-							int32_t time;
-							pcf2129_read_time(&time, NULL, Time_Format_Not_Specified);
-							lb_send_TIM(LINKBUS_MSG_REPLY, time);
+							#ifdef INCLUDE_PCF2129_SUPPORT
+								int32_t time;
+								pcf2129_read_time(&time, NULL, Time_Format_Not_Specified);
+								lb_send_TIM(LINKBUS_MSG_REPLY, time);
+							#endif
 						}
 
 #endif  /* #if PRODUCT_CONTROL_HEAD */
@@ -1965,7 +1974,7 @@ int main( void )
 
 								if(eemem_location)
 								{
-									static volatile Frequency_Hz memFreq = 0; // Prevent optimizer from breaking this
+									volatile Frequency_Hz memFreq = 0; // Prevent optimizer from breaking this
 									isMem = TRUE;
 
 									if(g_lb_terminal_mode)              /* Handle terminal mode message */
@@ -2018,8 +2027,7 @@ int main( void )
 							}
 							else
 							{
-								static volatile Frequency_Hz f; // Prevent optimizer from breaking this
-								f = atol(lb_buff->fields[FIELD1]);
+								Frequency_Hz f = atol(lb_buff->fields[FIELD1]); // Prevent optimizer from breaking this							
 								
 								Frequency_Hz ff = f;
 								if(rxSetFrequency(&ff))
@@ -2112,8 +2120,7 @@ int main( void )
 
 						if(lb_buff->fields[FIELD1][0])  /* band field */
 						{
-							static volatile int b; // Prevent optimizer from breaking this
-							b = atoi(lb_buff->fields[FIELD1]);
+							int b = atoi(lb_buff->fields[FIELD1]);
 							
 							if(b == 80)
 							{
@@ -2468,7 +2475,10 @@ int main( void )
 
 				case MESSAGE_ALL_INFO:
 				{
-					int32_t time;
+					#ifdef INCLUDE_PCF2129_SUPPORT
+						int32_t time;
+					#endif
+					
 					cli(); wdt_reset(); /* HW watchdog */ sei();
 					linkbus_setLineTerm("\n");
 					lb_send_BND(LINKBUS_MSG_REPLY, rxGetBand());
@@ -2480,9 +2490,11 @@ int main( void )
 					lb_broadcast_rssi(g_lastConversionResult[RSSI_READING]);
 					linkbus_setLineTerm("\n\n");
 					cli(); wdt_reset(); /* HW watchdog */ sei();
-					pcf2129_read_time(&time, NULL, Time_Format_Not_Specified);
-					lb_send_TIM(LINKBUS_MSG_REPLY, time);
-					cli(); wdt_reset(); /* HW watchdog */ sei();
+					#ifdef INCLUDE_PCF2129_SUPPORT
+						pcf2129_read_time(&time, NULL, Time_Format_Not_Specified);
+						lb_send_TIM(LINKBUS_MSG_REPLY, time);
+						cli(); wdt_reset(); /* HW watchdog */ sei();
+					#endif
 				}
 				break;
 

@@ -29,13 +29,20 @@
 #define RECEIVER_H_
 
 #include "defs.h"
+#include "si5351.h"
 
 typedef uint16_t SignalStrength;
 typedef int16_t Attenuation;
 
 #define RADIO_NUMBER_OF_BANDS 2
-#define RADIO_IF_FREQUENCY 10700000
-#define RADIO_MINIMUM_RECEIVE_FREQ 3500000
+#define RADIO_IF_FREQUENCY ((Frequency_Hz)10700000)
+#define RADIO_MINIMUM_RECEIVE_FREQ ((Frequency_Hz)3500000)
+
+/*
+ * Configure VFO and LO clock pins
+ */
+#define RX_CLOCK_BFO SI5351_CLK2
+#define RX_CLOCK_VFO SI5351_CLK0
 
 typedef enum
 {
@@ -120,7 +127,7 @@ typedef enum
 #ifdef INCLUDE_RECEIVER_SUPPORT
 /**
  */
-	void init_receiver(Receiver* rx);
+	void init_receiver(void);
 
 /**
  */

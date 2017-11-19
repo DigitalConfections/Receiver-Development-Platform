@@ -40,7 +40,7 @@
 
 /******************************************************
  * Set the text that gets displayed to the user */
-#define SW_REVISION "0.7.7"
+#define SW_REVISION "0.7.8"
 
 #if PRODUCT_CONTROL_HEAD
    #define PRODUCT_NAME_SHORT "Control Head"
@@ -62,12 +62,12 @@
  * Include only the necessary hardware support */
 #if PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD
    #define INCLUDE_ST7036_SUPPORT
-   #define INCLUDE_DS3231_SUPPORT
+   #define INCLUDE_DS3231_SUPPORT // Maxim RTC
 	/* TODO: Add LSM303DLHC compass module support
 	 * TODO: Add GPS support (http://adafruit/3133) */
 #elif PRODUCT_DUAL_BAND_RECEIVER || PRODUCT_TEST_DIGITAL_INTERFACE
-   #define INCLUDE_SI5351_SUPPORT
-   #define INCLUDE_PCF2129_SUPPORT
+   #define INCLUDE_SI5351_SUPPORT // Silicon Labs Programmable Clock
+   //#define INCLUDE_DS3231_SUPPORT // Maxim RTC
    #define INCLUDE_PCF8574_SUPPORT
    #define INCLUDE_RECEIVER_SUPPORT
 	/* TODO: Add DAC081C085 support
@@ -84,6 +84,10 @@
    #define ENABLE_1_SEC_INTERRUPTS
 #endif
 /*******************************************************/
+
+#ifndef SELECTIVELY_DISABLE_OPTIMIZATION
+	#define SELECTIVELY_DISABLE_OPTIMIZATION
+#endif
 
 /******************************************************
  * EEPROM definitions */

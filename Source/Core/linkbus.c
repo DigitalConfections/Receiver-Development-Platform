@@ -64,7 +64,7 @@ BOOL linkbus_send_text(char* text);
 BOOL linkbus_start_tx(void);
 
 /* Module global variables */
-static BOOL linkbus_tx_active = FALSE;
+static volatile BOOL linkbus_tx_active = FALSE; // volatile is required to ensure optimizer handles this properly
 static LinkbusTxBuffer tx_buffer[LINKBUS_NUMBER_OF_TX_MSG_BUFFERS];
 static LinkbusRxBuffer rx_buffer[LINKBUS_NUMBER_OF_RX_MSG_BUFFERS];
 
@@ -187,12 +187,8 @@ LinkbusRxBuffer* nextFullRxBuffer(void)
 
 /***********************************************************************
  * linkbusTxInProgress(void)
- *
- * Notice: Optimization is not handling this function properly, and
- * will cause lockup and WDT resets.
- * TODO: Diagnose optimizer issue
  ************************************************************************/
-BOOL __attribute__((optimize("O0"))) linkbusTxInProgress(void)
+BOOL linkbusTxInProgress(void)
 {
 	return(linkbus_tx_active);
 }
@@ -568,7 +564,7 @@ void lb_send_VOL(LBMessageType msgType, VolumeType type, VolumeSetting volume)
 
 void lb_send_BND(LBMessageType msgType, RadioBand band)
 {
-	char b[2];
+	char b[4];
 	BOOL valid = TRUE;
 	char prefix = '$';
 	char terminus = ';';
