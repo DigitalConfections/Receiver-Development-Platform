@@ -56,6 +56,17 @@
 #include <avr/wdt.h>
 
 /***********************************************************************
+ * Local Typedefs
+************************************************************************/
+typedef enum
+{
+	WD_SW_RESETS,
+	WD_HW_RESETS,
+	WD_FORCE_RESET
+} WDReset;
+
+
+/***********************************************************************
  * Global Variables & String Constants
  *
  * Identify each global with a "g_" prefix
@@ -141,6 +152,8 @@ static volatile BOOL g_initialization_complete = FALSE;
 static DeviceID g_LB_attached_device = NO_ID;
 static uint16_t g_LB_broadcasts_enabled = 0;
 static BOOL g_lb_terminal_mode = FALSE;
+static BOOL g_lb_repeat_rssi = FALSE;
+static uint16_t g_rssi_countdown = 0;
 
 #if PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD
 
@@ -214,6 +227,8 @@ static BOOL g_lb_terminal_mode = FALSE;
 #endif  /* PRODUCT_DUAL_BAND_RECEIVER || PRODUCT_TEST_DIGITAL_INTERFACE */
 
 static volatile uint8_t g_main_volume;
+static volatile uint8_t g_hw_main_volume = EEPROM_MAIN_VOLUME_DEFAULT;
+
 static volatile uint8_t g_tone_volume;
 
 #ifdef ENABLE_1_SEC_INTERRUPTS
@@ -239,7 +254,7 @@ static volatile uint8_t g_tone_volume;
 	static uint16_t g_filterADCValue[NUMBER_OF_POLLED_ADC_CHANNELS] = { 500, 500 };
 	static volatile BOOL g_adcUpdated[NUMBER_OF_POLLED_ADC_CHANNELS] = { FALSE, FALSE };
 	static volatile uint16_t g_lastConversionResult[NUMBER_OF_POLLED_ADC_CHANNELS];
-
+	
 #elif PRODUCT_DUAL_BAND_RECEIVER || PRODUCT_TEST_DIGITAL_INTERFACE
 
    #define RF_READING 0
@@ -257,6 +272,8 @@ static volatile uint8_t g_tone_volume;
 	static uint16_t g_filterADCValue[NUMBER_OF_POLLED_ADC_CHANNELS] = { 500, 500, 3 };
 	static volatile BOOL g_adcUpdated[NUMBER_OF_POLLED_ADC_CHANNELS] = { FALSE, FALSE, FALSE };
 	static volatile uint16_t g_lastConversionResult[NUMBER_OF_POLLED_ADC_CHANNELS];
+
+	static volatile uint32_t g_filteredRSSI = 0;
 
 	/* Broadcast data received from Dual-Band Receiver */
 	static int16_t g_RSSI_data = WAITING_FOR_UPDATE;
@@ -284,7 +301,7 @@ void saveAllEEPROM(void);
 void printButtons(char buff[DISPLAY_WIDTH_STRING_SIZE], char* labels[]);
 void clearTextBuffer(LcdRowType);
 void updateLCDTextBuffer(char* buffer, char* text, BOOL preserveContents);
-void wdt_init(BOOL enableHWResets);
+void wdt_init(WDReset resetType);
 LcdColType columnForDigit(int8_t digit, TextFormat format);
 
 
@@ -305,7 +322,7 @@ LcdColType columnForDigit(int8_t digit, TextFormat format);
  * Notice: Optimization must be enabled before watchdog can be set
  * in C (WDCE). Use __attribute__ to enforce optimization level.
  ************************************************************************/
-void __attribute__((optimize("O1"))) wdt_init(BOOL enableHWResets)
+void __attribute__((optimize("O1"))) wdt_init(WDReset resetType)
 {
 	wdt_reset();
 
@@ -314,21 +331,26 @@ void __attribute__((optimize("O1"))) wdt_init(BOOL enableHWResets)
 		MCUSR &= (1 << WDRF);   /* Clear the WDT reset flag */
 	}
 
-	if(enableHWResets)
+	if(resetType == WD_HW_RESETS)
 	{
 		WDTCSR |= (1 << WDCE) | (1 << WDE);
 		WDTCSR = (1 << WDP3) | (1 << WDIE) | (1 << WDE);    /* Enable WD interrupt every 4 seconds, and hardware resets */
 		/*	WDTCSR = (1 << WDP3) | (1 << WDP0) | (1 << WDIE) | (1 << WDE); // Enable WD interrupt every 8 seconds, and hardware resets */
 	}
-	else
+	else if(resetType == WD_SW_RESETS)
 	{
 		WDTCSR |= (1 << WDCE) | (1 << WDE);
 		/*	WDTCSR = (1 << WDP3) | (1 << WDIE); // Enable WD interrupt every 4 seconds (no HW reset)
 		 *	WDTCSR = (1 << WDP3) | (1 << WDP0)  | (1 << WDIE); // Enable WD interrupt every 8 seconds (no HW reset) */
 		WDTCSR = (1 << WDP1) | (1 << WDP2)  | (1 << WDIE);  /* Enable WD interrupt every 1 seconds (no HW reset) */
 	}
-
-	g_enableHardwareWDResets = enableHWResets;
+	else
+	{
+		WDTCSR |= (1 << WDCE) | (1 << WDE);
+		WDTCSR = (1 << WDIE) | (1 << WDE);    /* Enable WD interrupt in 16ms, and hardware reset */
+	}
+	
+	g_enableHardwareWDResets = (resetType != WD_SW_RESETS);
 }
 
 
@@ -364,6 +386,13 @@ ISR( TIMER2_COMPB_vect )
 	if(g_button0_pressed)
 	{
 		g_button0_press_ticks++;
+	}
+	if(g_lb_repeat_rssi)
+	{
+		if(g_rssi_countdown)
+		{
+			g_rssi_countdown--;
+		}
 	}
 
 #if PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD
@@ -420,7 +449,6 @@ ISR( TIMER2_COMPB_vect )
 			g_LB_broadcast_interval--;
 		}
 
-		static uint8_t mainVolumeSetting = EEPROM_MAIN_VOLUME_DEFAULT;
 		static BOOL volumeSetInProcess = FALSE;
 		static BOOL beepInProcess = FALSE;
 
@@ -457,25 +485,27 @@ ISR( TIMER2_COMPB_vect )
 				volumeSetInProcess = FALSE;
 			}
 		}
-		else if(mainVolumeSetting != g_main_volume)
+		else if(g_hw_main_volume != g_main_volume)
 		{
-			if(!(PORTC & (1 << PORTC0)))
+			if(g_sufficient_power_detected)
 			{
-				PORTC |= (1 << PORTC0); /* set clock high */
+				if(!(PORTC & (1 << PORTC0)))
+				{
+					PORTC |= (1 << PORTC0); /* set clock high */
+				}
+				if(g_hw_main_volume > g_main_volume)
+				{
+					PORTC &= ~(1 << PORTC1);    /* set direction down */
+					g_hw_main_volume--;
+				}
+				else                            /* if(g_hw_main_volume < g_main_volume) */
+				{
+					PORTC |= (1 << PORTC1);     /* set direction up */
+					g_hw_main_volume++;
+				}
 
+				volumeSetInProcess = TRUE;
 			}
-			if(mainVolumeSetting > g_main_volume)
-			{
-				PORTC &= ~(1 << PORTC1);    /* set direction down */
-				mainVolumeSetting--;
-			}
-			else                            /* if(mainVolumeSetting < g_main_volume) */
-			{
-				PORTC |= (1 << PORTC1);     /* set direction up */
-				mainVolumeSetting++;
-			}
-
-			volumeSetInProcess = TRUE;
 		}
 
 #endif  /* PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD */
@@ -521,36 +551,45 @@ ISR( TIMER2_COMPB_vect )
 
 		g_adcUpdated[indexConversionInProcess] = TRUE;
 
-		if(delta > g_filterADCValue[indexConversionInProcess])
+		if(indexConversionInProcess == BATTERY_READING)
+		{
+			if(delta > g_filterADCValue[indexConversionInProcess])
+			{
+				lastResult = holdConversionResult;
+				g_tickCountdownADCFlag[indexConversionInProcess] = 100; /* speed up next conversion */
+			}
+			else
+			{
+				if(directionUP)
+				{
+					lastResult++;
+				}
+				else if(delta)
+				{
+					lastResult--;
+				}
+
+				if(indexConversionInProcess == BATTERY_READING) /* Set flag indicating that battery/headphone monitoring has begun */
+				{
+					g_battery_measurements_active = TRUE;
+	
+					if(lastResult > VOLTS_5)
+					{
+						g_battery_type = BATTERY_9V;
+					}
+					else if(lastResult > VOLTS_3_0)
+					{
+						g_battery_type = BATTERY_4r2V;
+					}
+				}
+			}
+		}
+		else if(indexConversionInProcess == RSSI_READING)
 		{
 			lastResult = holdConversionResult;
-			g_tickCountdownADCFlag[indexConversionInProcess] = 100; /* speed up next conversion */
-		}
-		else
-		{
-			if(directionUP)
-			{
-				lastResult++;
-			}
-			else if(delta)
-			{
-				lastResult--;
-			}
-
-			if(indexConversionInProcess == BATTERY_READING) /* Set flag indicating that battery/headphone monitoring has begun */
-			{
-				g_battery_measurements_active = TRUE;
-
-				if(lastResult > VOLTS_5)
-				{
-					g_battery_type = BATTERY_9V;
-				}
-				else if(lastResult > VOLTS_3_0)
-				{
-					g_battery_type = BATTERY_4r2V;
-				}
-			}
-
+			g_filteredRSSI = g_filteredRSSI << 3; 
+			g_filteredRSSI += lastResult;
+			g_filteredRSSI /= 9;
 		}
 
 		g_lastConversionResult[indexConversionInProcess] = lastResult;
@@ -1529,7 +1568,7 @@ int main( void )
 
 	/**
 	 * Enable watchdog interrupts before performing I2C calls that might cause a lockup */
-	wdt_init(FALSE);
+	wdt_init(WD_SW_RESETS);
 
 	/**
 	 * Initialize the receiver */
@@ -1593,7 +1632,8 @@ int main( void )
 	}               /* wait until transmit finishes */
 
 	g_send_ID_countdown = SEND_ID_DELAY;
-	wdt_init(TRUE); /* enable hardware interrupts */
+	wdt_init(WD_HW_RESETS); /* enable hardware interrupts */
+	
 	g_initialization_complete = TRUE;
 
 	while(1)
@@ -1725,7 +1765,8 @@ int main( void )
 
 					PORTB |= (1 << PORTB1); /* latch power on */
 					PORTD |= (1 << PORTD6); /* Enable audio power */
-
+					g_hw_main_volume = EEPROM_MAIN_VOLUME_DEFAULT;
+					
 #endif
 			}
 			else
@@ -1795,6 +1836,41 @@ int main( void )
 
 			switch(msg_id)
 			{
+				case MESSAGE_RESET:
+				{
+					wdt_init(WD_FORCE_RESET);
+					while(1);
+				}
+				break;
+				
+				case MESSAGE_RSSI_REPEAT_BC:
+				{
+					g_lb_repeat_rssi = !g_lb_repeat_rssi;
+				}
+				break;
+
+				case MESSAGE_CW_OFFSET:
+				{
+					Frequency_Hz offset;
+					
+					if(lb_buff->fields[FIELD1][0])
+					{
+						offset = atol(lb_buff->fields[FIELD1]); // Prevent optimizer from breaking this
+						rxSetCWOffset(offset);
+					}
+					
+					offset = rxGetCWOffset();
+					lb_send_FRE(LINKBUS_MSG_REPLY, offset, FALSE);
+				}
+				break;
+				
+				case MESSAGE_PERM:
+				{
+					store_receiver_values();
+					saveAllEEPROM();
+				}
+				break;
+				
 				case MESSAGE_TIME:
 				{
 #if PRODUCT_CONTROL_HEAD
@@ -2454,7 +2530,7 @@ int main( void )
 				{
 				}
 				break;
-
+				
 				case MESSAGE_RSSI_BC:
 				{
 					if(g_lb_terminal_mode)
@@ -2483,6 +2559,7 @@ int main( void )
 					linkbus_setLineTerm("\n");
 					lb_send_BND(LINKBUS_MSG_REPLY, rxGetBand());
 					lb_send_FRE(LINKBUS_MSG_REPLY, rxGetFrequency(), FALSE);
+					lb_send_FRE(LINKBUS_MSG_REPLY, rxGetCWOffset(), FALSE);
 					lb_send_value(g_main_volume, "MAIN VOL");
 					lb_send_value(g_tone_volume, "TONE VOL");
 					cli(); wdt_reset(); /* HW watchdog */ sei();
@@ -2497,6 +2574,31 @@ int main( void )
 					#endif
 				}
 				break;
+				
+#ifdef DEBUG_FUNCTIONS_ENABLE
+				case MESSAGE_DEBUG:
+				{
+					static BOOL toggle = FALSE;
+					
+					if(toggle)
+					{
+						toggle = FALSE;
+						si5351_drive_strength(RX_CLOCK_BFO, SI5351_DRIVE_2MA);
+						si5351_drive_strength(RX_CLOCK_VFO, SI5351_DRIVE_2MA);
+						si5351_clock_enable(RX_CLOCK_BFO, TRUE);
+						si5351_clock_enable(RX_CLOCK_VFO, TRUE);
+					}
+					else
+					{
+						toggle = TRUE;
+						si5351_drive_strength(RX_CLOCK_BFO, SI5351_DRIVE_8MA);
+						si5351_drive_strength(RX_CLOCK_VFO, SI5351_DRIVE_8MA);
+						si5351_clock_enable(RX_CLOCK_BFO, TRUE);
+						si5351_clock_enable(RX_CLOCK_VFO, TRUE);
+					}
+				}
+				break;
+#endif //DEBUG_FUNCTIONS_ENABLE
 
 				default:
 				{
@@ -2950,6 +3052,15 @@ int main( void )
 			if(hold_tick_count != g_tick_count)
 			{
 				hold_tick_count = g_tick_count;
+
+				if(g_lb_repeat_rssi)
+				{
+					if(!g_rssi_countdown)
+					{
+						g_rssi_countdown = 100;
+						lb_broadcast_rssi(g_filteredRSSI);
+					}
+				}
 
 				if(!g_LB_broadcast_interval && g_LB_broadcasts_enabled)
 				{

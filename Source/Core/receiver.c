@@ -35,6 +35,7 @@
 	static volatile BOOL g_rx_initialized = FALSE;
 	static volatile Frequency_Hz g_freq_2m = DEFAULT_RX_2M_FREQUENCY;
 	static volatile Frequency_Hz g_freq_80m = DEFAULT_RX_80M_FREQUENCY;
+	static volatile Frequency_Hz g_cw_offset = DEFAULT_RX_CW_OFFSET_FREQUENCY;
 	static volatile Frequency_Hz g_freq_bfo = RADIO_IF_FREQUENCY;
 	static volatile RadioVFOConfig g_vfo_configuration = VFO_2M_LOW_80M_HIGH;
 	static volatile RadioBand g_activeBand = DEFAULT_RX_ACTIVE_BAND;
@@ -46,6 +47,9 @@
 	static int32_t EEMEM ee_si5351_ref_correction = EEPROM_SI5351_CALIBRATION_DEFAULT;
 
 	static uint8_t EEMEM ee_active_band = EEPROM_BAND_DEFAULT;
+	static uint32_t EEMEM ee_active_2m_frequency = DEFAULT_RX_2M_FREQUENCY;
+	static uint32_t EEMEM ee_active_80m_frequency = DEFAULT_RX_80M_FREQUENCY;
+	static uint32_t EEMEM ee_cw_offset_frequency = DEFAULT_RX_CW_OFFSET_FREQUENCY;
 
 	uint32_t EEMEM ee_receiver_2m_mem1_freq = EEPROM_2M_MEM1_DEFAULT;
 	uint32_t EEMEM ee_receiver_2m_mem2_freq = EEPROM_2M_MEM2_DEFAULT;
@@ -96,7 +100,7 @@
 					vfo = RADIO_IF_FREQUENCY - *freq;
 				}
 			}
-
+			
 			bandSet = BAND_80M;
 		}
 		else if((*freq < RX_MAXIMUM_2M_FREQUENCY) && (*freq > RX_MINIMUM_2M_FREQUENCY))
@@ -128,6 +132,7 @@
 		}
 		else if(g_activeBand == bandSet)
 		{
+			vfo -= g_cw_offset; // apply CW offset
 			si5351_set_freq(vfo, RX_CLOCK_VFO);
 			activeBandSet = TRUE;
 		}
@@ -184,28 +189,39 @@
 	{
 		si5351_init(SI5351_CRYSTAL_LOAD_6PF, 0);
 
-		g_freq_2m = DEFAULT_RX_2M_FREQUENCY;
-		g_freq_80m = DEFAULT_RX_80M_FREQUENCY;
-		g_activeBand = DEFAULT_RX_ACTIVE_BAND;
+//		g_freq_2m = DEFAULT_RX_2M_FREQUENCY;
+//		g_freq_80m = DEFAULT_RX_80M_FREQUENCY;
+//		g_activeBand = DEFAULT_RX_ACTIVE_BAND;
+		
+		initializeReceiverEEPROMVars();
 
 		g_freq_bfo = RADIO_IF_FREQUENCY;
 		rxSetBand(g_activeBand);    /* also sets RX_CLOCK_VFO to VFO frequency */
 
 		si5351_set_freq(g_freq_bfo, RX_CLOCK_BFO);
-		si5351_drive_strength(RX_CLOCK_BFO, SI5351_DRIVE_8MA);
+		si5351_drive_strength(RX_CLOCK_BFO, SI5351_DRIVE_2MA);
 		si5351_clock_enable(RX_CLOCK_BFO, TRUE);
 		
-		si5351_drive_strength(RX_CLOCK_VFO, SI5351_DRIVE_8MA);
+		si5351_drive_strength(RX_CLOCK_VFO, SI5351_DRIVE_2MA);
 		si5351_clock_enable(RX_CLOCK_VFO, TRUE);
 
 		g_rx_initialized = TRUE;
 	}
+	
+	void store_receiver_values(void)
+	{
+		saveAllReceiverEEPROM();
+	}
+
 
 	void initializeReceiverEEPROMVars(void)
 	{
 		if(eeprom_read_byte(&ee_receiver_eeprom_initialization_flag) == EEPROM_INITIALIZED_FLAG)
 		{
 			g_activeBand = eeprom_read_byte(&ee_active_band);
+			g_freq_2m = eeprom_read_dword(&ee_active_2m_frequency);
+			g_freq_80m = eeprom_read_dword(&ee_active_80m_frequency);
+			g_cw_offset = eeprom_read_dword(&ee_cw_offset_frequency);
 		}
 		else
 		{
@@ -222,6 +238,9 @@
 			eeprom_write_byte(&ee_receiver_eeprom_initialization_flag, EEPROM_INITIALIZED_FLAG);
 
 			g_activeBand = EEPROM_BAND_DEFAULT;
+			g_freq_2m = DEFAULT_RX_2M_FREQUENCY;
+			g_freq_80m = DEFAULT_RX_80M_FREQUENCY;
+			g_cw_offset = DEFAULT_RX_CW_OFFSET_FREQUENCY;
 
 			saveAllReceiverEEPROM();
 		}
@@ -230,11 +249,33 @@
 	void saveAllReceiverEEPROM(void)
 	{
 		storeEEbyteIfChanged(&ee_active_band, g_activeBand);
+		storeEEdwordIfChanged((uint32_t*)&ee_active_2m_frequency, g_freq_2m);
+		storeEEdwordIfChanged((uint32_t*)&ee_active_80m_frequency, g_freq_80m);
+		storeEEdwordIfChanged((uint32_t*)&ee_cw_offset_frequency, g_cw_offset);
 		storeEEdwordIfChanged((uint32_t*)&ee_si5351_ref_correction, si5351_get_correction());
 	}
 
 
 #endif  /*#ifdef INCLUDE_RECEIVER_SUPPORT */
+
+BOOL rxSetCWOffset(Frequency_Hz offset)
+{
+	BOOL success = FALSE;
+	
+	if((offset >= 0) && (offset <= MAX_CW_OFFSET))
+	{
+		g_cw_offset = offset;
+		rxSetBand(g_activeBand); // apply offset to currect frequency setting
+		success = TRUE;
+	}
+	
+	return success;
+}
+
+Frequency_Hz rxGetCWOffset(void)
+{
+	return g_cw_offset;
+}
 
 RadioBand bandForFrequency(Frequency_Hz freq)
 {
