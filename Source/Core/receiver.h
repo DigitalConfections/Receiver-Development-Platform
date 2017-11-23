@@ -88,6 +88,8 @@ typedef enum
 
 #define DEFAULT_RX_2M_FREQUENCY 145566000
 #define DEFAULT_RX_80M_FREQUENCY 3550000
+#define DEFAULT_RX_CW_OFFSET_FREQUENCY 500
+#define MAX_CW_OFFSET 2000
 #define DEFAULT_RX_ACTIVE_BAND BAND_2M
 #define RX_MINIMUM_2M_FREQUENCY 144000000
 #define RX_MAXIMUM_2M_FREQUENCY 148000000
@@ -128,6 +130,18 @@ typedef enum
 /**
  */
 	void init_receiver(void);
+
+/**
+ */
+	void store_receiver_values(void);
+	
+/**
+ */
+	BOOL rxSetCWOffset(Frequency_Hz offset);
+	
+/**
+ */
+	Frequency_Hz rxGetCWOffset(void);
 
 /**
  */

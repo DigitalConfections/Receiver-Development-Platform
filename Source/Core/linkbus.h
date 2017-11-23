@@ -106,14 +106,22 @@ typedef enum
 	MESSAGE_TIME = 'T' * 100 + 'I' * 10 + 'M',      /* $TIM,time; / !TIM,time; / $TIM,? // Set/request RTC time */
 	MESSAGE_BAT_BC = 'B',                           /* Battery broadcast data */
 	MESSAGE_RSSI_BC = 'S',                          /* RSSI broadcast data */
+	MESSAGE_RSSI_REPEAT_BC = 'S' * 10 + 'S',		/* RSSI repeat broadcast toggle */
 	MESSAGE_RF_BC = 'R',                            /* RF level broadcast data */
 	MESSAGE_TEMPERATURE_BC = 'T',                   /* Temperature broadcast data */
 
 	/* TTY USER MESSAGES */
 	MESSAGE_ALL_INFO = '?',                         /* Prints all receiver info */
+	
+	MESSAGE_PERM = 'P',
+	MESSAGE_CW_OFFSET = 'O',
+	MESSAGE_RESET = 'R' * 100 + 'S' * 10 + 'T',		/* Processor reset */
 
+#ifdef DEBUG_FUNCTIONS_ENABLE
+	MESSAGE_DEBUG = 'D',							/* Used for debug only */
+#endif
 
-	INVALID_MESSAGE
+	INVALID_MESSAGE = UINT16_MAX					/* This value must never overlap a valid message ID */
 } LBMessageID;
 
 typedef enum

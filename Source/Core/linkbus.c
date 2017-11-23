@@ -51,9 +51,12 @@ static const char textHelp[][40] = { "\nCommands:\n",
 ">  BND [2|80]        - Rx Band\n",
 ">  FRE [Hz]          - Rx Freq\n",
 ">  FRE M<1:5> [Hz]   - Rx Mem\n",
-">  S                 - RSSI\n",
+">  O [Hz]            - CW Offset\n",
+">  S[S]              - RSSI\n",
 ">  TIM [hh:mm:ss]    - RTC Time\n",
 ">  VOL <M:T> [0-100] - Main/Tone Vol\n",
+">  P                 - Perm\n",
+">  RST               - Reset\n",
 ">  ?                 - Info\n"
 };
 	
@@ -296,12 +299,16 @@ void lb_send_WDTError(void)
  ************************************************************************/
 void lb_send_Help(void)
 {
+#ifdef DEBUG_FUNCTIONS_ENABLE
+	sprintf(g_tempMsgBuff, "\n*** %s Debug Ver. %s ***", PRODUCT_NAME_LONG, SW_REVISION);
+#else
 	sprintf(g_tempMsgBuff, "\n*** %s Ver. %s ***", PRODUCT_NAME_LONG, SW_REVISION);
+#endif
 	
 	while(linkbus_send_text(g_tempMsgBuff)); 
 	while(linkbusTxInProgress());
 	
-	for(int i=0; i<9; i++)
+	for(int i=0; i<12; i++)
 	{
 		while(linkbus_send_text((char*)textHelp[i])); 
 		while(linkbusTxInProgress());
@@ -414,7 +421,7 @@ void lb_send_FRE(LBMessageType msgType, Frequency_Hz freq, BOOL isMemoryValue)
 		}
 		else
 		{
-			sprintf(f, "%9ld", freq);
+			sprintf(f, "%ld", freq);
 		}
 	}
 
@@ -437,11 +444,11 @@ void lb_send_FRE(LBMessageType msgType, Frequency_Hz freq, BOOL isMemoryValue)
 		{
 			if(isMemoryValue)
 			{
-				sprintf(g_tempMsgBuff, "> FRE=%s (MEM)%s", f, lineTerm);
+				sprintf(g_tempMsgBuff, "> %s (MEM)%s", f, lineTerm);
 			}
 			else
 			{
-				sprintf(g_tempMsgBuff, "> FRE=%s%s", f, lineTerm);
+				sprintf(g_tempMsgBuff, "> %s%s", f, lineTerm);
 			}
 		}
 		else
