@@ -162,7 +162,7 @@
 		g_vfo_configuration = config;
 	}
 
-	void rxSetBand(RadioBand band) 
+	void __attribute__((optimize("O0"))) rxSetBand(RadioBand band) 
 	{
 		if(band == BAND_80M)
 		{
