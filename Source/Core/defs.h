@@ -40,7 +40,7 @@
 
 /******************************************************
  * Set the text that gets displayed to the user */
-#define SW_REVISION "0.7.9"
+#define SW_REVISION "0.7.10"
 
 //#define DEBUG_FUNCTIONS_ENABLE
 

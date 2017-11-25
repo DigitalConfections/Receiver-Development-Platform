@@ -27,10 +27,11 @@
 #include <ctype.h>
 #include <asf.h>
 #include "defs.h"
-#include "si5351.h"
-#include "st7036.h"
-#include "ad5245.h"
-#include "pcf8574.h"
+#include "si5351.h"		/* Programmable clock */
+#include "st7036.h"		/* LCD display on Control Head */
+#include "ad5245.h"		/* Potentiometer for tone volume on Digital Interface */
+#include "max5478.h"	/* Potentiometer for receiver attenuation on Rev X.1 Receiver board */
+#include "pcf8574.h"	/* Port expander on Rev X.1 Receiver board */
 #include "menu.h"
 #include "i2c.h"
 #include "linkbus.h"
@@ -186,6 +187,7 @@ static uint16_t g_rssi_countdown = 0;
 
 #if PRODUCT_CONTROL_HEAD || PRODUCT_DUAL_BAND_RECEIVER
 	static volatile Frequency_Hz g_receiver_freq = 0;
+	static volatile uint8_t g_rx_attenuation = 0;
 #endif  /* PRODUCT_CONTROL_HEAD || PRODUCT_DUAL_BAND_RECEIVER */
 
 #if PRODUCT_CONTROL_HEAD
@@ -230,6 +232,8 @@ static volatile uint8_t g_main_volume;
 static volatile uint8_t g_hw_main_volume = EEPROM_MAIN_VOLUME_DEFAULT;
 
 static volatile uint8_t g_tone_volume;
+
+static volatile uint8_t g_receiver_port_shadow = 0xff; // keep track of port value to avoid unnecessary reads
 
 #ifdef ENABLE_1_SEC_INTERRUPTS
 
@@ -569,27 +573,56 @@ ISR( TIMER2_COMPB_vect )
 					lastResult--;
 				}
 
-				if(indexConversionInProcess == BATTERY_READING) /* Set flag indicating that battery/headphone monitoring has begun */
-				{
-					g_battery_measurements_active = TRUE;
+				g_battery_measurements_active = TRUE;
 	
-					if(lastResult > VOLTS_5)
-					{
-						g_battery_type = BATTERY_9V;
-					}
-					else if(lastResult > VOLTS_3_0)
-					{
-						g_battery_type = BATTERY_4r2V;
-					}
+				if(lastResult > VOLTS_5)
+				{
+					g_battery_type = BATTERY_9V;
+				}
+				else if(lastResult > VOLTS_3_0)
+				{
+					g_battery_type = BATTERY_4r2V;
 				}
 			}
 		}
 		else if(indexConversionInProcess == RSSI_READING)
 		{
-			lastResult = holdConversionResult;
-			g_filteredRSSI = g_filteredRSSI << 3; 
-			g_filteredRSSI += lastResult;
-			g_filteredRSSI /= 9;
+			if(delta > 50)
+			{
+				if(directionUP)
+				{
+					lastResult = holdConversionResult;
+				}
+				else
+				{
+					if(delta > 100)
+					{
+						lastResult = holdConversionResult;
+					}
+					else
+					{
+						lastResult -= 10;
+					}
+				}
+
+				g_filteredRSSI = lastResult;
+			}
+			else
+			{
+				if(directionUP)
+				{
+					lastResult = holdConversionResult;
+				}
+				else if(delta)
+				{
+					lastResult--;
+				}
+
+//				lastResult = holdConversionResult;
+				g_filteredRSSI = g_filteredRSSI << 3;
+				g_filteredRSSI += lastResult;
+				g_filteredRSSI /= 9;
+			}
 		}
 
 		g_lastConversionResult[indexConversionInProcess] = lastResult;
@@ -1596,7 +1629,7 @@ int main( void )
 		LCD_init(NUMBER_OF_LCD_ROWS, NUMBER_OF_LCD_COLS, LCD_I2C_SLAVE_ADDRESS, g_contrast_setting);
 #else
 		ad5245_set_potentiometer(g_tone_volume);    /* move to receiver initialization */
-		writePort(RECEIVER_REMOTE_PORT_ADDR, 0b11111111);
+//		pcf8574_writePort(0b00000000); /* initialize receiver port expander */
 #endif
 
 	wdt_reset();                                    /* HW watchdog */
@@ -1836,6 +1869,32 @@ int main( void )
 
 			switch(msg_id)
 			{
+				case MESSAGE_ATTENUATION:
+				{
+					uint8_t attenuation;
+					
+					if(lb_buff->fields[FIELD1][0])
+					{
+						attenuation = (uint8_t)atoi(lb_buff->fields[FIELD1]); 
+						max5478_set_potentiometer_wiperB(attenuation);
+						g_rx_attenuation = attenuation;
+						
+						if(attenuation)
+						{
+							g_receiver_port_shadow |= 0b00000100;
+							pcf8574_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
+						}
+						else
+						{
+							g_receiver_port_shadow &= 0b11111011;
+							pcf8574_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
+						}
+					}
+					
+					lb_broadcast_num((uint16_t)g_rx_attenuation, NULL);
+				}
+				break;
+				
 				case MESSAGE_RESET:
 				{
 					wdt_init(WD_FORCE_RESET);
@@ -2560,6 +2619,7 @@ int main( void )
 					lb_send_BND(LINKBUS_MSG_REPLY, rxGetBand());
 					lb_send_FRE(LINKBUS_MSG_REPLY, rxGetFrequency(), FALSE);
 					lb_send_FRE(LINKBUS_MSG_REPLY, rxGetCWOffset(), FALSE);
+					lb_send_value(g_rx_attenuation, "ATT ");
 					lb_send_value(g_main_volume, "MAIN VOL");
 					lb_send_value(g_tone_volume, "TONE VOL");
 					cli(); wdt_reset(); /* HW watchdog */ sei();
@@ -2632,7 +2692,7 @@ int main( void )
 				g_radio_port_changed = FALSE;
 
 				uint8_t portPins;
-				readPort(RECEIVER_REMOTE_PORT_ADDR, &portPins);
+				pcf8574_readPort(&portPins);
 
 				/* Take appropriate action for the pin change */
 				/*			if((~portPins) & 0b00010000)
@@ -3055,10 +3115,25 @@ int main( void )
 
 				if(g_lb_repeat_rssi)
 				{
+					static uint16_t lastRSSI = 0;
+					static uint16_t lastRoundedRSSI = 0;
+					
 					if(!g_rssi_countdown)
 					{
-						g_rssi_countdown = 100;
-						lb_broadcast_rssi(g_filteredRSSI);
+						if(lastRSSI != g_filteredRSSI)
+						{
+							uint16_t roundedRSSI = g_filteredRSSI / 10;
+							
+							if(lastRoundedRSSI != roundedRSSI)
+							{
+								lastRoundedRSSI = roundedRSSI;
+								g_rssi_countdown = 100;
+								lb_broadcast_rssi(10*roundedRSSI);
+							}
+
+							lastRSSI = g_filteredRSSI;
+							
+						}
 					}
 				}
 

@@ -36,15 +36,6 @@ static const char crlf[] = "\n";
 static char lineTerm[8] = "\n";
 static const char textPrompt[] = "RDP> ";
 static const char textWDT[] = "*** WDT Reset! ***\n";
-//static const char textHelp1[] = "\nCommands:\n";
-//static const char textHelp2[] = ">  B                 - Battery\n";
-//static const char textHelp3[] = ">  BND [2|80]        - Rx Band\n";
-//static const char textHelp4[] = ">  FRE [Hz]          - Rx Freq\n";
-//static const char textHelp5[] = ">  FRE M<1:5> [Hz]   - Rx Mem\n";
-//static const char textHelp6[] = ">  S                 - RSSI\n";
-//static const char textHelp7[] = ">  TIM [hh:mm:ss]    - RTC Time\n";
-//static const char textHelp8[] = ">  VOL <M:T> [0-100] - Main/Tone Vol\n";
-//static const char textHelp9[] = ">  ?                 - Info\n";
 
 static const char textHelp[][40] = { "\nCommands:\n",
 ">  B                 - Battery\n",
@@ -52,6 +43,7 @@ static const char textHelp[][40] = { "\nCommands:\n",
 ">  FRE [Hz]          - Rx Freq\n",
 ">  FRE M<1:5> [Hz]   - Rx Mem\n",
 ">  O [Hz]            - CW Offset\n",
+">  A [0-255]         - Attenuation\n",
 ">  S[S]              - RSSI\n",
 ">  TIM [hh:mm:ss]    - RTC Time\n",
 ">  VOL <M:T> [0-100] - Main/Tone Vol\n",
@@ -308,7 +300,7 @@ void lb_send_Help(void)
 	while(linkbus_send_text(g_tempMsgBuff)); 
 	while(linkbusTxInProgress());
 	
-	for(int i=0; i<12; i++)
+	for(int i=0; i<13; i++)
 	{
 		while(linkbus_send_text((char*)textHelp[i])); 
 		while(linkbusTxInProgress());
@@ -662,7 +654,7 @@ void lb_send_sync(void)
 
 void lb_broadcast_bat(uint16_t data)
 {
-	char t[4] = "\0";
+	char t[6] = "\0";
 
 	sprintf(t, "%d", data);
 
@@ -680,7 +672,7 @@ void lb_broadcast_bat(uint16_t data)
 
 void lb_broadcast_rssi(uint16_t data)
 {
-	char t[4] = "\0";
+	char t[6] = "\0";
 
 	sprintf(t, "%d", data);
 
@@ -698,7 +690,7 @@ void lb_broadcast_rssi(uint16_t data)
 
 void lb_broadcast_rf(uint16_t data)
 {
-	char t[4] = "\0";
+	char t[6] = "\0";
 
 	sprintf(t, "%d", data);
 
@@ -713,19 +705,29 @@ void lb_broadcast_rf(uint16_t data)
 	linkbus_send_text(g_tempMsgBuff);
 }
 
-void lb_broadcast_temp(uint16_t data)
+void lb_broadcast_num(uint16_t data, char* str)
 {
-	char t[4] = "\0";
+	char t[6] = "\0";
 
 	sprintf(t, "%d", data);
 
 	if(g_lb_terminal_mode)
 	{
-		sprintf(g_tempMsgBuff, "> T=%s%s", t, lineTerm);
+		if(str)
+		{
+			sprintf(g_tempMsgBuff, "> %s=%s%s", str, t, lineTerm);
+		}
+		else
+		{
+			sprintf(g_tempMsgBuff, "> %s%s", t, lineTerm);
+		}
 	}
 	else
 	{
-		sprintf(g_tempMsgBuff, "!T,%s;", t);
+		if(str)
+		{
+			sprintf(g_tempMsgBuff, "!%s,%s;", str, t);
+		}
 	}
 
 	linkbus_send_text(g_tempMsgBuff);

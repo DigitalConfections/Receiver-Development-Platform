@@ -19,32 +19,25 @@
  * DEALINGS IN THE SOFTWARE.
  *
  **********************************************************************************************
- *
- * pcf8574.h
- *
- * http://www.nxp.com/documents/data_sheet/PCF8574_PCF8574A.pdf
- * The PCF8574/74A provides general-purpose remote I/O expansion via the two-wire
- * bidirectional I2C-bus (serial clock (SCL), serial data (SDA)).
- * The devices consist of eight quasi-bidirectional ports, 100 kHz I2C-bus interface,
- * three hardware address inputs and interrupt output operating between 2.5 V and 6 V.
- * The quasi-bidirectional port can be independently assigned as an input to monitor
- * interrupt status or keypads, or as an output to activate indicator devices such as
- * LEDs. System master can read from the input port or write to the output port through
- * a single register.
+ * ad5245.c
  *
  */
 
+#include "max5478.h"
+#include "i2c.h"
+#include <util/twi.h>
 
-#ifndef PCF8574_H_
-#define PCF8574_H_
+#define MAX_5478_WIPER_A_VREG_COMMAND 0x11
+#define MAX_5478_WIPER_A_NVREG_COMMAND 0x21
+#define MAX_5478_WIPER_A_NVREG_TO_VREG_COMMAND 0x61
+#define MAX_5478_WIPER_A_VREG_TO_NVREG_COMMAND 0x51
 
-/**
- */
-void pcf8574_writePort(uint8_t data);
+#define MAX_5478_WIPER_B_VREG_COMMAND 0x12
+#define MAX_5478_WIPER_B_NVREG_COMMAND 0x22
+#define MAX_5478_WIPER_B_NVREG_TO_VREG_COMMAND 0x62
+#define MAX_5478_WIPER_B_VREG_TO_NVREG_COMMAND 0x52
 
-/**
- */
-BOOL pcf8574_readPort(uint8_t *portData);
-
-
-#endif  /* PCF8574_H_ */
+void max5478_set_potentiometer_wiperB(uint8_t setting)
+{
+	i2c_device_write(MAX5478_SLAVE_ADDR_A0_0, MAX_5478_WIPER_B_VREG_COMMAND, &setting, 1);
+}

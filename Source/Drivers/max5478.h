@@ -19,28 +19,31 @@
  * DEALINGS IN THE SOFTWARE.
  *
  **********************************************************************************************
- * ad5245.h
+ * max5478.h
  *
- * AD5245: 256-Position I2C®-Compatible Digital Potentiometer
- * http://www.analog.com/media/en/technical-documentation/data-sheets/AD5245.pdf
+ * MAX5478EUD: 256-Position I2C®-Compatible Digital Potentiometer
+ * https://datasheets.maximintegrated.com/en/ds/MAX5477-MAX5479.pdf
  *
- * The AD5245 provides a compact 2.9 mm × 3 mm packaged solution for 256-position 
- * adjustment applications. These devices perform the same electronic adjustment 
- * function as mechanical potentiometers or variable resistors, with enhanced resolution, 
- * solid-state reliability, and superior low temperature coefficient performance.
+ * The MAX5477/MAX5478/MAX5479 nonvolatile, dual, linear-taper, digital potentiometers 
+ * perform the function of a mechanical potentiometer, but replace the mechanics with a 
+ * simple 2-wire digital interface. Each device performs the same function as a discrete 
+ * potentiometer or variable resistor and has 256 tap points.
  *
  */ 
 
 
-#ifndef AD5245_H_
-#define AD5245_H_
+#ifndef MAX5478_H_
+#define MAX5478_H_
 
 #include "defs.h"
 
+#define MAX5478_SLAVE_ADDR_A0_0 0x50
+#define MAX5478_SLAVE_ADDR_A0_1 0x51
+
 /**
-   Set the AD5345 potentiometer to the value passed in setting.
+   Set the potentiometer to the value passed in setting.
 */
-void ad5245_set_potentiometer(uint8_t setting);
+void max5478_set_potentiometer_wiperB(uint8_t setting);
 
 
-#endif /* AD5245_H_ */
+#endif /* MAX5478_H_ */

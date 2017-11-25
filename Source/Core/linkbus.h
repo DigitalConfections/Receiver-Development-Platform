@@ -109,12 +109,14 @@ typedef enum
 	MESSAGE_RSSI_REPEAT_BC = 'S' * 10 + 'S',		/* RSSI repeat broadcast toggle */
 	MESSAGE_RF_BC = 'R',                            /* RF level broadcast data */
 	MESSAGE_TEMPERATURE_BC = 'T',                   /* Temperature broadcast data */
+	MESSAGE_PERM = 'P',								/* Saves all settings to EEPROM "perm" */
+	MESSAGE_CW_OFFSET = 'O',						/* Sets or returns the CW offset in Hz */
+	MESSAGE_ATTENUATION = 'A',                      /* Sets receiver attenuation (0-255) */
 
 	/* TTY USER MESSAGES */
 	MESSAGE_ALL_INFO = '?',                         /* Prints all receiver info */
 	
-	MESSAGE_PERM = 'P',
-	MESSAGE_CW_OFFSET = 'O',
+	/* UTILITY MESSAGES */
 	MESSAGE_RESET = 'R' * 100 + 'S' * 10 + 'T',		/* Processor reset */
 
 #ifdef DEBUG_FUNCTIONS_ENABLE
@@ -245,7 +247,7 @@ void lb_broadcast_rf(uint16_t data);
 
 /**
  */
-void lb_broadcast_temp(uint16_t data);
+void lb_broadcast_num(uint16_t data, char* str);
 
 /**
  */
