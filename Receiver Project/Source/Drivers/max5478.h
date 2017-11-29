@@ -43,7 +43,7 @@
 /**
    Set the potentiometer to the value passed in setting.
 */
-void max5478_set_potentiometer_wiperB(uint8_t setting);
+void max5478_set_dualpotentiometer_wipers(uint16_t setting);
 
 
 #endif /* MAX5478_H_ */

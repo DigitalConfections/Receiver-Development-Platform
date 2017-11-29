@@ -32,42 +32,25 @@
 
 /******************************************************
  * SET THE ONE PRODUCT TO BE BUILT TO NON-ZERO (ONE-AT-A-TIME PLEASE), OTHER PRODUCTS SHOULD BE DEFINED AS ZERO */
-#define PRODUCT_CONTROL_HEAD 0
-#define PRODUCT_DUAL_BAND_RECEIVER 1
-#define PRODUCT_TEST_INSTRUMENT_HEAD 0
-#define PRODUCT_TEST_DIGITAL_INTERFACE 0
+//#define PRODUCT_CONTROL_HEAD 0
+//#define PRODUCT_DUAL_BAND_RECEIVER 1
+//#define PRODUCT_TEST_INSTRUMENT_HEAD 0
+//#define PRODUCT_TEST_DIGITAL_INTERFACE 0
 /*******************************************************/
 
 /******************************************************
  * Set the text that gets displayed to the user */
-#define SW_REVISION "0.7.10"
+#define SW_REVISION "0.7.11"
 
-//#define DEBUG_FUNCTIONS_ENABLE
+#define DEBUG_FUNCTIONS_ENABLE
 
-#if PRODUCT_CONTROL_HEAD
-   #define PRODUCT_NAME_SHORT "Control Head"
-   #define PRODUCT_NAME_LONG "Control Head with 2x20 Display"
-   #define EXCLUDE_SI5351_SUPPORT
-#elif PRODUCT_DUAL_BAND_RECEIVER
-   #define PRODUCT_NAME_SHORT "ARDF Rx"
-   #define PRODUCT_NAME_LONG "ARDF Dual-Band Receiver"
-#elif PRODUCT_TEST_DIGITAL_INTERFACE
-   #define PRODUCT_NAME_SHORT "Interface"
-   #define PRODUCT_NAME_LONG "Interface"
-#else
-   #define PRODUCT_NAME_SHORT "RDP"
-   #define PRODUCT_NAME_LONG "RDP"
-#endif
+#define PRODUCT_NAME_SHORT "ARDF Rx"
+#define PRODUCT_NAME_LONG "ARDF Dual-Band Receiver"
+
 /*******************************************************/
 
 /******************************************************
  * Include only the necessary hardware support */
-#if PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD
-   #define INCLUDE_ST7036_SUPPORT
-   #define INCLUDE_DS3231_SUPPORT // Maxim RTC
-	/* TODO: Add LSM303DLHC compass module support
-	 * TODO: Add GPS support (http://adafruit/3133) */
-#elif PRODUCT_DUAL_BAND_RECEIVER || PRODUCT_TEST_DIGITAL_INTERFACE
    #define INCLUDE_SI5351_SUPPORT // Silicon Labs Programmable Clock
    //#define INCLUDE_DS3231_SUPPORT // Maxim RTC
    #define INCLUDE_PCF8574_SUPPORT
@@ -75,16 +58,13 @@
 	/* TODO: Add DAC081C085 support
 	 * TODO: Add MAX5478EUD+ support
 	 * TODO: Add AT24CS01-STUM support */
-#endif
 /*******************************************************/
 
 /******************************************************
  * Include only the necessary software support */
-#if PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD
-   #define ENABLE_1_SEC_INTERRUPTS
-#else
-   #define ENABLE_1_SEC_INTERRUPTS
-#endif
+#define ENABLE_1_SEC_INTERRUPTS
+//#define ENABLE_POWERUP_POLLING
+
 /*******************************************************/
 
 #ifndef SELECTIVELY_DISABLE_OPTIMIZATION
@@ -94,31 +74,16 @@
 /******************************************************
  * EEPROM definitions */
 #define EEPROM_INITIALIZED_FLAG 0xA5
-#define EEPROM_BACKLIGHT_DEFAULT BL_LOW
-#define EEPROM_TONE_VOLUME_DEFAULT 60
+#define EEPROM_TONE_VOLUME_DEFAULT 5
+#define EEPROM_MAIN_VOLUME_DEFAULT 11
 
-#if PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD
-
-   #define EEPROM_CONTRAST_DEFAULT 0x03
-
-#elif PRODUCT_DUAL_BAND_RECEIVER || PRODUCT_TEST_DIGITAL_INTERFACE
-
-   #define EEPROM_MAIN_VOLUME_DEFAULT 11
-
-#endif  /* PRODUCT_CONTROL_HEAD || PRODUCT_TEST_INSTRUMENT_HEAD */
-
-
-#if PRODUCT_DUAL_BAND_RECEIVER || PRODUCT_TEST_DIGITAL_INTERFACE
-
-   #define EEPROM_SI5351_CALIBRATION_DEFAULT 0x00
-   #define EEPROM_CLK0_OUT_DEFAULT 133000000
-   #define EEPROM_CLK1_OUT_DEFAULT 70000000
-   #define EEPROM_CLK2_OUT_DEFAULT 10700000
-   #define EEPROM_CLK0_ONOFF_DEFAULT OFF
-   #define EEPROM_CLK1_ONOFF_DEFAULT OFF
-   #define EEPROM_CLK2_ONOFF_DEFAULT OFF
-
-#endif  /* PRODUCT_DUAL_BAND_RECEIVER || PRODUCT_TEST_DIGITAL_INTERFACE */
+#define EEPROM_SI5351_CALIBRATION_DEFAULT 0x00
+#define EEPROM_CLK0_OUT_DEFAULT 133000000
+#define EEPROM_CLK1_OUT_DEFAULT 70000000
+#define EEPROM_CLK2_OUT_DEFAULT 10700000
+#define EEPROM_CLK0_ONOFF_DEFAULT OFF
+#define EEPROM_CLK1_ONOFF_DEFAULT OFF
+#define EEPROM_CLK2_ONOFF_DEFAULT OFF
 
 /******************************************************
  * General definitions for making the code easier to understand */
@@ -165,7 +130,8 @@ typedef enum
 #define QUAD_A 7
 #define QUAD_B 6
 
-#define MAX_TONE_VOLUME_SETTING 0xFF
+#define MAX_TONE_VOLUME_SETTING 15
+#define TONE_POT_VAL(x) (255 - (x*17))
 #define MAX_MAIN_VOLUME_SETTING 15
 
 #define POWER_OFF_DELAY 5000
@@ -187,6 +153,7 @@ typedef enum
 #define POWER_ON_VOLT_THRESH_MV ((3 * BATTERY_VOLTAGE_COEFFICIENT) - POWER_SUPPLY_VOLTAGE_DROP_MV)          /* 3.0 V = 3000 mV */
 
 #define BEEP_SHORT 100
+#define BEEP_LONG 65535
 
 /******************************************************
  * UI Hardware-related definitions */

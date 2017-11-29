@@ -37,7 +37,10 @@
 #define MAX_5478_WIPER_B_NVREG_TO_VREG_COMMAND 0x62
 #define MAX_5478_WIPER_B_VREG_TO_NVREG_COMMAND 0x52
 
-void max5478_set_potentiometer_wiperB(uint8_t setting)
+void max5478_set_dualpotentiometer_wipers(uint16_t setting)
 {
-	i2c_device_write(MAX5478_SLAVE_ADDR_A0_0, MAX_5478_WIPER_B_VREG_COMMAND, &setting, 1);
+	uint8_t data = setting & 0xFF;
+	i2c_device_write(MAX5478_SLAVE_ADDR_A0_0, MAX_5478_WIPER_A_VREG_COMMAND, &data, 1); // Fine attenuation
+	data = (setting >> 8);
+	i2c_device_write(MAX5478_SLAVE_ADDR_A0_0, MAX_5478_WIPER_B_VREG_COMMAND, &data, 1); // Coarse attenuation
 }

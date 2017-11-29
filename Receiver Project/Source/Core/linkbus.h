@@ -30,7 +30,7 @@
 #include "receiver.h"
 #include "si5351.h"
 
-#define LINKBUS_MAX_MSG_LENGTH 50
+#define LINKBUS_MAX_MSG_LENGTH 75
 #define LINKBUS_MIN_MSG_LENGTH 3    /* shortest message: $TTY; */
 #define LINKBUS_MAX_MSG_FIELD_LENGTH 21
 #define LINKBUS_MAX_MSG_NUMBER_OF_FIELDS 3
@@ -120,7 +120,7 @@ typedef enum
 	MESSAGE_RESET = 'R' * 100 + 'S' * 10 + 'T',		/* Processor reset */
 
 #ifdef DEBUG_FUNCTIONS_ENABLE
-	MESSAGE_DEBUG = 'D',							/* Used for debug only */
+	MESSAGE_DEBUG = 'D' * 100 + 'B' * 10 + 'G',		/* Used for debug only */
 #endif
 
 	INVALID_MESSAGE = UINT16_MAX					/* This value must never overlap a valid message ID */
@@ -207,7 +207,7 @@ void lb_send_sync(void);
 
 /**
  */
-BOOL linkbus_toggleTerminalMode(void);
+void linkbus_setTerminalMode(BOOL on);
 
 /**
  */
@@ -282,11 +282,5 @@ void lb_send_value(uint16_t value, char* label);
 /**
  */
 void lb_echo_char(uint8_t c);
-
-#if PRODUCT_TEST_INSTRUMENT_HEAD
-/**
- */
-	void lb_send_CKn(LBMessageType msgType, Si5351_clock clock, Frequency_Hz freq, Si5351_clock_enable enabled, Si5351_drive drive);
-#endif  /* PRODUCT_TEST_INSTRUMENT_HEAD */
 
 #endif  /* LINKBUS_H_ */

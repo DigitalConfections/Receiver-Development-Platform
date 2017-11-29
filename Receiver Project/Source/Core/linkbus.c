@@ -31,7 +31,7 @@
 #include <avr/wdt.h>
 
 /* Global Variables */
-static BOOL g_lb_terminal_mode = FALSE;
+static volatile BOOL g_lb_terminal_mode = TRUE;
 static const char crlf[] = "\n";
 static char lineTerm[8] = "\n";
 static const char textPrompt[] = "RDP> ";
@@ -43,10 +43,10 @@ static const char textHelp[][40] = { "\nCommands:\n",
 ">  FRE [Hz]          - Rx Freq\n",
 ">  FRE M<1:5> [Hz]   - Rx Mem\n",
 ">  O [Hz]            - CW Offset\n",
-">  A [0-255]         - Attenuation\n",
+">  A [0-65535]       - Attenuation\n",
 ">  S[S]              - RSSI\n",
 ">  TIM [hh:mm:ss]    - RTC Time\n",
-">  VOL <M:T> [0-100] - Main/Tone Vol\n",
+">  VOL <M:T> [0-15]  - Main/Tone Vol\n",
 ">  P                 - Perm\n",
 ">  RST               - Reset\n",
 ">  ?                 - Info\n"
@@ -235,9 +235,9 @@ void linkbus_init(void)
 	UCSR0C = (1 << USBS0) | (3 << UCSZ00);
 }
 
-BOOL linkbus_toggleTerminalMode(void)
+void linkbus_setTerminalMode(BOOL on)
 {
-	g_lb_terminal_mode = !g_lb_terminal_mode;
+	g_lb_terminal_mode = on;
 
 	if(g_lb_terminal_mode)
 	{
@@ -248,8 +248,6 @@ BOOL linkbus_toggleTerminalMode(void)
 	{
 		linkbus_send_text((char*)crlf);
 	}
-
-	return(g_lb_terminal_mode);
 }
 
 BOOL linkbus_send_text(char* text)
@@ -351,52 +349,6 @@ void lb_send_value(uint16_t value, char* label)
 /***********************************************************************************
  *  Support for creating and sending various Linkbus messages is provided below.
  ************************************************************************************/
-
-#if PRODUCT_TEST_INSTRUMENT_HEAD
-
-	void lb_send_CKn(LBMessageType msgType, Si5351_clock clock, Frequency_Hz freq, Si5351_clock_enable enabled, Si5351_drive drive)
-	{
-		BOOL valid = TRUE;
-		char f[10] = "\0";
-		char e[2] = "\0";
-		char d[2] = "\0";
-		char prefix = '$';
-		char terminus = ';';
-
-		if(freq > FREQUENCY_NOT_SPECIFIED)
-		{
-			sprintf(f, "%9ld", freq);
-		}
-		if(enabled != SI5351_ENABLE_NOT_SPECIFIED)
-		{
-			sprintf(e, "%d", enabled);
-		}
-		if(drive != SI5351_DRIVE_NOT_SPECIFIED)
-		{
-			sprintf(d, "%d", drive);
-		}
-
-		if(msgType == LINKBUS_MSG_REPLY)
-		{
-			prefix = '!';
-		}
-		else if(msgType == LINKBUS_MSG_QUERY)
-		{
-			terminus = '?';
-		}
-		else if(msgType != LINKBUS_MSG_COMMAND)
-		{
-			valid = FALSE;
-		}
-
-		if(valid)
-		{
-			sprintf(g_tempMsgBuff, "%cCK%d,%s,%s,%s%c", prefix, clock, f, e, d, terminus);
-			linkbus_send_text(g_tempMsgBuff);
-		}
-	}
-
-#endif  /* PRODUCT_TEST_INSTRUMENT_HEAD */
 
 void lb_send_FRE(LBMessageType msgType, Frequency_Hz freq, BOOL isMemoryValue)
 {
@@ -709,7 +661,7 @@ void lb_broadcast_num(uint16_t data, char* str)
 {
 	char t[6] = "\0";
 
-	sprintf(t, "%d", data);
+	sprintf(t, "%u", data);
 
 	if(g_lb_terminal_mode)
 	{
