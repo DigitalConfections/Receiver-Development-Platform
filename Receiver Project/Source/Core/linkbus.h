@@ -112,6 +112,7 @@ typedef enum
 	MESSAGE_PERM = 'P',								/* Saves all settings to EEPROM "perm" */
 	MESSAGE_CW_OFFSET = 'O',						/* Sets or returns the CW offset in Hz */
 	MESSAGE_ATTENUATION = 'A',                      /* Sets receiver attenuation (0-255) */
+	MESSAGE_PREAMP = 'P' * 100 + 'R' * 10 + 'E',    /* Turn on preamp (1|0) */
 
 	/* TTY USER MESSAGES */
 	MESSAGE_ALL_INFO = '?',                         /* Prints all receiver info */

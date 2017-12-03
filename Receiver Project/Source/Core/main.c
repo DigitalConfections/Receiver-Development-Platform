@@ -117,7 +117,7 @@ static volatile uint8_t g_main_volume = 0;
 static volatile uint8_t g_hw_main_volume = EEPROM_MAIN_VOLUME_DEFAULT;
 static volatile uint8_t g_tone_volume;
 
-static volatile uint8_t g_receiver_port_shadow = 0xff; // keep track of port value to avoid unnecessary reads
+static volatile uint8_t g_receiver_port_shadow = 0x00; // keep track of port value to avoid unnecessary reads
 
 #ifdef ENABLE_1_SEC_INTERRUPTS
 
@@ -162,13 +162,9 @@ static volatile BOOL g_enableHardwareWDResets = FALSE;
  ************************************************************************/
 
 void initializeEEPROMVars(void);
-void setMsgGraph(uint8_t len, LcdRowType row);
 void saveAllEEPROM(void);
-void printButtons(char buff[DISPLAY_WIDTH_STRING_SIZE], char* labels[]);
-void clearTextBuffer(LcdRowType);
-void updateLCDTextBuffer(char* buffer, char* text, BOOL preserveContents);
 void wdt_init(WDReset resetType);
-LcdColType columnForDigit(int8_t digit, TextFormat format);
+uint16_t potValFromAtten(uint16_t atten);
 
 /***********************************************************************
  * Watchdog Timer ISR
@@ -949,6 +945,10 @@ int main( void )
 	 * Initialize the receiver */
 
 	init_receiver();
+	
+	/**
+	 * Initialize port expander on receiver board */
+	pcf8574_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
 
 	/**
 	 * The watchdog must be petted periodically to keep it from barking */
@@ -965,6 +965,7 @@ int main( void )
 	if(g_terminal_mode)
 	{
 		lb_send_NewLine();
+		lb_send_Help();
 		lb_send_NewPrompt();		
 	}
 	else 
@@ -1009,11 +1010,7 @@ int main( void )
 
 			if(!g_volume_set_beep_delay)
 			{
-#ifdef DEBUG_FUNCTIONS_ENABLE
-				g_beep_length = BEEP_LONG;
-#else
 				g_beep_length = BEEP_SHORT;
-#endif
 			}
 		}
 
@@ -1157,7 +1154,31 @@ int main( void )
 					}
 				}
 				break;
-#endif //DEBUG_FUNCTIONS_ENABLE				
+#endif //DEBUG_FUNCTIONS_ENABLE		
+
+				case MESSAGE_PREAMP:
+				{
+					BOOL result = 0;
+					
+					if(lb_buff->fields[FIELD1][0])
+					{
+						if(lb_buff->fields[FIELD1][0] == '1')
+						{
+							g_receiver_port_shadow |= 0b00100000;
+							pcf8574_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
+						}
+						else if(lb_buff->fields[FIELD1][0] == '0')
+						{
+							g_receiver_port_shadow &= 0b11011111;
+							pcf8574_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
+						}
+					}
+
+					result = (g_receiver_port_shadow & 0b00100000) >> 5;
+					
+					lb_broadcast_num((uint16_t)result, NULL);
+				}
+				break;
 
 				case MESSAGE_ATTENUATION:
 				{
@@ -1165,8 +1186,8 @@ int main( void )
 					
 					if(lb_buff->fields[FIELD1][0])
 					{
-						attenuation = (uint16_t)atoi(lb_buff->fields[FIELD1]); 
-						max5478_set_dualpotentiometer_wipers(attenuation);
+						attenuation = CLAMP(0, (uint16_t)atoi(lb_buff->fields[FIELD1]), 100); 
+						max5478_set_dualpotentiometer_wipers(potValFromAtten(attenuation));
 						g_rx_attenuation = attenuation;
 						
 						if(attenuation)
@@ -1687,7 +1708,8 @@ int main( void )
 					lb_send_BND(LINKBUS_MSG_REPLY, rxGetBand());
 					lb_send_FRE(LINKBUS_MSG_REPLY, rxGetFrequency(), FALSE);
 					lb_send_FRE(LINKBUS_MSG_REPLY, rxGetCWOffset(), FALSE);
-					lb_send_value(g_rx_attenuation, "ATT ");
+					lb_send_value(g_rx_attenuation, "ATT");
+					lb_send_value((g_receiver_port_shadow & 0b00100000) ? 1:0, "PRE");
 					lb_send_value(g_main_volume, "MAIN VOL");
 					lb_send_value(g_tone_volume, "TONE VOL");
 					cli(); wdt_reset(); /* HW watchdog */ sei();
@@ -1775,32 +1797,11 @@ int main( void )
 						g_rssi_countdown = 100;
 						if(g_debug_atten_step)
 						{
-							static uint16_t attenuation = 0xFFFF;
-						
-							if(attenuation >= 0x2200)
-							{
-								attenuation -= 2560; // Step coarse attenuation by 10
-							}
-							else
-							{
-								if(attenuation > 0x00FF)
-								{
-									attenuation -= 0x0100;
-								}
-								else if(attenuation > 0)
-								{
-									attenuation -= 1;
-								}
-								else
-								{
-									attenuation = 0xFFFF;
-									g_debug_atten_step = 0;
-								}
-							}
+							static uint16_t attenuation = 0;
 						
 							g_debug_atten_step++;
 						
-							max5478_set_dualpotentiometer_wipers(attenuation);
+							max5478_set_dualpotentiometer_wipers(potValFromAtten(attenuation));
 							g_rx_attenuation = attenuation;
 						
 							if(attenuation)
@@ -1813,6 +1814,9 @@ int main( void )
 								g_receiver_port_shadow &= 0b11111011;
 								pcf8574_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
 							}
+
+							attenuation++;
+							attenuation = attenuation % 100;
 
 							lb_broadcast_num((uint16_t)g_rx_attenuation, NULL);
 						}
@@ -1904,4 +1908,29 @@ int main( void )
 		storeEEbyteIfChanged(&ee_tone_volume_setting, g_tone_volume);
 		storeEEbyteIfChanged(&ee_main_volume_setting, g_main_volume);
 	}
-
+	
+	uint16_t potValFromAtten(uint16_t atten)
+	{
+		uint16_t valLow = 0x00FF;
+		uint16_t valHigh = 0;
+		
+		if(atten)
+		{							
+			if(atten < 23) // 0xFFF -> 0x23FF
+			{
+				valHigh = 0xFF00 - (atten * 0x0A00);
+			}
+			else if(atten < 41) // 0x23FF -> 0x00FF
+			{
+				valHigh = 0x2300 - (0x0200 * (atten - 23));
+			}
+			else // 0x00FF -> 0x0000
+			{
+				valLow = (255 * (100 - atten)) / 59;
+			}
+			
+			valHigh += valLow;
+		}
+		
+		return valHigh;
+	}

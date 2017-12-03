@@ -38,18 +38,18 @@ static const char textPrompt[] = "RDP> ";
 static const char textWDT[] = "*** WDT Reset! ***\n";
 
 static const char textHelp[][40] = { "\nCommands:\n",
-">  B                 - Battery\n",
-">  BND [2|80]        - Rx Band\n",
-">  FRE [Hz]          - Rx Freq\n",
-">  FRE M<1:5> [Hz]   - Rx Mem\n",
-">  O [Hz]            - CW Offset\n",
-">  A [0-65535]       - Attenuation\n",
-">  S[S]              - RSSI\n",
-">  TIM [hh:mm:ss]    - RTC Time\n",
-">  VOL <M:T> [0-15]  - Main/Tone Vol\n",
-">  P                 - Perm\n",
-">  RST               - Reset\n",
-">  ?                 - Info\n"
+"  B                 - Battery\n",
+"  BND [2|80]        - Rx Band\n",
+"  FRE [Hz]          - Rx Freq\n",
+"  FRE M<1:5> [Hz]   - Rx Mem\n",
+"  O [Hz]            - CW Offset\n",
+"  A [0-100]         - Attenuation\n",
+"  S[S]              - RSSI\n",
+"  TIM [hh:mm:ss]    - RTC Time\n",
+"  VOL <M:T> [0-15]  - Main/Tone Vol\n",
+"  P                 - Perm\n",
+"  RST               - Reset\n",
+"  ?                 - Info\n"
 };
 	
 static char g_tempMsgBuff[LINKBUS_MAX_MSG_LENGTH];

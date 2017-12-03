@@ -40,9 +40,9 @@
 
 /******************************************************
  * Set the text that gets displayed to the user */
-#define SW_REVISION "0.7.11"
+#define SW_REVISION "0.7.14"
 
-#define DEBUG_FUNCTIONS_ENABLE
+// #define DEBUG_FUNCTIONS_ENABLE
 
 #define PRODUCT_NAME_SHORT "ARDF Rx"
 #define PRODUCT_NAME_LONG "ARDF Dual-Band Receiver"
@@ -115,8 +115,15 @@
 
 #define ADC_REF_VOLTAGE_mV 3300UL
 
-#define MAX( a, b ) ( ( a > b) ? a : b )
-#define MIN( a, b ) ( ( a > b) ? b : a )
+#define MIN(A,B)    ({ __typeof__(A) __a = (A); __typeof__(B) __b = (B); __a < __b ? __a : __b; })
+#define MAX(A,B)    ({ __typeof__(A) __a = (A); __typeof__(B) __b = (B); __a < __b ? __b : __a; })
+
+#define CLAMP(low, x, high) ({\
+  __typeof__(x) __x = (x); \
+  __typeof__(low) __low = (low);\
+  __typeof__(high) __high = (high);\
+  __x > __high ? __high : (__x < __low ? __low : __x);\
+  })
 
 typedef enum
 {
