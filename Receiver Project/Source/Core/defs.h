@@ -31,18 +31,10 @@
 #include <avr/interrupt.h>
 
 /******************************************************
- * SET THE ONE PRODUCT TO BE BUILT TO NON-ZERO (ONE-AT-A-TIME PLEASE), OTHER PRODUCTS SHOULD BE DEFINED AS ZERO */
-//#define PRODUCT_CONTROL_HEAD 0
-//#define PRODUCT_DUAL_BAND_RECEIVER 1
-//#define PRODUCT_TEST_INSTRUMENT_HEAD 0
-//#define PRODUCT_TEST_DIGITAL_INTERFACE 0
-/*******************************************************/
-
-/******************************************************
  * Set the text that gets displayed to the user */
-#define SW_REVISION "0.7.14"
+#define SW_REVISION "0.7.15"
 
-// #define DEBUG_FUNCTIONS_ENABLE
+//#define DEBUG_FUNCTIONS_ENABLE
 
 #define PRODUCT_NAME_SHORT "ARDF Rx"
 #define PRODUCT_NAME_LONG "ARDF Dual-Band Receiver"
