@@ -30,7 +30,8 @@
 #include "si5351.h"		/* Programmable clock generator */
 #include "ad5245.h"		/* Potentiometer for tone volume on Digital Interface */
 #include "max5478.h"	/* Potentiometer for receiver attenuation on Rev X.1 Receiver board */
-#include "pcf8574.h"	/* Port expander on Rev X.1 Receiver board */
+#include "pcf8574.h"	/* Port expander on Rev X1 Receiver board */
+#include "dac081c085.h" /* DAC on 80m VGA of Rev X1 Receiver board */
 #include "i2c.h"
 #include "linkbus.h"
 #include "receiver.h"
@@ -1139,7 +1140,20 @@ int main( void )
 				case MESSAGE_DEBUG:
 				{
 					static BOOL toggle = FALSE;
-					
+//					
+//					if(toggle)
+//					{
+//						toggle = FALSE;
+//						g_lb_repeat_rssi = FALSE;
+//						g_debug_atten_step = 0;
+//					}
+//					else
+//					{
+//						toggle = TRUE;
+//						g_lb_repeat_rssi = TRUE;
+//						g_debug_atten_step = 1;
+//					}
+
 					if(toggle)
 					{
 						toggle = FALSE;
@@ -1150,6 +1164,7 @@ int main( void )
 					{
 						toggle = TRUE;
 						g_lb_repeat_rssi = TRUE;
+						dac081c_set_dac(0);
 						g_debug_atten_step = 1;
 					}
 				}
@@ -1159,24 +1174,42 @@ int main( void )
 				case MESSAGE_PREAMP:
 				{
 					BOOL result = 0;
+					RadioBand band = rxGetBand();
 					
 					if(lb_buff->fields[FIELD1][0])
 					{
-						if(lb_buff->fields[FIELD1][0] == '1')
+						uint8_t setting = atol(lb_buff->fields[FIELD1]);
+						
+						if(band == BAND_2M)
 						{
-							g_receiver_port_shadow |= 0b00100000;
-							pcf8574_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
+							if(setting == 0)
+							{
+								g_receiver_port_shadow &= 0b11011111;
+								pcf8574_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
+							}
+							else if(setting == 1)
+							{
+								g_receiver_port_shadow |= 0b00100000;
+								pcf8574_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
+							}
 						}
-						else if(lb_buff->fields[FIELD1][0] == '0')
+						else // if band == BAND_80M
 						{
-							g_receiver_port_shadow &= 0b11011111;
-							pcf8574_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
+							dac081c_set_dac(setting);
 						}
 					}
-
-					result = (g_receiver_port_shadow & 0b00100000) >> 5;
+					
+					if(band == BAND_2M)
+					{
+						result = (g_receiver_port_shadow & 0b00100000) >> 5;
+					}
+					else
+					{
+						result = dac081c_read_dac();
+					}
 					
 					lb_broadcast_num((uint16_t)result, NULL);
+
 				}
 				break;
 
@@ -1498,8 +1531,6 @@ int main( void )
 
 						band = rxGetBand();
 
-
-
 						if(lb_buff->type == LINKBUS_MSG_QUERY)  /* Query */
 						{
 							/* Send a reply */
@@ -1794,32 +1825,41 @@ int main( void )
 						}
 						
 #ifdef DEBUG_FUNCTIONS_ENABLE
+//						g_rssi_countdown = 100;
+//						if(g_debug_atten_step)
+//						{
+//							static uint16_t attenuation = 0;
+//						
+//							g_debug_atten_step++;
+//						
+//							max5478_set_dualpotentiometer_wipers(potValFromAtten(attenuation));
+//							g_rx_attenuation = attenuation;
+//						
+//							if(attenuation)
+//							{
+//								g_receiver_port_shadow |= 0b00000100;
+//								pcf8574_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
+//							}
+//							else
+//							{
+//								g_receiver_port_shadow &= 0b11111011;
+//								pcf8574_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
+//							}
+//
+//							attenuation++;
+//							attenuation = attenuation % 100;
+//
+//							lb_broadcast_num((uint16_t)g_rx_attenuation, NULL);
+//						}
+
 						g_rssi_countdown = 100;
 						if(g_debug_atten_step)
 						{
-							static uint16_t attenuation = 0;
+							static uint8_t attenuation = 0;
 						
-							g_debug_atten_step++;
-						
-							max5478_set_dualpotentiometer_wipers(potValFromAtten(attenuation));
-							g_rx_attenuation = attenuation;
-						
-							if(attenuation)
-							{
-								g_receiver_port_shadow |= 0b00000100;
-								pcf8574_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
-							}
-							else
-							{
-								g_receiver_port_shadow &= 0b11111011;
-								pcf8574_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
-							}
-
-							attenuation++;
-							attenuation = attenuation % 100;
-
-							lb_broadcast_num((uint16_t)g_rx_attenuation, NULL);
+							dac081c_set_dac(attenuation++);
 						}
+
 #endif // DEBUG_FUNCTIONS_ENABLE
 
 					}				
