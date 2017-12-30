@@ -445,9 +445,13 @@ ISR( TIMER2_COMPB_vect )
  * Note: For quadrature reading the interrupt is set for "Any logical
  * change on INT0 generates an interrupt request."
  ************************************************************************/
-//	ISR( PCINT0_vect )
-//	{
-//	}
+ISR( PCINT0_vect )
+{
+	if(g_terminal_mode)
+	{
+		lb_send_string("\nError: PCINT0 occurred!\n");
+	}
+}
 
 
 /***********************************************************************
@@ -839,35 +843,13 @@ ISR(USART_UDRE_vect)
  * interrupts can be used for waking the part from sleep modes other
  * than Idle mode.
  ************************************************************************/
-// ISR( PCINT2_vect )
-// {
-// 	static uint8_t portDhistory = 0xFF; /* default is high because the pull-up */
-// 
-// 	/* Control Head
-// 	 * Switches are PCINT18, PCINT19, PCINT20, PCINT21, and PCINT22 */
-// 
-// 	uint8_t changedbits;
-// 
-// 	if(!g_initialization_complete)
-// 	{
-// 		return; /* ignore keypresses before initialization completes */
-// 
-// 	}
-// 	changedbits = PIND ^ portDhistory;
-// 	portDhistory = PIND;
-// 
-// 	if(!changedbits)    /* noise? */
-// 	{
-// 		return;
-// 	}
-// 
-// //	if(changedbits & 0b00011100)                                /* Only do this for button presses */
-// //	{
-// //		g_power_off_countdown = POWER_OFF_DELAY;                /* restart countdown */
-// //		g_backlight_off_countdown = g_backlight_delay_value;    /* keep backlight illuminated */
-// //	}
-// 
-// }
+ISR( PCINT2_vect )
+{
+	if(g_terminal_mode)
+	{
+		lb_send_string("\nError: PCINT2 occurred!\n");
+	}
+}
 
 
 /***********************************************************************
@@ -884,7 +866,6 @@ int main( void )
 {
 	BOOL attach_success = TRUE; // Start out in TTY terminal communication mode
 	uint16_t hold_tick_count = 0;
-
 	LinkbusRxBuffer* lb_buff = 0;
 
 	/**
@@ -932,7 +913,7 @@ int main( void )
 		PCICR |= (1 << PCIE2) | (1 << PCIE1) | (1 << PCIE0);    /* Enable pin change interrupts PCI2, PCI1 and PCI0 */
 		PCMSK2 |= 0b00011100;                                   /* Enable port D pin change interrupts PD2, PD3, and PD4 */
 		PCMSK1 |= (1 << PCINT10);                               /* Enable port C pin change interrupts on pin PC2 */
-		PCMSK0 |= (1 << PORTB2);                                /* | (1 << QUAD_A) | (1 << QUAD_B); // Enable port B pin 2 and quadrature changes on rotary encoder. */
+//		PCMSK0 |= (1 << PORTB2);                                /* Do not enable interrupts until HW is ready */
 
 	cpu_irq_enable();                                           /* same as sei(); */
 
@@ -940,7 +921,9 @@ int main( void )
 
 	/**
 	 * Enable watchdog interrupts before performing I2C calls that might cause a lockup */
+#ifndef TRANQUILIZE_WATCHDOG
 	wdt_init(WD_SW_RESETS);
+#endif // TRANQUILIZE_WATCHDOG
 
 	/**
 	 * Initialize the receiver */
@@ -996,7 +979,9 @@ int main( void )
 	}               /* wait until transmit finishes */
 
 	g_send_ID_countdown = 0; /* Do not send ID broadcasts initially */
+#ifndef TRANQUILIZE_WATCHDOG
 	wdt_init(WD_HW_RESETS); /* enable hardware interrupts */
+#endif // TRANQUILIZE_WATCHDOG
 	
 	g_initialization_complete = TRUE;
 
@@ -1241,8 +1226,10 @@ int main( void )
 				
 				case MESSAGE_RESET:
 				{
+#ifndef TRANQUILIZE_WATCHDOG
 					wdt_init(WD_FORCE_RESET);
 					while(1);
+#endif // TRANQUILIZE_WATCHDOG
 				}
 				break;
 				

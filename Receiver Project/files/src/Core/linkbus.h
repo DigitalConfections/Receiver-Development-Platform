@@ -279,9 +279,13 @@ void lb_poweroff_msg(uint8_t sec);
  */
 void lb_send_value(uint16_t value, char* label);
 
-
 /**
  */
 void lb_echo_char(uint8_t c);
+
+/**
+ */
+BOOL lb_send_string(char* str);
+
 
 #endif  /* LINKBUS_H_ */

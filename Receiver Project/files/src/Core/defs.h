@@ -32,9 +32,10 @@
 
 /******************************************************
  * Set the text that gets displayed to the user */
-#define SW_REVISION "0.7.15"
+#define SW_REVISION "X1.8.0"
 
 //#define DEBUG_FUNCTIONS_ENABLE
+// #define TRANQUILIZE_WATCHDOG
 
 #define PRODUCT_NAME_SHORT "ARDF Rx"
 #define PRODUCT_NAME_LONG "ARDF Dual-Band Receiver"
@@ -54,7 +55,7 @@
 
 /******************************************************
  * Include only the necessary software support */
-#define ENABLE_1_SEC_INTERRUPTS
+//#define ENABLE_1_SEC_INTERRUPTS
 //#define ENABLE_POWERUP_POLLING
 
 /*******************************************************/
