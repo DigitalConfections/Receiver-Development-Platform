@@ -29,9 +29,6 @@
 #include "defs.h"
 #include "si5351.h"		/* Programmable clock generator */
 #include "ad5245.h"		/* Potentiometer for tone volume on Digital Interface */
-#include "max5478.h"	/* Potentiometer for receiver attenuation on Rev X.1 Receiver board */
-#include "pcf8574.h"	/* Port expander on Rev X1 Receiver board */
-#include "dac081c085.h" /* DAC on 80m VGA of Rev X1 Receiver board */
 #include "i2c.h"
 #include "linkbus.h"
 #include "receiver.h"
@@ -107,7 +104,6 @@ extern uint32_t EEMEM ee_receiver_80m_mem4_freq;
 extern uint32_t EEMEM ee_receiver_80m_mem5_freq;
 
 static volatile Frequency_Hz g_receiver_freq = 0;
-static volatile uint16_t g_rx_attenuation = 0;
 
 /* Digital Potentiometer Defines */
 static uint8_t EEMEM ee_tone_volume_setting = EEPROM_TONE_VOLUME_DEFAULT;
@@ -117,8 +113,6 @@ static uint8_t EEMEM ee_main_volume_setting = EEPROM_MAIN_VOLUME_DEFAULT;
 static volatile uint8_t g_main_volume = 0;
 static volatile uint8_t g_hw_main_volume = EEPROM_MAIN_VOLUME_DEFAULT;
 static volatile uint8_t g_tone_volume;
-
-static volatile uint8_t g_receiver_port_shadow = 0x00; // keep track of port value to avoid unnecessary reads
 
 #ifdef ENABLE_1_SEC_INTERRUPTS
 
@@ -165,7 +159,6 @@ static volatile BOOL g_enableHardwareWDResets = FALSE;
 void initializeEEPROMVars(void);
 void saveAllEEPROM(void);
 void wdt_init(WDReset resetType);
-uint16_t potValFromAtten(uint16_t atten);
 
 /***********************************************************************
  * Watchdog Timer ISR
@@ -931,18 +924,12 @@ int main( void )
 	init_receiver();
 	
 	/**
-	 * Initialize port expander on receiver board */
-	pcf8574_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
-
-	/**
 	 * The watchdog must be petted periodically to keep it from barking */
 	wdt_reset();                /* HW watchdog */
 
 	/**
 	 * Initialize tone volume setting */
-
-		ad5245_set_potentiometer(TONE_POT_VAL(g_tone_volume));    /* move to receiver initialization */
-//		pcf8574_writePort(0b00000000); /* initialize receiver port expander */
+	ad5245_set_potentiometer(TONE_POT_VAL(g_tone_volume));    /* move to receiver initialization */
 
 	wdt_reset();                                    /* HW watchdog */
 
@@ -1149,7 +1136,7 @@ int main( void )
 					{
 						toggle = TRUE;
 						g_lb_repeat_rssi = TRUE;
-						dac081c_set_dac(0);
+						rxSetAttenuation(0);
 						g_debug_atten_step = 1;
 					}
 				}
@@ -1158,39 +1145,13 @@ int main( void )
 
 				case MESSAGE_PREAMP:
 				{
-					BOOL result = 0;
-					RadioBand band = rxGetBand();
+					BOOL result = rxGetPreamp();
 					
 					if(lb_buff->fields[FIELD1][0])
 					{
 						uint8_t setting = atol(lb_buff->fields[FIELD1]);
 						
-						if(band == BAND_2M)
-						{
-							if(setting == 0)
-							{
-								g_receiver_port_shadow &= 0b11011111;
-								pcf8574_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
-							}
-							else if(setting == 1)
-							{
-								g_receiver_port_shadow |= 0b00100000;
-								pcf8574_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
-							}
-						}
-						else // if band == BAND_80M
-						{
-							dac081c_set_dac(setting);
-						}
-					}
-					
-					if(band == BAND_2M)
-					{
-						result = (g_receiver_port_shadow & 0b00100000) >> 5;
-					}
-					else
-					{
-						result = dac081c_read_dac();
+						result = rxSetPreamp(setting);
 					}
 					
 					lb_broadcast_num((uint16_t)result, NULL);
@@ -1205,22 +1166,14 @@ int main( void )
 					if(lb_buff->fields[FIELD1][0])
 					{
 						attenuation = CLAMP(0, (uint16_t)atoi(lb_buff->fields[FIELD1]), 100); 
-						max5478_set_dualpotentiometer_wipers(potValFromAtten(attenuation));
-						g_rx_attenuation = attenuation;
-						
-						if(attenuation)
-						{
-							g_receiver_port_shadow |= 0b00000100;
-							pcf8574_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
-						}
-						else
-						{
-							g_receiver_port_shadow &= 0b11111011;
-							pcf8574_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
-						}
+						attenuation = rxSetAttenuation(attenuation);
 					}
-					
-					lb_broadcast_num((uint16_t)g_rx_attenuation, NULL);
+					else
+					{
+						attenuation = rxGetAttenuation();
+					}
+
+					lb_broadcast_num(attenuation, NULL);
 				}
 				break;
 				
@@ -1726,8 +1679,8 @@ int main( void )
 					lb_send_BND(LINKBUS_MSG_REPLY, rxGetBand());
 					lb_send_FRE(LINKBUS_MSG_REPLY, rxGetFrequency(), FALSE);
 					lb_send_FRE(LINKBUS_MSG_REPLY, rxGetCWOffset(), FALSE);
-					lb_send_value(g_rx_attenuation, "ATT");
-					lb_send_value((g_receiver_port_shadow & 0b00100000) ? 1:0, "PRE");
+					lb_send_value(rxGetAttenuation(), "ATT");
+					lb_send_value(rxGetPreamp(), "PRE");
 					lb_send_value(g_main_volume, "MAIN VOL");
 					lb_send_value(g_tone_volume, "TONE VOL");
 					cli(); wdt_reset(); /* HW watchdog */ sei();
@@ -1772,8 +1725,8 @@ int main( void )
 			{
 				g_radio_port_changed = FALSE;
 
-				uint8_t portPins;
-				pcf8574_readPort(&portPins);
+//				uint8_t portPins;
+//				pcf8574_readPort(&portPins);
 
 				/* Take appropriate action for the pin change */
 				/*			if((~portPins) & 0b00010000)
@@ -1819,9 +1772,6 @@ int main( void )
 //						
 //							g_debug_atten_step++;
 //						
-//							max5478_set_dualpotentiometer_wipers(potValFromAtten(attenuation));
-//							g_rx_attenuation = attenuation;
-//						
 //							if(attenuation)
 //							{
 //								g_receiver_port_shadow |= 0b00000100;
@@ -1836,7 +1786,6 @@ int main( void )
 //							attenuation++;
 //							attenuation = attenuation % 100;
 //
-//							lb_broadcast_num((uint16_t)g_rx_attenuation, NULL);
 //						}
 
 						g_rssi_countdown = 100;
@@ -1844,7 +1793,7 @@ int main( void )
 						{
 							static uint8_t attenuation = 0;
 						
-							dac081c_set_dac(attenuation++);
+							rxSetAttenuation(attenuation++);
 						}
 
 #endif // DEBUG_FUNCTIONS_ENABLE
@@ -1934,30 +1883,4 @@ int main( void )
 	{
 		storeEEbyteIfChanged(&ee_tone_volume_setting, g_tone_volume);
 		storeEEbyteIfChanged(&ee_main_volume_setting, g_main_volume);
-	}
-	
-	uint16_t potValFromAtten(uint16_t atten)
-	{
-		uint16_t valLow = 0x00FF;
-		uint16_t valHigh = 0;
-		
-		if(atten)
-		{							
-			if(atten < 23) // 0xFFF -> 0x23FF
-			{
-				valHigh = 0xFF00 - (atten * 0x0A00);
-			}
-			else if(atten < 41) // 0x23FF -> 0x00FF
-			{
-				valHigh = 0x2300 - (0x0200 * (atten - 23));
-			}
-			else // 0x00FF -> 0x0000
-			{
-				valLow = (255 * (100 - atten)) / 59;
-			}
-			
-			valHigh += valLow;
-		}
-		
-		return valHigh;
 	}

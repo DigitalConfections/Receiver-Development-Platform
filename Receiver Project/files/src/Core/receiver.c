@@ -29,6 +29,9 @@
 
 #include <stdlib.h>
 #include "receiver.h"
+#include "pcf8574.h"	/* Port expander on Rev X1 Receiver board */
+#include "max5478.h"	/* Potentiometer for receiver attenuation on Rev X.1 Receiver board */
+#include "dac081c085.h" /* DAC on 80m VGA of Rev X1 Receiver board */
 
 #ifdef INCLUDE_RECEIVER_SUPPORT
 
@@ -36,10 +39,15 @@
 	static volatile Frequency_Hz g_freq_2m = DEFAULT_RX_2M_FREQUENCY;
 	static volatile Frequency_Hz g_freq_80m = DEFAULT_RX_80M_FREQUENCY;
 	static volatile Frequency_Hz g_cw_offset = DEFAULT_RX_CW_OFFSET_FREQUENCY;
+	static volatile uint8_t g_preamp_80m = DEFAULT_PREAMP_80M;
+	static volatile uint8_t g_preamp_2m = DEFAULT_PREAMP_2M;
+	static volatile uint8_t g_attenuation_setting = DEFAULT_ATTENUATION;
 	static volatile Frequency_Hz g_freq_bfo = RADIO_IF_FREQUENCY;
 	static volatile RadioVFOConfig g_vfo_configuration = VFO_2M_LOW_80M_HIGH;
 	static volatile RadioBand g_activeBand = DEFAULT_RX_ACTIVE_BAND;
-
+	
+	static volatile uint8_t g_receiver_port_shadow = 0x00; // keep track of port value to avoid unnecessary reads
+	
 /* EEPROM Defines */
    #define EEPROM_BAND_DEFAULT BAND_2M
 
@@ -50,6 +58,9 @@
 	static uint32_t EEMEM ee_active_2m_frequency = DEFAULT_RX_2M_FREQUENCY;
 	static uint32_t EEMEM ee_active_80m_frequency = DEFAULT_RX_80M_FREQUENCY;
 	static uint32_t EEMEM ee_cw_offset_frequency = DEFAULT_RX_CW_OFFSET_FREQUENCY;
+	static uint8_t EEMEM ee_preamp_80m = DEFAULT_PREAMP_80M;
+	static uint8_t EEMEM ee_preamp_2m = DEFAULT_PREAMP_2M;
+	static uint8_t EEMEM ee_attenuation_setting = DEFAULT_ATTENUATION;
 
 	uint32_t EEMEM ee_receiver_2m_mem1_freq = EEPROM_2M_MEM1_DEFAULT;
 	uint32_t EEMEM ee_receiver_2m_mem2_freq = EEPROM_2M_MEM2_DEFAULT;
@@ -69,6 +80,7 @@
 
 	void saveAllReceiverEEPROM(void);
 	void initializeReceiverEEPROMVars(void);
+	uint16_t potValFromAtten(uint16_t atten);
 
 /*
  *       This function sets the VFO frequency (CLK0 of the Si5351) based on the intended receive frequency passed in by the parameter (freq),
@@ -204,6 +216,21 @@
 		
 		si5351_drive_strength(RX_CLOCK_VFO, SI5351_DRIVE_2MA);
 		si5351_clock_enable(RX_CLOCK_VFO, TRUE);
+		
+		/**
+		 * Initialize port expander on receiver board */
+		g_receiver_port_shadow = 0;
+		pcf8574_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
+		
+		rxSetAttenuation(g_attenuation_setting);
+		if(g_activeBand == BAND_2M)
+		{
+			rxSetPreamp(g_preamp_2m);
+		}
+		else
+		{
+			rxSetPreamp(g_preamp_80m);
+		}
 
 		g_rx_initialized = TRUE;
 	}
@@ -222,6 +249,9 @@
 			g_freq_2m = eeprom_read_dword(&ee_active_2m_frequency);
 			g_freq_80m = eeprom_read_dword(&ee_active_80m_frequency);
 			g_cw_offset = eeprom_read_dword(&ee_cw_offset_frequency);
+			g_preamp_80m = eeprom_read_byte(&ee_preamp_80m);
+			g_preamp_2m = eeprom_read_byte(&ee_preamp_2m);
+			g_attenuation_setting = eeprom_read_byte(&ee_attenuation_setting);
 		}
 		else
 		{
@@ -241,6 +271,9 @@
 			g_freq_2m = DEFAULT_RX_2M_FREQUENCY;
 			g_freq_80m = DEFAULT_RX_80M_FREQUENCY;
 			g_cw_offset = DEFAULT_RX_CW_OFFSET_FREQUENCY;
+			g_preamp_80m = DEFAULT_PREAMP_80M;
+			g_preamp_2m = DEFAULT_PREAMP_2M;
+			g_attenuation_setting = DEFAULT_ATTENUATION;
 
 			saveAllReceiverEEPROM();
 		}
@@ -253,6 +286,9 @@
 		storeEEdwordIfChanged((uint32_t*)&ee_active_80m_frequency, g_freq_80m);
 		storeEEdwordIfChanged((uint32_t*)&ee_cw_offset_frequency, g_cw_offset);
 		storeEEdwordIfChanged((uint32_t*)&ee_si5351_ref_correction, si5351_get_correction());
+		storeEEbyteIfChanged(&ee_preamp_80m, g_preamp_80m);
+		storeEEbyteIfChanged(&ee_preamp_2m, g_preamp_2m);
+		storeEEbyteIfChanged(&ee_attenuation_setting, g_attenuation_setting);
 	}
 
 
@@ -288,6 +324,105 @@ RadioBand bandForFrequency(Frequency_Hz freq)
 	else if((freq >= RX_MINIMUM_80M_FREQUENCY) && (freq <= RX_MAXIMUM_80M_FREQUENCY))
 	{
 		result = BAND_80M;
+	}
+
+	return(result);
+}
+
+uint8_t rxSetAttenuation(uint8_t att)
+{
+	uint16_t attenuation = CLAMP(0, att, 100); 
+	max5478_set_dualpotentiometer_wipers(potValFromAtten(attenuation));
+	g_attenuation_setting = attenuation;
+						
+	if(attenuation)
+	{
+		g_receiver_port_shadow |= 0b00000100;
+		pcf8574_writePort(g_receiver_port_shadow); /* set receiver port expander */
+	}
+	else
+	{
+		g_receiver_port_shadow &= 0b11111011;
+		pcf8574_writePort(g_receiver_port_shadow); /* set receiver port expander */
+	}
+	
+	return g_attenuation_setting;
+}
+
+uint8_t rxGetAttenuation(void)
+{
+	return g_attenuation_setting;
+}
+	
+uint16_t potValFromAtten(uint16_t atten)
+{
+	uint16_t valLow = 0x00FF;
+	uint16_t valHigh = 0;
+		
+	if(atten)
+	{							
+		if(atten < 23) // 0xFFF -> 0x23FF
+		{
+			valHigh = 0xFF00 - (atten * 0x0A00);
+		}
+		else if(atten < 41) // 0x23FF -> 0x00FF
+		{
+			valHigh = 0x2300 - (0x0200 * (atten - 23));
+		}
+		else // 0x00FF -> 0x0000
+		{
+			valLow = (255 * (100 - atten)) / 59;
+		}
+			
+		valHigh += valLow;
+	}
+		
+	return valHigh;
+}
+
+uint8_t rxGetPreamp(void)
+{
+	if(g_activeBand == BAND_2M)
+	{
+		return g_preamp_2m;
+	}
+	else
+	{
+		return g_preamp_80m;
+	}
+}
+
+uint8_t rxSetPreamp(uint8_t setting)
+{
+	uint8_t result;
+	
+	if(g_activeBand == BAND_2M)
+	{
+		if(setting == 0)
+		{
+			g_receiver_port_shadow &= 0b11011111;
+			pcf8574_writePort(g_receiver_port_shadow); /* set receiver port expander */
+		}
+		else // if(setting == 1)
+		{
+			g_receiver_port_shadow |= 0b00100000;
+			pcf8574_writePort(g_receiver_port_shadow); /* set receiver port expander */
+		}
+	}
+	else // if g_activeBand == BAND_80M
+	{
+		dac081c_set_dac(setting);
+	}
+					
+	if(g_activeBand == BAND_2M)
+	{
+		g_preamp_2m = (g_receiver_port_shadow & 0b00100000) >> 5;
+		result = g_preamp_2m;
+	}
+	else
+	{
+		g_preamp_80m = dac081c_read_dac();
+		result = g_preamp_80m;
 	}
 
 	return(result);
