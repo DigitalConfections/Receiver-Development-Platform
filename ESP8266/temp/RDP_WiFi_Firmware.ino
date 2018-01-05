@@ -41,24 +41,16 @@
       5. $$$w; <- starts a web server that accepts connections from WiFi devices.
 
 */
-#include <Arduino.h>
-//#include <GDBStub.h>
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
 #include <WiFiClient.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266WiFiMulti.h>
-//#include <ESP8266mDNS.h>
-#include <user_interface.h>
+#include <ESP8266mDNS.h>
 #include "esp8266.h"
-//#include <ArduinoOTA.h>
+#include <ArduinoOTA.h>
 #include <FS.h>
-//#include <WebSocketsClient.h>
-#include <Hash.h>
 #include <WebSocketsServer.h>
-
-
-
 /* #include <Wire.h> */
 #include "Helpers.h"
 
@@ -79,8 +71,8 @@ BOOL g_LEDs_enabled = LEDS_ENABLE_DEFAULT;
 */
 
 #define MAX_SRV_CLIENTS 3   /*how many clients should be able to telnet to this ESP8266 */
-//WiFiServer g_tcpServer(BRIDGE_TCP_PORT_DEFAULT.toInt());
-//WiFiClient g_tcpServerClients[MAX_SRV_CLIENTS];
+WiFiServer g_tcpServer(BRIDGE_TCP_PORT_DEFAULT.toInt());
+WiFiClient g_tcpServerClients[MAX_SRV_CLIENTS];
 
 String g_bridgeIPaddr = BRIDGE_IP_ADDR_DEFAULT;
 String g_bridgeSSID = BRIDGE_SSID_DEFAULT;
@@ -113,23 +105,11 @@ unsigned int g_localPort = 2390;    /* local port to listen for UDP  packets */
 
 /* HTTP web server */
 ESP8266WebServer g_http_server(80); /* HTTP server on port 80 */
-WebSocketsServer g_webSocket = WebSocketsServer(81);  // create a websocket server on port 81
-
-typedef struct webSocketClient {
-  uint8_t webID;
-  uint8_t socketID;
-  char macAddr[20];
-} WebSocketClient;
-
-WebSocketClient g_webSocketClient[MAX_NUMBER_OF_WEB_CLIENTS]; // Keep track of active clients and their MAC addresses
-uint8_t g_numberOfSocketClients = 0;
-uint8_t g_numberOfWebClients = 0;
-
+WebSocketsServer webSocket = WebSocketsServer(81);  // create a websocket server on port 81
 ESP8266WiFiMulti wifiMulti;     // Create an instance of the ESP8266WiFiMulti class, called 'wifiMulti'
 File fsUploadFile;  // a File variable to temporarily store the received file
 
 String g_softAP_IP_addr;
-bool g_main_page_served = false;
 
 void handleRoot();              // function prototypes for HTTP handlers
 void handleLED();
@@ -143,8 +123,6 @@ unsigned long g_relativeTimeSeconds;
 unsigned long g_lastAccessToNISTServers = 0;
 BOOL g_timeWasSet = FALSE;
 int g_blinkPeriodMillis = 500;
-
-static WiFiEventHandler e1, e2;
 
 void setup()
 {
@@ -168,9 +146,59 @@ void setup()
 }
 
 
+bool setupTCP2UART()
+{
+  bool success = false;
+  WiFi.mode(WIFI_AP);
+
+  /* Create a somewhat unique SSID */
+  uint8_t mac[WL_MAC_ADDR_LENGTH];
+  WiFi.softAPmacAddress(mac);
+  String macID = String(mac[WL_MAC_ADDR_LENGTH - 2], HEX) +
+                 String(mac[WL_MAC_ADDR_LENGTH - 1], HEX);
+  macID.toUpperCase();
+  String ap_NameString = g_bridgeSSID + macID;
+
+  IPAddress apIP = stringToIP(g_bridgeIPaddr);
+
+  if (apIP == IPAddress(-1, -1, -1, -1))
+  {
+    apIP = stringToIP(String(SOFT_AP_IP_ADDR_DEFAULT));   /* some reasonable default address */
+  }
+
+  WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
+  success = WiFi.softAP(stringObjToConstCharString(&ap_NameString), stringObjToConstCharString(&g_bridgePW));
+
+  if (success)
+  {
+    /* Start TCP listener on port TCP_PORT */
+    g_tcpServer.begin();
+    g_tcpServer.setNoDelay(true);
+
+    if (g_debug_prints_enabled)
+    {
+      Serial.println(String("Ready! TCP to ") + g_bridgeIPaddr + String(" port ") + g_bridgeTCPport + String(" to connect"));
+    }
+  }
+
+  return (success);
+}
+
 //===============================================================
 // This routine is executed when you open its IP in browser
 //===============================================================
+//void handleRoot()
+//{
+//String s = MAIN_page; //Read HTML contents
+//g_http_server.send(200, "text/html", s); //Send web page
+//sendSettings();
+//}
+
+//void handleRoot()
+//{                         // When URI / is requested, send a web page with a button to toggle the LED
+//  g_http_server.send(200, "text/html", "<form action=\"/LED\" method=\"POST\"><input type=\"submit\" value=\"Toggle LED\"></form>");
+//}
+
 void handleRoot()
 { // When URI / is requested, send a web page with a button to toggle the LED
   g_http_server.send(200, "text/html", "<form action=\"/login\" method=\"POST\"><input type=\"text\" name=\"username\" placeholder=\"Username\"></br><input type=\"password\" name=\"password\" placeholder=\"Password\"></br><input type=\"submit\" value=\"Login\"></form><p>Try 'John Doe' and 'password123' ...</p>");
@@ -203,45 +231,27 @@ void handleLED()
   g_http_server.send(303);                         // Send it back to the browser with an HTTP status 303 (See Other) to redirect
 }
 
+//void handleNotFound()
+//{
+//  g_http_server.send(404, "text/plain", "404: Not found"); // Send HTTP status 404 (Not Found) when there's no handler for the URI in the request
+//}
 void handleNotFound()
 { // if the requested file or page doesn't exist, return a 404 not found error
   if (!handleFileRead(g_http_server.uri()))
   { // check if the file exists in the flash memory (SPIFFS), if so, send it
-    String message = "File Not Found\n\n";
-    message += "URI: ";
-    message += g_http_server.uri();
-    message += "\nMethod: ";
-    message += (g_http_server.method() == HTTP_GET) ? "GET" : "POST";
-    message += "\nArguments: ";
-    message += g_http_server.args();
-    message += "\n";
-    for (uint8_t i = 0; i < g_http_server.args(); i++) {
-      message += " " + g_http_server.argName(i) + ": " + g_http_server.arg(i) + "\n";
-    }
-    g_http_server.send(404, "text/plain", message);
-  }
-  else
-  {
-    String filename = String(g_http_server.uri());
-
-    Serial.println("File read:" + filename);
-
-    if (filename.indexOf("tx.html") >= 0)
-    {
-      g_main_page_served = true;
-    }
+    g_http_server.send(404, "text/plain", "404: File Not Found");
   }
 }
+
 
 
 bool setupHTTP_AP()
 {
   bool success = false;
-  g_numberOfSocketClients = 0;
-  g_numberOfWebClients = 0;
+  startWebSocket(); // Start a WebSocket server
 
-  WiFi.mode(WIFI_AP_STA);
-  //  WiFi.mode(WIFI_AP);
+  //  WiFi.mode(WIFI_AP_STA);
+  WiFi.mode(WIFI_AP);
 
   /* Create a somewhat unique SSID */
   uint8_t mac[WL_MAC_ADDR_LENGTH];
@@ -273,46 +283,28 @@ bool setupHTTP_AP()
   {
     IPAddress myIP = WiFi.softAPIP(); //Get IP address
 
-    //    if (MDNS.begin(stringObjToConstCharString(&g_mDNS_responder)))
-    //    { // Start the mDNS responder for e.g., "esp8266.local"
-    //      Serial.println("mDNS responder started: " + g_mDNS_responder + ".local");
-    //    }
-    //    else
-    //    {
-    //      Serial.println("Error setting up MDNS responder!");
-    //    }
+    if (MDNS.begin(stringObjToConstCharString(&g_mDNS_responder)))
+    { // Start the mDNS responder for e.g., "esp8266.local"
+      Serial.println("mDNS responder started: " + g_mDNS_responder + ".local");
+    }
+    else
+    {
+      Serial.println("Error setting up MDNS responder!");
+    }
 
     /* Start TCP listener on port TCP_PORT */
-    g_http_server.on("/", HTTP_GET, handleRoot);     // Call the 'handleRoot' function when a client requests URI "/"
+    //  g_http_server.on("/", handleRoot); /* serve the root web page */
+    //  g_http_server.onNotFound(handleNotFound);        // When a client requests an unknown URI (i.e. something other than "/"), call function "handleNotFound"
+    //  g_http_server.on("/", HTTP_GET, handleRoot);     // Call the 'handleRoot' function when a client requests URI "/"
     g_http_server.on("/LED", HTTP_POST, handleLED);  // Call the 'handleLED' function when a POST request is made to URI "/LED"
     g_http_server.on("/login", HTTP_POST, handleLogin); // Call the 'handleLogin' function when a POST request is made to URI "/login"
-
-    g_http_server.on("/upload", HTTP_GET, []() {                 // if the client requests the upload page
-      if (!handleFileRead("/upload.html"))                // send it if it exists
-        g_http_server.send(404, "text/plain", "404: Not Found"); // otherwise, respond with a 404 (Not Found) error
-    });
-
-    g_http_server.on("/upload", HTTP_POST,                       // if the client posts to the upload page
-    []() {
-      g_http_server.send(200);
-    },                          // Send status 200 (OK) to tell the client we are ready to receive
-    handleFileUpload                                    // Receive and save the file
-                    );
-
-
-    // g_http_server.on("/edit.html",  HTTP_POST, []()
-    // {  // If a POST request is sent to the /edit.html address,
-    //   g_http_server.send(200, "text/plain", "");
-    // }, handleFileUpload);                       // go to 'handleFileUpload'
+   // g_http_server.on("/edit.html",  HTTP_POST, []() 
+   // {  // If a POST request is sent to the /edit.html address,
+   //   g_http_server.send(200, "text/plain", ""); 
+   // }, handleFileUpload);                       // go to 'handleFileUpload'
 
     g_http_server.onNotFound(handleNotFound);        // When a client requests an unknown URI (i.e. something other than "/"), call function "handleNotFound"
     g_http_server.begin();
-
-    //    startWebSocket(); // Start a WebSocket server
-
-    // Event subscription
-    e1 = WiFi.onSoftAPModeStationConnected(onNewStation);
-    e2 = WiFi.onSoftAPModeStationDisconnected(onStationDisconnect);
 
     if (g_debug_prints_enabled)
     {
@@ -323,55 +315,6 @@ bool setupHTTP_AP()
 
   return (success);
 }
-
-
-// Manage incoming device connection on ESP access point
-void onNewStation(WiFiEventSoftAPModeStationConnected sta_info) {
-  Serial.println("New Station :");
-  Serial.println("Station List");
-
-  if (g_numberOfWebClients > MAX_NUMBER_OF_WEB_CLIENTS)
-  {
-    Serial.printf("ERROR: Number of web clients (%d) exceeds MAX_NUMBER_OF_WEB_CLIENTS.", g_numberOfWebClients);
-    // TODO: attempt to recover gracefully
-  }
-  else
-  {
-    for (int i = 0; i < g_numberOfWebClients; i++)
-    {
-      Serial.printf("WebID# %d. MAC address : %s\n", g_webSocketClient[i].webID, g_webSocketClient[i].macAddr);
-    }
-
-    sprintf(g_webSocketClient[g_numberOfWebClients].macAddr, "%02X:%02X:%02X:%02X:%02X:%02X", MAC2STR(sta_info.mac));
-    g_webSocketClient[g_numberOfWebClients].webID = sta_info.aid;
-    Serial.printf("WebID# %d. MAC address : %s\n", g_webSocketClient[g_numberOfWebClients].webID, g_webSocketClient[g_numberOfWebClients].macAddr);
-    g_numberOfWebClients++;
-
-    startWebSocket(); // Start a WebSocket server
-  }
-}
-
-void onStationDisconnect(WiFiEventSoftAPModeStationDisconnected sta_info) {
-  if (g_numberOfWebClients) g_numberOfWebClients--;
-  Serial.println("Station Exit :");
-
-  if (g_numberOfWebClients > MAX_NUMBER_OF_WEB_CLIENTS)
-  {
-    Serial.printf("ERROR: Number of web clients (%d) exceeds MAX_NUMBER_OF_WEB_CLIENTS.", g_numberOfWebClients);
-    // TODO: attempt to recover gracefully
-  }
-  else
-  {
-    for (int i = 0; i < g_numberOfWebClients; i++)
-    {
-      if (g_webSocketClient[i].webID == sta_info.aid)
-      {
-        Serial.printf("WebID# %d. sockID# %d. MAC address : %s\n", g_webSocketClient[i].webID, g_webSocketClient[i].socketID, g_webSocketClient[i].macAddr);
-      }
-    }
-  }
-}
-
 
 
 bool setupWiFiAPConnection()
@@ -700,6 +643,26 @@ void loop()
 
         WiFi.disconnect();
         digitalWrite(BLUE_LED, HIGH);       /* Turn off blue LED */
+        done = FALSE;
+      }
+      break;
+
+    /* Bridge TCP to UART */
+    case 'b':
+    case 'B':
+      {
+        if (g_debug_prints_enabled)
+        {
+          Serial.println("Processing B command...");
+        }
+
+        digitalWrite(RED_LED, HIGH);    /* Turn off red LED */
+
+        if (setupTCP2UART())
+        {
+          tcp2UARTbridgeLoop();
+        }
+
         done = FALSE;
       }
       break;
@@ -1467,6 +1430,130 @@ int32_t stringToTimeVal(String string)
   return (time_sec);
 }
 
+void tcp2UARTbridgeLoop()
+{
+  uint8_t i, j;
+  char buf[1024];
+  int bytesAvail, bytesIn;
+  BOOL done = FALSE;
+  BOOL toggle = FALSE;
+  unsigned long holdTime;
+  BOOL clientConnected = FALSE;
+  int escapeCount = 0;
+
+  if (g_debug_prints_enabled)
+  {
+    Serial.println("Bridge started");
+  }
+
+  while (!done)
+  {
+    /*check if there are any new clients */
+    if (g_tcpServer.hasClient())
+    {
+      for (i = 0; i < MAX_SRV_CLIENTS; i++)
+      {
+        /*find free/disconnected spot */
+        if (!g_tcpServerClients[i] || !g_tcpServerClients[i].connected())
+        {
+          if (g_tcpServerClients[i])
+          {
+            g_tcpServerClients[i].stop();
+          }
+
+          g_tcpServerClients[i] = g_tcpServer.available();
+
+          if (g_tcpServerClients[i].connected())
+          {
+            if (g_debug_prints_enabled)
+            {
+              Serial.println("New client: #" + String(i + 1));
+            }
+          }
+
+          continue;
+        }
+      }
+
+      /* no free/disconnected spot so reject */
+      WiFiClient g_tcpServerClient = g_tcpServer.available();
+      g_tcpServerClient.stop();
+    }
+
+    /*check clients for data */
+    clientConnected = FALSE;
+    for (i = 0; i < MAX_SRV_CLIENTS; i++)
+    {
+      if (g_tcpServerClients[i] && g_tcpServerClients[i].connected())
+      {
+        /*get data from the telnet client and push it to the UART */
+        while ((bytesAvail = g_tcpServerClients[i].available()) > 0)
+        {
+          bytesIn = g_tcpServerClients[i].readBytes(buf, min(sizeof(buf), bytesAvail));
+          if (bytesIn > 0)
+          {
+            Serial.write(buf, bytesIn);
+            delay(0);
+          }
+        }
+
+        clientConnected = TRUE;
+      }
+    }
+
+    /*check UART for data */
+    while ((bytesAvail = Serial.available()) > 0)
+    {
+      bytesIn = Serial.readBytes(buf, min(sizeof(buf), bytesAvail));
+
+      if (bytesIn > 0)
+      {
+        /*push UART data to all connected telnet clients */
+        for (i = 0; i < MAX_SRV_CLIENTS; i++)
+        {
+          if (g_tcpServerClients[i] && g_tcpServerClients[i].connected())
+          {
+            g_tcpServerClients[i].write((uint8_t*)buf, bytesIn);
+            delay(0);
+          }
+
+          for (j = 0; j < bytesIn; j++)
+          {
+            if (buf[j] == '$')
+            {
+              escapeCount++;
+
+              if (escapeCount == 3)
+              {
+                done = TRUE;
+                escapeCount = 0;
+              }
+            }
+            else
+            {
+              escapeCount = 0;
+            }
+          }
+        }
+      }
+    }
+
+    if (clientConnected && g_LEDs_enabled)
+    {
+      g_relativeTimeSeconds = millis() / g_blinkPeriodMillis;
+      if (holdTime != g_relativeTimeSeconds)
+      {
+        holdTime = g_relativeTimeSeconds;
+        toggle = !toggle;
+        digitalWrite(BLUE_LED, toggle); /* Blink blue LED */
+      }
+    }
+    else
+    {
+      digitalWrite(BLUE_LED, HIGH);   /* Turn off blue LED */
+    }
+  }
+}
 
 void httpWebServerLoop()
 {
@@ -1490,7 +1577,7 @@ void httpWebServerLoop()
   {
     /*check if there are any new clients */
     g_http_server.handleClient();
-    g_webSocket.loop();
+//    webSocket.loop();
 
     hold = WiFi.softAPgetStationNum();
     if (numConnected != hold)
@@ -1528,30 +1615,6 @@ void httpWebServerLoop()
                 }
 
                 WiFi.softAPdisconnect(true);
-              }
-            }
-            else if ((buf[j] == 'H') || (buf[j] == 'h'))
-            {
-              for (uint8_t i = 0; i < g_numberOfSocketClients; i++)
-              {
-                String msg = String("MAC," + String(g_webSocketClient[i].macAddr));
-                g_webSocket.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
-              }
-            }
-            else if ((buf[j] == 'S') || (buf[j] == 's'))
-            {
-              for (uint8_t i = 0; i < g_numberOfSocketClients; i++)
-              {
-                String msg = String("START," + String("2018-01-02T00:52")); // yyyy-MM-ddThh:mm
-                g_webSocket.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
-              }
-            }
-            else if ((buf[j] == 'F') || (buf[j] == 'f'))
-            {
-              for (uint8_t i = 0; i < g_numberOfSocketClients; i++)
-              {
-                String msg = String("FINISH," + String("2018-01-02T00:52")); // yyyy-MM-ddThh:mm
-                g_webSocket.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
               }
             }
             else
@@ -1600,74 +1663,48 @@ void startSPIFFS()
 
 void startWebSocket()
 { // Start a WebSocket server
-  g_webSocket.begin();      // start the websocket server
-  g_webSocket.onEvent(webSocketEvent);  // if there's an incoming websocket message, go to function 'webSocketEvent'
-  Serial.println("WebSocket server start tasks complete.");
+  webSocket.begin();      // start the websocket server
+  webSocket.onEvent(webSocketEvent);  // if there's an incomming websocket message, go to function 'webSocketEvent'
+  Serial.println("WebSocket server started.");
 }
 
-void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length)
-{
-  Serial.printf("webSocketEvent(%d, %d, ...)\r\n", num, type);
-  switch (type) {
-    case WStype_DISCONNECTED:
-      Serial.printf("[%u] Disconnected!\r\n", num);
-
-      if (g_numberOfSocketClients)
-      {
-        g_numberOfSocketClients--;
-
-        if (g_numberOfSocketClients)
-        {
-          for (uint8_t i = 0; i < g_numberOfSocketClients; i++)
-          {
-            if (g_webSocketClient[i].socketID == num)
-            {
-              g_webSocketClient[i].socketID = g_webSocketClient[i + 1].socketID;
-              g_webSocketClient[i].webID = g_webSocketClient[i + 1].webID;
-              strcpy(g_webSocketClient[i].macAddr, g_webSocketClient[i + 1].macAddr);
-              g_webSocketClient[i + 1].socketID = num;
-            }
-          }
-        }
-      }
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght)
+{ // When a WebSocket message is received
+  switch (type)
+  {
+    case WStype_DISCONNECTED:   // if the websocket is disconnected
+      Serial.printf("[%u] Disconnected!\n", num);
       break;
 
     case WStype_CONNECTED:
-      {
-        IPAddress ip = g_webSocket.remoteIP(num);
-        Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\r\n", num, ip[0], ip[1], ip[2], ip[3], payload);
-        g_webSocketClient[g_numberOfSocketClients].socketID = num;
-
-        if (g_main_page_served)
-        {
-          Serial.println("Sending MAC address:");
-
-          String msg = String("MAC," + String(g_webSocketClient[g_numberOfSocketClients].macAddr));
-          g_webSocket.sendTXT(g_webSocketClient[g_numberOfSocketClients].socketID, stringObjToConstCharString(&msg), msg.length());
-          Serial.println(msg);
-          g_main_page_served = FALSE;
-        }
-
-        g_numberOfSocketClients++;
+      { // if a new websocket connection is established
+        IPAddress ip = webSocket.remoteIP(num);
+        Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
+        //        rainbow = false;  // Turn rainbow off when a new connection is established
       }
       break;
 
-    case WStype_TEXT:
-      Serial.printf("[%u] get Text: %s\r\n", num, payload);
-      // send data to all connected clients
-      g_webSocket.broadcastTXT(payload, length);
-      break;
+    case WStype_TEXT: // if new text data is received
+      Serial.printf("[%u] get Text: %s\n", num, payload);
+      if (payload[0] == '#')
+      { // we get RGB data
+        uint32_t rgb = (uint32_t) strtol((const char *) &payload[1], NULL, 16);   // decode rgb data
+        int r = ((rgb >> 20) & 0x3FF);    // 10 bits per color, so R: bits 20-29
+        int g = ((rgb >> 10) & 0x3FF);    // G: bits 10-19
+        int b = rgb & 0x3FF;              // B: bits Ã‚Â 0-9
 
-    case WStype_BIN:
-      Serial.printf("[%u] get binary length: %u\r\n", num, length);
-      hexdump(payload, length);
-
-      // echo data back to browser
-      g_webSocket.sendBIN(num, payload, length);
-      break;
-
-    default:
-      Serial.printf("Invalid WStype [%d]\r\n", type);
+        //        analogWrite(LED_RED, r);  // write it to the LED output pins
+        //        analogWrite(LED_GREEN, g);
+        //        analogWrite(LED_BLUE, b);
+      }
+      else if (payload[0] == 'R')
+      { // the browser sends an R when the rainbow effect is enabled
+        //       rainbow = true;
+      }
+      else if (payload[0] == 'N')
+      { // the browser sends an N when the rainbow effect is disabled
+        //       rainbow = false;
+      }
       break;
   }
 }
@@ -1678,8 +1715,7 @@ bool handleFileRead(String path)
   if (path.endsWith("/")) path += "index.html";   // If a folder is requested, send the index file
   String contentType = getContentType(path);      // Get the MIME type
   String pathWithGz = path + ".gz";
-  String pathWithHTML = path + ".html";
-  if (SPIFFS.exists(stringObjToConstCharString(&pathWithGz)) || SPIFFS.exists(stringObjToConstCharString(&path)) || SPIFFS.exists(stringObjToConstCharString(&pathWithHTML)))
+  if (SPIFFS.exists(stringObjToConstCharString(&pathWithGz)) || SPIFFS.exists(stringObjToConstCharString(&path)))
   { // If the file exists, either as a compressed archive, or normal
     if (SPIFFS.exists(pathWithGz))      // If there's a compressed version available
       path += ".gz";                    // Use the compressed verion
@@ -2088,6 +2124,34 @@ void handleFileUpload()
 }
 
 
+String formatBytes(size_t bytes)
+{ // convert sizes in bytes to KB and MB
+  if (bytes < 1024)
+  {
+    return String(bytes) + "B";
+  }
+  else if (bytes < (1024 * 1024))
+  {
+    return String(bytes / 1024.0) + "KB";
+  }
+  else if (bytes < (1024 * 1024 * 1024))
+  {
+    return String(bytes / 1024.0 / 1024.0) + "MB";
+  }
+}
+
+String getContentType(String filename)
+{ // determine the filetype of a given filename, based on the extension
+  if (filename.endsWith(".html")) return "text/html";
+  else if (filename.endsWith(".css")) return "text/css";
+  else if (filename.endsWith(".js")) return "application/javascript";
+  else if (filename.endsWith(".ico")) return "image/x-icon";
+  else if (filename.endsWith(".gz")) return "application/x-gzip";
+  return "text/plain";
+}
+
+
+
 void showSettings()
 {
   int i;
@@ -2214,5 +2278,57 @@ void showSettings()
     }
   }
 }
+
+/*
+   Converts a String containing a valid IP address into an IPAddress.
+   Returns the IPAddress contained in addr, or returns "-1,-1,-1,-1" if the address is invalid
+*/
+IPAddress stringToIP(String addr)
+{
+  IPAddress ipAddr = IPAddress(-1, -1, -1, -1);
+  int dot, nextDot;
+  /* 129.6.15.28 = NIST, Gaithersburg, Maryland */
+  String o1 = "129", o2 = "6", o3 = "15", o4 = "28";  /* default to some reasonable IP address */
+
+  dot = addr.indexOf(".", 0);
+
+  if (dot > 0)
+  {
+    o1 = addr.substring(0, dot);
+
+    if ((o1.toInt() >= 0) && (o1.toInt() <= 255))
+    {
+      dot++;
+      nextDot = addr.indexOf(".", dot);
+
+      if (nextDot > 0)
+      {
+        o2 = addr.substring(dot, nextDot);
+
+        if ((o2.toInt() >= 0) && (o2.toInt() <= 255))
+        {
+          nextDot++;
+          dot = addr.indexOf(".", nextDot);
+
+          if (dot > 0)
+          {
+            o3 = addr.substring(nextDot, dot);
+            dot++;
+            o4 = addr.substring(dot);
+
+            if (((o3.toInt() >= 0) && (o3.toInt() <= 255)) && ((o4.toInt() >= 0) && (o4.toInt() <= 255)))
+            {
+
+              ipAddr = IPAddress(o1.toInt(), o2.toInt(), o3.toInt(), o4.toInt());
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return (ipAddr);
+}
+
 
 

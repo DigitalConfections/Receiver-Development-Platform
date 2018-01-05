@@ -35,8 +35,6 @@
 #define MULTI_ACCESS_POINT_SUPPORT
 #define SERIAL_BAUD_RATE 115200
 
-#define MAX_NUMBER_OF_WEB_CLIENTS 5
-
 #ifndef SecondsFromHours
   #define SecondsFromHours(hours) ((hours) * 3600)
 #endif

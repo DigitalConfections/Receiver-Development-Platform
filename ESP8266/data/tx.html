@@ -1,0 +1,880 @@
+<html>
+
+<head>
+    <title>Tx</title>
+</head>
+
+<body onload="javascript:start();">
+    <script type="text/javascript">
+        var timer = 0;
+        var timeUpdateTimer = 0;
+        var homeTimer = 0;
+        var band = "2m";
+
+        var foxFrequencyHz = "144520000";
+        var homeFrequencyHz = "144865000";
+        var stillConnected = false;
+        var lastPacketTime = 0;
+        var webSocketTxTimer = 0;
+        var lastSocketTxMessage;
+
+        var websock;
+
+        timeUpdateTimer = setInterval(function() {
+            updateTime();
+        }, 1000);
+
+        function start() {
+            var websocketcreated = true;
+            setLocalTime();
+            foxFreqString(foxFrequencyHz);
+            homeFreqString(homeFrequencyHz);
+
+            try {
+                websock = new WebSocket("ws://" + window.location.hostname + ":81/");
+            } catch (err) {
+                document.getElementById("xmtrTime").innerHTML = "Disconnected";
+                console.log("Unable to create web socket");
+                websocketcreated = false;
+            }
+
+            if (websocketcreated == true) {
+                document.getElementById("xmtrTime").innerHTML = "Connected";
+
+                websock.onopen = function(evt) {
+                    console.log("websock open");
+                };
+
+                websock.onclose = function(evt) {
+                    console.log("websock close");
+                };
+
+                websock.onerror = function(evt) {
+                    console.log(evt);
+                };
+
+                websock.onmessage = function(evt) {
+                    console.log(evt);
+                    var str = evt.data;
+                    var arr = str.split(",");
+
+                    stillConnected = true;
+
+                    console.log(arr);
+                    console.log(arr[0]);
+                    console.log(arr[1]);
+                    switch (arr[0]) {
+                        case "HB":
+                            break;
+
+                        case "CLONE":
+                            document.getElementById("cloneText").value = arr[1];
+                            break;
+
+                        case "CALL":
+                            document.getElementById("callText").value = arr[1];
+                            break;
+
+                        case "EVENT":
+                            document.getElementById("eventText").value = arr[1];
+                            break;
+
+                        case "FOX":
+                            document.getElementById("txIDText").value = arr[1];
+                            break;
+
+                        case "START":
+                            document.getElementById("datetimeStart").value = arr[1];
+                            break;
+
+                        case "FINISH":
+                            document.getElementById("datetimeFinish").value = arr[1];
+                            break;
+
+                        case "BAND":
+                            document.getElementById("bandText").value = arr[1];
+                            break;
+
+                        case "FOXF":
+                            foxFrequencyHz = arr[1];
+                            foxFreqString(foxFrequencyHz);
+                            break;
+
+                        case "HOMEF":
+                            homeFrequencyHz = arr[1];
+                            homeFreqString(homeFrequencyHz);
+                            break;
+
+                        case "MAC":
+                            var t = "MAC: " + arr[1];
+                            document.getElementById("macAddress").innerHTML = t;
+                            console.log(t);
+                            break;
+
+                        default:
+                            break;
+                    }
+                };
+            }
+        }
+
+        function clamp(min, num, max) {
+            return num <= min ? min : num >= max ? max : num;
+        }
+
+        function sendToSocket(msg) {
+            var now = Date.now();
+            var dif = now - lastPacketTime;
+
+            if (msg === lastSocketTxMessage) {
+                return;
+            }
+
+            if (webSocketTxTimer != 0) {
+                clearInterval(webSocketTxTimer);
+                webSocketTxTimer = 0;
+            }
+
+            if (dif > 100) {
+                if (stillConnected) websock.send(msg);
+                lastPacketTime = now;
+                lastSocketTxMessage = msg;
+            } else {
+                webSocketTxTimer = setInterval(function() {
+                    sendToSocket(msg);
+                }, 200);
+            }
+
+            console.log(now, lastPacketTime, dif);
+        }
+
+        function syncClock() {
+            var btext = Date().now();
+            btext = "SYNC," + btext;
+            console.log(btext);
+            sendToSocket(btext);
+        }
+
+        function sendClone() {
+            var btext = document.getElementById("cloneText").value;
+            btext = "CLONE," + btext;
+            console.log(btext);
+            sendToSocket(btext);
+        }
+
+        function sendCall() {
+            var btext = document.getElementById("callText").value;
+            btext = "CALL," + btext;
+            console.log(btext);
+            sendToSocket(btext);
+        }
+
+        function sendEvent() {
+            var btext = document.getElementById("eventText").value;
+            btext = "EVENT," + btext;
+            console.log(btext);
+            sendToSocket(btext);
+        }
+
+        function sendFox() {
+            var btext = document.getElementById("txIDText").value;
+            btext = "FOX," + btext;
+            console.log(btext);
+            sendToSocket(btext);
+        }
+
+        function sendStart() {
+            var btext = new Date(document.getElementById("datetimeStart").value);
+            btext = "START," + btext;
+            console.log(btext);
+            sendToSocket(btext);
+        }
+
+        function sendFinish() {
+            var btext = new Date(document.getElementById("datetimeFinish").value);
+            btext = "FINISH," + btext;
+            console.log(btext);
+            sendToSocket(btext);
+        }
+
+        function sendBand() {
+            var btext = document.getElementById("bandText").value;
+            btext = "BAND," + btext;
+            console.log(btext);
+            sendToSocket(btext);
+        }
+
+        function sendFoxFreq() {
+            var btext = foxFrequencyHz;
+            btext = "FOXF," + btext;
+            console.log(btext);
+            sendToSocket(btext);
+        }
+
+        function sendHomeFreq() {
+            var btext = homeFrequencyHz;
+            btext = "HOMEF," + btext;
+            console.log(btext);
+            sendToSocket(btext);
+        }
+
+        function freqChange() {
+            var freq = document.querySelector("#freq");
+            var count = document.querySelector(".freqval");
+            var f = Math.floor(freq.value);
+
+            if (f > 0) {
+                count.textContent = "UP";
+            } else if (f < 0) {
+                count.textContent = "DOWN";
+            } else {
+                count.textContent = "<-DOWN   UP->";
+            }
+
+            if (timer != 0) {
+                clearInterval(timer);
+                timer = 0;
+            }
+
+            if (f != 0) {
+                if (f < 0) f = -f;
+                var time = 500 - (5 * f);
+                timer = setInterval(function() {
+                    incFreq();
+                }, time);
+            }
+        }
+
+        function homeFreqChange() {
+            var freq = document.querySelector("#homeFreq");
+            var count = document.querySelector(".homeFreqval");
+            var f = Math.floor(freq.value);
+
+            if (f > 0) {
+                count.textContent = "UP";
+            } else if (f < 0) {
+                count.textContent = "DOWN";
+            } else {
+                count.textContent = "<-DOWN   UP->";
+            }
+
+            if (homeTimer != 0) {
+                clearInterval(homeTimer);
+                homeTimer = 0;
+            }
+
+            if (f != 0) {
+                if (f < 0) f = -f;
+                var time = 500 - (5 * f);
+                homeTimer = setInterval(function() {
+                    incHomeFreq();
+                }, time);
+            }
+        }
+
+        function cloneClick() {
+            var clonetext = document.getElementById("cloneText");
+            var x = document.getElementById("clones");
+
+            var i;
+            var found = false;
+            for (i = 0; i < x.options.length; i++) {
+                if (x.options[i].value == clonetext.value) {
+                    i = (i + 1) % x.options.length;
+                    clonetext.value = x.options[i].value;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (found == false) {
+                clonetext.value = x.options[0].value;
+            }
+
+            sendClone();
+        }
+
+        function foxClick() {
+            var foxtext = document.getElementById("txIDText");
+            var x = document.getElementById("foxes");
+
+            var i;
+            var found = false;
+            for (i = 0; i < x.options.length; i++) {
+                if (x.options[i].value == foxtext.value) {
+                    i = (i + 1) % x.options.length;
+                    foxtext.value = x.options[i].value;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (found == false) {
+                foxtext.value = x.options[0].value;
+            }
+
+            sendFox();
+        }
+
+        function eventClick() {
+            var etext = document.getElementById("eventText");
+            var x = document.getElementById("events");
+
+            var i;
+            var found = false;
+            for (i = 0; i < x.options.length; i++) {
+                if (x.options[i].value == etext.value) {
+                    i = (i + 1) % x.options.length;
+                    etext.value = x.options[i].value;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (found == false) {
+                etext.value = x.options[0].value;
+            }
+
+            sendEvent();
+        }
+
+        function bandClick() {
+            var btext = document.getElementById("bandText");
+
+            if (band == "2m") {
+                band = "80m";
+                foxFrequencyHz = 3560000;
+                homeFrequencyHz = 3520000;
+                btext.value = "80m";
+
+            } else {
+                band = "2m";
+                foxFrequencyHz = 144600000;
+                homeFrequencyHz = 144900000;
+                btext.value = "2m";
+            }
+
+            foxFreqString(foxFrequencyHz);
+            homeFreqString(homeFrequencyHz);
+            resetSlider();
+            sendBand();
+        }
+
+        function resetSlider() {
+            var freq = document.querySelector("#freq");
+            var count = document.querySelector(".freqval");
+
+            freq.value = 0;
+            count.textContent = "<-DOWN   UP->";
+        }
+
+        function resetHomeFreqSlider() {
+            var freq = document.querySelector("#homeFreq");
+            var count = document.querySelector(".homeFreqval");
+
+            freq.value = 0;
+            count.textContent = "<-DOWN   UP->";
+        }
+
+        function decFoxFreqClick() {
+            var val;
+
+            if (band == "2m") {
+                val = Number(foxFrequencyHz) - 5000;
+
+                foxFrequencyHz = clamp(Number("144000000"), val, Number("148000000"));
+            } else {
+                val = Number(foxFrequencyHz) - 100;
+
+                foxFrequencyHz = clamp(Number("3500000"), val, Number("4000000"));
+            }
+
+            foxFreqString(foxFrequencyHz)
+            sendFoxFreq();
+        }
+
+        function incFoxFreqClick() {
+            var val;
+
+            if (band == "2m") {
+                val = Number(foxFrequencyHz) + 5000;
+
+                foxFrequencyHz = clamp(Number("144000000"), val, Number("148000000"));
+            } else {
+                val = Number(foxFrequencyHz) + 100;
+
+                foxFrequencyHz = clamp(Number("3500000"), val, Number("4000000"));
+            }
+
+            foxFreqString(foxFrequencyHz)
+            sendFoxFreq();
+        }
+
+        function decHomeFreqClick() {
+            var val;
+
+            if (band == "2m") {
+                val = Number(homeFrequencyHz) - 5000;
+
+                homeFrequencyHz = clamp(Number("144000000"), val, Number("148000000"));
+            } else {
+                val = Number(homeFrequencyHz) - 100;
+
+                homeFrequencyHz = clamp(Number("3500000"), val, Number("4000000"));
+            }
+
+            homeFreqString(homeFrequencyHz);
+            sendHomeFreq();
+        }
+
+        function incHomeFreqClick() {
+            var val;
+
+            if (band == "2m") {
+                val = Number(homeFrequencyHz) + 5000;
+
+                homeFrequencyHz = clamp(Number("144000000"), val, Number("148000000"));
+            } else {
+                val = Number(homeFrequencyHz) + 100;
+
+                homeFrequencyHz = clamp(Number("3500000"), val, Number("4000000"));
+            }
+
+            homeFreqString(homeFrequencyHz);
+            sendHomeFreq();
+        }
+
+        function incFreq() {
+            var ftext = document.getElementById("freqText");
+            var freq = document.querySelector("#freq");
+            var f = Math.floor(Number(freq.value));
+            var val;
+
+            if (f != 0) {
+                if (band == "2m") {
+                    if (f < 0) {
+                        val = Number(foxFrequencyHz) - 5000;
+                    } else {
+                        val = Number(foxFrequencyHz) + 5000;
+                    }
+
+                    foxFrequencyHz = clamp(Number("144000000"), val, Number("148000000"));
+                } else {
+                    if (f < 0) {
+                        val = Number(foxFrequencyHz) - 100;
+                    } else {
+                        val = Number(foxFrequencyHz) + 100;
+                    }
+
+                    foxFrequencyHz = clamp(Number("3500000"), val, Number("4000000"));
+                }
+
+                foxFreqString(foxFrequencyHz);
+                sendFoxFreq();
+            } else {
+                clearInterval(timer);
+                timer = 0;
+            }
+        }
+
+        function incHomeFreq() {
+            var ftext = document.getElementById("homeFreqText");
+            var freq = document.querySelector("#homeFreq");
+            var f = Math.floor(Number(homeFreq.value));
+            var val;
+
+            if (f != 0) {
+                if (band == "2m") {
+                    if (f < 0) {
+                        val = Number(homeFrequencyHz) - 5000;
+
+                    } else {
+                        val = Number(homeFrequencyHz) + 5000;
+                    }
+
+                    homeFrequencyHz = clamp(Number("144000000"), val, Number("148000000"));
+                } else {
+                    if (f < 0) {
+                        val = Number(homeFrequencyHz) - 100;
+                    } else {
+                        val = Number(homeFrequencyHz) + 100;
+                    }
+
+                    homeFrequencyHz = clamp(Number("3500000"), val, Number("4000000"));
+                }
+
+                homeFreqString(homeFrequencyHz);
+                sendHomeFreq();
+            } else {
+                clearInterval(homeTimer);
+                homeTimer = 0;
+            }
+        }
+
+        function updateTime() {
+            document.getElementById("currentTime").innerHTML = Date();
+            updateTextFormatting();
+        }
+
+        function setLocalTime() {
+            // get the iso time string formatted for usage in an input['type="datetime-local"']
+            var tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
+            var localISOTime = (new Date(Date.now() - tzoffset)).toISOString().slice(0, -1);
+            var localISOTimePlus3hrs = (new Date(Date.now() - tzoffset + 3 * 3600 * 1000)).toISOString().slice(0, -1);
+            var localISOTimeWithoutSeconds = localISOTime.slice(0, 16);
+            var localISOTimePlus3hrsWithoutSeconds = localISOTimePlus3hrs.slice(0, 16);
+
+            // select the "datetime-local" input to set the default value on
+            //   var dtlInput = document.querySelectorAll('input[type="datetime-local"]');
+            //   dtlInput[0].value = localISOTimeWithoutSeconds;
+            //   dtlInput[1].value = localISOTimePlus3hrsWithoutSeconds;
+            document.getElementById("datetimeStart").value = localISOTimeWithoutSeconds;
+            document.getElementById("datetimeFinish").value = localISOTimePlus3hrsWithoutSeconds;
+        }
+
+        function hasNumber(myString) {
+            return /\d/.test(myString);
+        }
+
+        function hasAlpha(myString) {
+            return /\D/.test(myString);
+        }
+
+        function updateTextFormatting() {
+            var callsignText = document.getElementById("callText");
+            var callString = String(callsignText.value);
+
+            //            stillConnected = false;
+
+            if (hasNumber(callString) && hasAlpha(callString) && (callString.length > 2)) {
+                callsignText.style = "color:Black; font-weight:bold;";
+            } else {
+                callsignText.style = "color:Red; font-weight:bold;";
+            }
+
+            var startTime = document.getElementById("datetimeStart");
+            var finishTime = document.getElementById("datetimeFinish");
+            var s = new Date(startTime.value);
+            var f = new Date(finishTime.value);
+            var n = new Date();
+
+            if (s >= f) {
+                startTime.style = "color:Red; font-weight:bold;";
+                finishTime.style = "color:Red; font-weight:bold;";
+            } else if (n > s) {
+                startTime.style = "color:Red; font-weight:bold;";
+            } else {
+                startTime.style = "color:Black; font-weight:bold;";
+                finishTime.style = "color:Black; font-weight:bold;";
+            }
+
+            var fox = document.getElementById("freqText");
+            var home = document.getElementById("homeFreqText");
+            var b = document.getElementById("bandText");
+            var dif;
+
+            if (foxFrequencyHz > homeFrequencyHz)
+                dif = Number(foxFrequencyHz) - Number(homeFrequencyHz);
+            else
+                dif = Number(homeFrequencyHz) - Number(foxFrequencyHz);
+
+            if (b.value == "2m") {
+                if ((Number(foxFrequencyHz) < 144500000) || (Number(foxFrequencyHz) > 144900000) || (Number(dif) <= 200000)) {
+                    fox.style = "color:Red; font-weight:bold; text-align:center;";
+                } else {
+                    fox.style = "color:Black; font-weight:bold; text-align:center;";
+                }
+
+                if ((Number(homeFrequencyHz) < 144500000) || (Number(homeFrequencyHz) > 144900000) || (Number(dif) <= 200000)) {
+                    home.style = "color:Red; font-weight:bold; text-align:center;";
+                } else {
+                    home.style = "color:Black; font-weight:bold; text-align:center;";
+                }
+            } else {
+                if ((foxFrequencyHz < 3510000) || (foxFrequencyHz > 3600000) || (dif <= 30000)) {
+                    fox.style = "color:Red; font-weight:bold; text-align:center;";
+                } else {
+                    fox.style = "color:Black; font-weight:bold; text-align:center;";
+                }
+
+                if ((homeFrequencyHz < 3510000) || (homeFrequencyHz > 3600000) || (dif <= 30000)) {
+                    home.style = "color:Red; font-weight:bold; text-align:center;";
+                } else {
+                    home.style = "color:Black; font-weight:bold; text-align:center;";
+                }
+            }
+
+            var fTime = document.getElementById("xmtrTime");
+
+            if (fTime.innerHTML.indexOf("Disconnected") !== -1) {
+                fTime.style = "width:400px; font-size:20px; font-weight:bold; text-align:center; color:Red;"
+            } else {
+                fTime.style = "width:400px; font-size:20px; font-weight:bold; text-align:center; color:Black;"
+            }
+        }
+
+        function pad(num, size) {
+            var s = "000000000" + num;
+            return s.substr(s.length - size);
+        }
+
+        function foxFreqString(myString) {
+            var fox = document.getElementById("freqText");
+            var val = Number(myString);
+            var newString = String(Math.floor(val / 1000000)) + "." + pad(Math.floor(((val % 1000000) / 1000)), 3) + "." + pad((val % 1000), 3);
+            fox.value = newString;
+        }
+
+        function homeFreqString(myString) {
+            var home = document.getElementById("homeFreqText");
+            var val = Number(myString);
+            var newString = String(Math.floor(val / 1000000)) + "." + pad(Math.floor(((val % 1000000) / 1000)), 3) + "." + pad((val % 1000), 3);
+            home.value = newString;
+        }
+
+        window.addEventListener("mouseup", function() {
+            if (document.getElementById("freq").value != 0) {
+                resetSlider();
+            }
+        });
+
+        window.addEventListener("touchend", function() {
+            if (document.getElementById("freq").value != 0) {
+                resetSlider();
+            }
+        });
+
+        window.addEventListener("click", function() {
+            if (document.getElementById("freq").value != 0) {
+                resetSlider();
+            }
+        });
+
+        window.addEventListener("mouseup", function() {
+            if (document.getElementById("homeFreq").value != 0) {
+                resetHomeFreqSlider();
+            }
+        });
+
+        window.addEventListener("touchend", function() {
+            if (document.getElementById("homeFreq").value != 0) {
+                resetHomeFreqSlider();
+            }
+        });
+
+        window.addEventListener("click", function() {
+            if (document.getElementById("homeFreq").value != 0) {
+                resetHomeFreqSlider();
+            }
+        });
+
+    </script>
+
+    <center>
+        <span style="opacity:0">
+         <select id="clones" size="2">
+            <option>Master</option>
+            <option>Clone</option>
+         </select>
+
+         <select id="events" size="3">
+            <option>Classic</option>
+            <option>Sprint</option>
+            <option>Fox-O</option>
+         </select>
+
+         <select id="foxes" size="6">
+            <option>Fox 1 - MOE</option>
+            <option>Fox 2 - MOI</option>
+            <option>Fox 3 - MOS</option>
+            <option>Fox 4 - MOH</option>
+            <option>Fox 5 - MO5</option>
+            <option>Home - MO</option>
+         </select>
+
+         <select id="bands" size="2">
+         <option>2m</option>
+         <option>80m</option>
+         </select>
+      </span>
+
+        <h1>Transmitter Settings</h1>
+
+        <div>
+            <table>
+                <tr>
+                    <td style="width:400px; height:50px; text-align:right; vertical-align:middle;">
+                        <p id="xmtrTime" style="color:Black; font-size:20px; font-weight:bold; text-align:center;">Disconnected</p>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="width:400px; height:50px; text-align:right; vertical-align:middle;">
+                        <p id="currentTime" style="color:Black; font-size:20px; font-weight:bold; text-align:center;">Updating...</p>
+                    </td>
+
+                    <td style="width:100px; height:50px; text-align:left; vertical-align:middle;">
+                        <button id="SyncButton" class="button" style="background-color:#EEE;" onclick="syncClock();">Sync</button>
+                    </td>
+                </tr>
+            </table>
+
+            <table>
+                <tr>
+                    <td style="width:14.4px; text-align: right">Clone:</td>
+
+                    <td>
+                        <input type="text" list="events" id="cloneText" name="cloneText" style="font-weight:bold;" value="Master" readonly="readonly" />
+                    </td>
+
+                    <td style="width:14.4px; text-align: left">
+                        <button id="CloneButton" class="button" style="background-color:#EEE" onclick="cloneClick();">Clone</button>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style="width:14.4px; text-align: right">Callsign:</td>
+
+                    <td>
+                        <input type="text" id="callText" name="callText" value="Callsign" />
+                    </td>
+                </tr>
+            </table>
+
+            <table>
+                <tr>
+                    <td style="width:14.4px; text-align: center">======</td>
+                </tr>
+            </table>
+
+            <table>
+                <tr>
+                    <td style="width:14.4px; text-align: right">Event:</td>
+
+                    <td>
+                        <input type="text" list="events" id="eventText" name="eventText" style="font-weight:bold;" value="Classic" readonly="readonly" />
+                    </td>
+
+                    <td style="width:14.4px; text-align: left">
+                        <button id="EventButton" class="button" style="background-color:#EEE" onclick="eventClick();">Event</button>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style="width:14.4px; text-align: right">Fox:</td>
+
+                    <td>
+                        <input type="text" list="foxes" id="txIDText" name="txIDText" style="font-weight:bold;" value="Fox 1 - MOE" readonly="readonly" />
+                    </td>
+
+                    <td style="width:14.4px; text-align: left">
+                        <button id="FoxButton" class="button" style="background-color:#EEE" onclick="foxClick();">Fox</button>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style="width:14.4px; text-align: right">Start:</td>
+
+                    <td>
+                       <input id="datetimeStart" type="datetime-local" style="font-weight:bold;" value="2018-01-01T12:00"/>
+		    </td>
+
+                    <td></td>
+                </tr>
+
+                <tr>
+                    <td style="width:14.4px; text-align: right">Finish:</td>
+
+                    <td>
+                        <input id="datetimeFinish" type="datetime-local" style="font-weight:bold;" value="2018-01-01T15:00" />
+                    </td>
+
+                    <td></td>
+                </tr>
+
+                <tr>
+                    <td style="width:14.4px; text-align: right">Band:</td>
+
+                    <td style="width:14.4px; text-align: left">
+                        <input type="text" list="bands" id="bandText" name="bandText" style="font-weight:bold;" value="2m" readonly="readonly" />
+                    </td>
+
+                    <td style="width:14.4px; text-align: left">
+                        <button id="BandButton" class="button" style="background-color:#EEE" onclick="bandClick();">Band</button>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </center>
+
+    <center>
+        <h4>Set Fox Frequency</h4>
+
+        <table>
+            <tr>
+                <td style="width:14.4px; text-align: right">
+                    <button id="FreqDownButton" class="button" style="background-color:#EEE" onclick="decFoxFreqClick();">DEC</button>
+                </td>
+
+                <td name="freqText" id="freqText_frm" action="#"></td>
+
+                <td style="width:200px; text-align: center">
+                    <input style="text-align: center" type="text" id="freqText" name="freqText" value="144600000" readonly="readonly" />
+                </td>
+
+                <td style="width:14.4px; text-align: left">
+                    <button id="FreqUpButton" class="button" style="background-color:#EEE" onclick="incFoxFreqClick();">INC</button>
+                </td>
+            </tr>
+        </table>
+
+        <div>
+            <span class="freqval">&lt;-DOWN UP-&gt;</span>
+
+            <table>
+                <tr>
+                    <td></td>
+
+                    <td style="width:400px; text-align: center">
+                        <input style="width:400px; text-align: center" type="range" name="freq" id="freq" min="-100" max="100" step="1" value="0" oninput="freqChange();" />
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <h4>Set Home Frequency</h4>
+
+        <table>
+            <tr>
+                <td style="width:14.4px; text-align: right">
+                    <button id="HomeFreqDownButton" class="button" style="background-color:#EEE" onclick="decHomeFreqClick();">DEC</button>
+                </td>
+
+                <td style="width:200px; text-align: center">
+                    <input style="text-align: center" type="text" id="homeFreqText" name="homeFreqText" value="144900000" readonly="readonly" />
+                </td>
+
+                <td style="width:14.4px; text-align: left">
+                    <button id="HomeFreqUpButton" class="button" style="background-color:#EEE" onclick="incHomeFreqClick();">INC</button>
+                </td>
+            </tr>
+        </table>
+
+        <div>
+            <span class="homeFreqval">&lt;-DOWN UP-&gt;</span>
+
+            <table>
+                <tr>
+                    <td></td>
+
+                    <td style="width:400px; text-align: center">
+                        <input style="width:400px; text-align: center" type="range" name="homeFreq" id="homeFreq" min="-100" max="100" step="1" value="0" oninput="homeFreqChange();" />
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <h3 id="macAddress">Waiting for MAC Address</h3>
+    </center>
+</body>
+
+</html>
