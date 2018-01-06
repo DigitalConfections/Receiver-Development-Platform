@@ -56,6 +56,8 @@
 //#include <WebSocketsClient.h>
 #include <Hash.h>
 #include <WebSocketsServer.h>
+#include <ESP8266WiFiType.h>
+#include <time.h>
 
 
 
@@ -165,8 +167,85 @@ void setup()
   }
 
   showSettings();
+
+  WiFi.onEvent(eventWiFi);                                                    // Handle WiFi event
+
 }
 
+/********************************************************
+  /*  Handle WiFi events                                  *
+  /********************************************************/
+void eventWiFi(WiFiEvent_t event) {
+  String e = String(event);
+
+  switch (event) {
+    case WIFI_EVENT_STAMODE_CONNECTED:
+      Serial.println(String("[WiFi] " + e + ", Connected"));
+      break;
+
+    case WIFI_EVENT_STAMODE_DISCONNECTED:
+      Serial.println(String("[WiFi] " + e + ", Disconnected - Status " + String( WiFi.status()) + String(connectionStatus( WiFi.status() ).c_str()) ));
+      break;
+
+    case WIFI_EVENT_STAMODE_AUTHMODE_CHANGE:
+      Serial.println(String("[WiFi] " + e + ", AuthMode Change"));
+      break;
+
+    case WIFI_EVENT_STAMODE_GOT_IP:
+      Serial.println(String("[WiFi] " + e + ", Got IP"));
+      break;
+
+    case WIFI_EVENT_STAMODE_DHCP_TIMEOUT:
+      Serial.println(String("[WiFi] " + e + ", DHCP Timeout"));
+      break;
+
+    case WIFI_EVENT_SOFTAPMODE_STACONNECTED:
+      Serial.println(String("[WiFi] " + e + ", Client Connected"));
+      break;
+
+    case WIFI_EVENT_SOFTAPMODE_STADISCONNECTED:
+      Serial.println(String("[AP] " + e + ", Client Disconnected"));
+      break;
+
+    case WIFI_EVENT_SOFTAPMODE_PROBEREQRECVED:
+      Serial.println(String("[AP] " + e + ", Probe Request Recieved"));
+      break;
+  }
+
+}
+
+/********************************************************
+  /*  WiFi Connection Status                              *
+  /********************************************************/
+String connectionStatus ( int which )
+{
+  switch ( which )
+  {
+    case WL_CONNECTED:
+      return "Connected";
+      break;
+
+    case WL_NO_SSID_AVAIL:
+      return "Network not availible";
+      break;
+
+    case WL_CONNECT_FAILED:
+      return "Wrong password";
+      break;
+
+    case WL_IDLE_STATUS:
+      return "Idle status";
+      break;
+
+    case WL_DISCONNECTED:
+      return "Disconnected";
+      break;
+
+    default:
+      return "Unknown";
+      break;
+  }
+}
 
 //===============================================================
 // This routine is executed when you open its IP in browser
@@ -239,8 +318,15 @@ bool setupHTTP_AP()
   bool success = false;
   g_numberOfSocketClients = 0;
   g_numberOfWebClients = 0;
+  Serial.setDebugOutput(true);
+  Serial.printf("Initial connection status: %d\n", WiFi.status());
+  WiFi.printDiag(Serial);
 
   WiFi.mode(WIFI_AP_STA);
+  // Event subscription
+  e1 = WiFi.onSoftAPModeStationConnected(onNewStation);
+  e2 = WiFi.onSoftAPModeStationDisconnected(onStationDisconnect);
+
   //  WiFi.mode(WIFI_AP);
 
   /* Create a somewhat unique SSID */
@@ -309,10 +395,6 @@ bool setupHTTP_AP()
     g_http_server.begin();
 
     //    startWebSocket(); // Start a WebSocket server
-
-    // Event subscription
-    e1 = WiFi.onSoftAPModeStationConnected(onNewStation);
-    e2 = WiFi.onSoftAPModeStationDisconnected(onStationDisconnect);
 
     if (g_debug_prints_enabled)
     {
@@ -512,159 +594,165 @@ bool setupWiFiAPConnection()
 
 void loop()
 {
-  int value = 0;
-  BOOL toggle = FALSE;
+  int value = 'W'; // start out functioning as a web server
+  bool skipInitialCommand = true;
+  bool toggle = FALSE;
   unsigned long holdTime;
   int commaLoc;
   int nextCommaLoc;
   String arg1, arg2;
-  BOOL argumentsRcvd = FALSE;
-  BOOL commandInProgress = FALSE;
+  bool argumentsRcvd = FALSE;
+  bool commandInProgress = FALSE;
   int escapeCount = 0;
-  BOOL done = FALSE;
+  bool done = FALSE;
 
-  while (!done)
+  if (!skipInitialCommand)
   {
-    if (commandInProgress)
+    while (!done)
     {
-      int len;
-      String command;
-
-      command = Serial.readStringUntil(';');
-      len = command.length();
-
-      if (len)
+      if (commandInProgress)
       {
-        value = command.c_str()[0];
+        int len;
+        String command;
 
-        if (g_debug_prints_enabled)
+        command = Serial.readStringUntil(';');
+        len = command.length();
+
+        if (len)
         {
-          Serial.println("Command received...");
-        }
+          value = command.c_str()[0];
 
-        /* Extract arguments from commands containing them */
-        if ((value == 'M') || (value == 'm'))
-        {
-          argumentsRcvd = FALSE;
-
-          if (len > 1)
+          if (g_debug_prints_enabled)
           {
-            arg1 = "";
-            arg2 = "";
+            Serial.println("Command received...");
+          }
 
-            if (g_debug_prints_enabled)
+          /* Extract arguments from commands containing them */
+          if ((value == 'M') || (value == 'm'))
+          {
+            argumentsRcvd = FALSE;
+
+            if (len > 1)
             {
-              Serial.println("Parsing command...");
-            }
+              arg1 = "";
+              arg2 = "";
 
-            commaLoc = 1 + command.indexOf(",");
-
-            if (commaLoc > 1)
-            {
-              nextCommaLoc = command.indexOf(",", commaLoc);
-
-              if (nextCommaLoc > 0)
+              if (g_debug_prints_enabled)
               {
-                arg1 = command.substring(commaLoc, nextCommaLoc);
+                Serial.println("Parsing command...");
+              }
 
-                commaLoc = 1 + command.indexOf(",", nextCommaLoc);
+              commaLoc = 1 + command.indexOf(",");
 
-                if (commaLoc > 0)
+              if (commaLoc > 1)
+              {
+                nextCommaLoc = command.indexOf(",", commaLoc);
+
+                if (nextCommaLoc > 0)
                 {
-                  nextCommaLoc = command.indexOf(",", commaLoc);
+                  arg1 = command.substring(commaLoc, nextCommaLoc);
 
-                  if (nextCommaLoc > 0)
+                  commaLoc = 1 + command.indexOf(",", nextCommaLoc);
+
+                  if (commaLoc > 0)
                   {
-                    arg2 = command.substring(commaLoc, nextCommaLoc);
-                  }
-                  else
-                  {
-                    arg2 = command.substring(commaLoc);
+                    nextCommaLoc = command.indexOf(",", commaLoc);
+
+                    if (nextCommaLoc > 0)
+                    {
+                      arg2 = command.substring(commaLoc, nextCommaLoc);
+                    }
+                    else
+                    {
+                      arg2 = command.substring(commaLoc);
+                    }
                   }
                 }
+                else
+                {
+                  arg1 = command.substring(commaLoc);
+                }
               }
-              else
+
+              if (g_debug_prints_enabled)
               {
-                arg1 = command.substring(commaLoc);
+                if (arg1.length() > 0)
+                {
+                  Serial.println(arg1);
+                }
+
+                if (arg2.length() > 0)
+                {
+                  Serial.println(arg2);
+                }
               }
+
+              argumentsRcvd = ((arg1.length() > 0) && (arg2.length() > 0));
             }
+          }
 
-            if (g_debug_prints_enabled)
-            {
-              if (arg1.length() > 0)
-              {
-                Serial.println(arg1);
-              }
+          if (g_debug_prints_enabled)
+          {
+            Serial.println(command + " " + String(value));
+          }
+          done = TRUE;
+        }
+        else
+        {
+          if (g_debug_prints_enabled)
+          {
+            Serial.println("NULL command received...");
+          }
 
-              if (arg2.length() > 0)
-              {
-                Serial.println(arg2);
-              }
-            }
+          value = 'H';
+          done = TRUE;
+        }
 
-            argumentsRcvd = ((arg1.length() > 0) && (arg2.length() > 0));
+        commandInProgress = FALSE;
+      }
+      else if (Serial.available() > 0) /* search for escape sequency $$$ */
+      {
+        value = Serial.read();
+
+        if (value == '$')
+        {
+          escapeCount++;
+          if (g_debug_prints_enabled)
+          {
+            Serial.println("$..." + String(escapeCount));
+          }
+
+          if (escapeCount == 3)
+          {
+            commandInProgress = TRUE;
+            escapeCount = 0;
+            g_blinkPeriodMillis = 250;
           }
         }
-
-        if (g_debug_prints_enabled)
+        else
         {
-          Serial.println(command + " " + String(value));
-        }
-        done = TRUE;
-      }
-      else
-      {
-        if (g_debug_prints_enabled)
-        {
-          Serial.println("NULL command received...");
-        }
-
-        value = 'H';
-        done = TRUE;
-      }
-
-      commandInProgress = FALSE;
-    }
-    else if (Serial.available() > 0) /* search for escape sequency $$$ */
-    {
-      value = Serial.read();
-
-      if (value == '$')
-      {
-        escapeCount++;
-        if (g_debug_prints_enabled)
-        {
-          Serial.println("$..." + String(escapeCount));
-        }
-
-        if (escapeCount == 3)
-        {
-          commandInProgress = TRUE;
           escapeCount = 0;
-          g_blinkPeriodMillis = 250;
+        }
+      }
+
+      if (g_LEDs_enabled)
+      {
+        g_relativeTimeSeconds = millis() / g_blinkPeriodMillis;
+        if (holdTime != g_relativeTimeSeconds)
+        {
+          holdTime = g_relativeTimeSeconds;
+          toggle = !toggle;
+          digitalWrite(RED_LED, toggle);  /* Blink red LED */
         }
       }
       else
       {
-        escapeCount = 0;
+        digitalWrite(RED_LED, HIGH);    /* Turn off red LED */
       }
     }
+  } // skipInitialCommand
 
-    if (g_LEDs_enabled)
-    {
-      g_relativeTimeSeconds = millis() / g_blinkPeriodMillis;
-      if (holdTime != g_relativeTimeSeconds)
-      {
-        holdTime = g_relativeTimeSeconds;
-        toggle = !toggle;
-        digitalWrite(RED_LED, toggle);  /* Blink red LED */
-      }
-    }
-    else
-    {
-      digitalWrite(RED_LED, HIGH);    /* Turn off red LED */
-    }
-  }
+  skipInitialCommand = false;
 
   switch (value)
   {
@@ -1483,8 +1571,25 @@ void httpWebServerLoop()
 
   if (g_debug_prints_enabled)
   {
-    Serial.println("Web Server started");
+    Serial.println("Web Server loop started");
   }
+
+  i = WiFi.softAPgetStationNum();
+  if (i > 0)
+  {
+    Serial.println(String("Stations already connected:" + String(i) + " ...disconnecting..."));
+    //    WiFi.disconnect();
+    //    ESP.restart();
+    //    WiFi.mode(WIFI_OFF);
+    WiFi.mode(WIFI_STA);
+    WiFi.mode(WIFI_AP_STA);
+    // Event subscription
+    e1 = WiFi.onSoftAPModeStationConnected(onNewStation);
+    e2 = WiFi.onSoftAPModeStationDisconnected(onStationDisconnect);
+    i = WiFi.softAPgetStationNum();
+    Serial.println(String("Stations already connected:" + String(i)));
+  }
+
 
   while (!done)
   {
@@ -1532,10 +1637,21 @@ void httpWebServerLoop()
             }
             else if ((buf[j] == 'H') || (buf[j] == 'h'))
             {
+              time_t rawtime;
+              struct tm * timeinfo;
+              time ( &rawtime );
+              timeinfo = localtime ( &rawtime );
+
               for (uint8_t i = 0; i < g_numberOfSocketClients; i++)
               {
                 String msg = String("MAC," + String(g_webSocketClient[i].macAddr));
                 g_webSocket.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
+
+                msg = String("TIME," + String(asctime (timeinfo)));
+                Serial.println("Time sent =" + msg);
+                g_webSocket.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
+
+
               }
             }
             else if ((buf[j] == 'S') || (buf[j] == 's'))
@@ -1640,11 +1756,20 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 
         if (g_main_page_served)
         {
+          time_t rawtime;
+          struct tm * timeinfo;
+          time ( &rawtime );
+          timeinfo = localtime ( &rawtime );
           Serial.println("Sending MAC address:");
 
           String msg = String("MAC," + String(g_webSocketClient[g_numberOfSocketClients].macAddr));
           g_webSocket.sendTXT(g_webSocketClient[g_numberOfSocketClients].socketID, stringObjToConstCharString(&msg), msg.length());
           Serial.println(msg);
+
+          msg = String("TIME," + String(asctime (timeinfo)));
+          g_webSocket.sendTXT(g_webSocketClient[g_numberOfSocketClients].socketID, stringObjToConstCharString(&msg), msg.length());
+          Serial.println(msg);
+
           g_main_page_served = FALSE;
         }
 

@@ -2,6 +2,11 @@
 
 <head>
     <title>Tx</title>
+    <style type="text/css">
+        input[type="text"]:value {
+            -webkit-text-font-weight: bold;
+        }
+    </style>
 </head>
 
 <body onload="javascript:start();">
@@ -17,6 +22,20 @@
         var lastPacketTime = 0;
         var webSocketTxTimer = 0;
         var lastSocketTxMessage;
+
+        ///////////////////////////////
+        // Settings
+        var cloneSetting;
+        var callsignSetting;
+        var eventSetting;
+        var foxIDSetting;
+        var starttimeSetting;
+        var finishtimesetting;
+        var bandSetting;
+        var foxFrequencySetting;
+        var homeFrequencySetting;
+        var macSetting;
+        ///////////////////////////////
 
         var websock;
 
@@ -64,7 +83,8 @@
                     console.log(arr[0]);
                     console.log(arr[1]);
                     switch (arr[0]) {
-                        case "HB":
+                        case "TIME":
+                            document.getElementById("xmtrTime").innerHTML = arr[1];
                             break;
 
                         case "CLONE":
@@ -149,7 +169,7 @@
         }
 
         function syncClock() {
-            var btext = Date().now();
+            var btext = Date.now();
             btext = "SYNC," + btext;
             console.log(btext);
             sendToSocket(btext);
@@ -547,9 +567,9 @@
             //            stillConnected = false;
 
             if (hasNumber(callString) && hasAlpha(callString) && (callString.length > 2)) {
-                callsignText.style = "color:Black; font-weight:bold;";
+                callsignText.style.color = "black";
             } else {
-                callsignText.style = "color:Red; font-weight:bold;";
+                callsignText.style.color = "red";
             }
 
             var startTime = document.getElementById("datetimeStart");
@@ -559,13 +579,13 @@
             var n = new Date();
 
             if (s >= f) {
-                startTime.style = "color:Red; font-weight:bold;";
-                finishTime.style = "color:Red; font-weight:bold;";
+                startTime.style.color = "red";
+                finishTime.style.color = "red";
             } else if (n > s) {
-                startTime.style = "color:Red; font-weight:bold;";
+                startTime.style.color = "red";
             } else {
-                startTime.style = "color:Black; font-weight:bold;";
-                finishTime.style = "color:Black; font-weight:bold;";
+                startTime.style.color = "black";
+                finishTime.style.color = "black";
             }
 
             var fox = document.getElementById("freqText");
@@ -580,36 +600,36 @@
 
             if (b.value == "2m") {
                 if ((Number(foxFrequencyHz) < 144500000) || (Number(foxFrequencyHz) > 144900000) || (Number(dif) <= 200000)) {
-                    fox.style = "color:Red; font-weight:bold; text-align:center;";
+                    fox.style.color = "red";
                 } else {
-                    fox.style = "color:Black; font-weight:bold; text-align:center;";
+                    fox.style.color = "black";
                 }
 
                 if ((Number(homeFrequencyHz) < 144500000) || (Number(homeFrequencyHz) > 144900000) || (Number(dif) <= 200000)) {
-                    home.style = "color:Red; font-weight:bold; text-align:center;";
+                    home.style.color = "red";
                 } else {
-                    home.style = "color:Black; font-weight:bold; text-align:center;";
+                    home.style.color = "black";
                 }
             } else {
                 if ((foxFrequencyHz < 3510000) || (foxFrequencyHz > 3600000) || (dif <= 30000)) {
-                    fox.style = "color:Red; font-weight:bold; text-align:center;";
+                    fox.style.color = "red";
                 } else {
-                    fox.style = "color:Black; font-weight:bold; text-align:center;";
+                    fox.style.color = "black";
                 }
 
                 if ((homeFrequencyHz < 3510000) || (homeFrequencyHz > 3600000) || (dif <= 30000)) {
-                    home.style = "color:Red; font-weight:bold; text-align:center;";
+                    home.style.color = "red";
                 } else {
-                    home.style = "color:Black; font-weight:bold; text-align:center;";
+                    home.style.color = "black";
                 }
             }
 
             var fTime = document.getElementById("xmtrTime");
 
             if (fTime.innerHTML.indexOf("Disconnected") !== -1) {
-                fTime.style = "width:400px; font-size:20px; font-weight:bold; text-align:center; color:Red;"
+                fTime.style.color = "red";
             } else {
-                fTime.style = "width:400px; font-size:20px; font-weight:bold; text-align:center; color:Black;"
+                fTime.style.color = "black";
             }
         }
 
@@ -667,7 +687,6 @@
                 resetHomeFreqSlider();
             }
         });
-
     </script>
 
     <center>
@@ -704,7 +723,7 @@
             <table>
                 <tr>
                     <td style="width:400px; height:50px; text-align:right; vertical-align:middle;">
-                        <p id="xmtrTime" style="color:Black; font-size:20px; font-weight:bold; text-align:center;">Disconnected</p>
+                        <p id="xmtrTime" style="color:Red; font-size:20px; font-weight:bold; text-align:center;">Disconnected</p>
                     </td>
                 </tr>
                 <tr>
@@ -735,7 +754,7 @@
                     <td style="width:14.4px; text-align: right">Callsign:</td>
 
                     <td>
-                        <input type="text" id="callText" name="callText" value="Callsign" />
+                        <input type="text" id="callText" style="font-weight:bold;" name="callText" value="Callsign" />
                     </td>
                 </tr>
             </table>
@@ -775,8 +794,8 @@
                     <td style="width:14.4px; text-align: right">Start:</td>
 
                     <td>
-                       <input id="datetimeStart" type="datetime-local" style="font-weight:bold;" value="2018-01-01T12:00"/>
-		    </td>
+                        <input id="datetimeStart" type="datetime-local" style="font-weight:bold;" value="2018-01-01T12:00" />
+                    </td>
 
                     <td></td>
                 </tr>
@@ -811,14 +830,12 @@
 
         <table>
             <tr>
-                <td style="width:14.4px; text-align: right">
+                <td>
                     <button id="FreqDownButton" class="button" style="background-color:#EEE" onclick="decFoxFreqClick();">DEC</button>
                 </td>
 
-                <td name="freqText" id="freqText_frm" action="#"></td>
-
-                <td style="width:200px; text-align: center">
-                    <input style="text-align: center" type="text" id="freqText" name="freqText" value="144600000" readonly="readonly" />
+                <td>
+                    <input type="text" style="font-weight:bold; text-align:center" id="freqText" name="freqText" value="144600000" readonly="readonly" />
                 </td>
 
                 <td style="width:14.4px; text-align: left">
@@ -834,8 +851,8 @@
                 <tr>
                     <td></td>
 
-                    <td style="width:400px; text-align: center">
-                        <input style="width:400px; text-align: center" type="range" name="freq" id="freq" min="-100" max="100" step="1" value="0" oninput="freqChange();" />
+                    <td style="width:400px; text-align:center">
+                        <input style="width:400px; text-align:center color:black font-weight:bold;" type="range" name="freq" id="freq" min="-100" max="100" step="1" value="0" oninput="freqChange();" />
                     </td>
                 </tr>
             </table>
@@ -845,15 +862,15 @@
 
         <table>
             <tr>
-                <td style="width:14.4px; text-align: right">
+                <td>
                     <button id="HomeFreqDownButton" class="button" style="background-color:#EEE" onclick="decHomeFreqClick();">DEC</button>
                 </td>
 
-                <td style="width:200px; text-align: center">
-                    <input style="text-align: center" type="text" id="homeFreqText" name="homeFreqText" value="144900000" readonly="readonly" />
+                <td style="text-align:center color:black font-weight:bold;">
+                    <input type="text" style="font-weight:bold; text-align:center" id="homeFreqText" name="homeFreqText" value="144900000" readonly="readonly" />
                 </td>
 
-                <td style="width:14.4px; text-align: left">
+                <td style="width:14.4px; text-align:left">
                     <button id="HomeFreqUpButton" class="button" style="background-color:#EEE" onclick="incHomeFreqClick();">INC</button>
                 </td>
             </tr>
@@ -867,7 +884,7 @@
                     <td></td>
 
                     <td style="width:400px; text-align: center">
-                        <input style="width:400px; text-align: center" type="range" name="homeFreq" id="homeFreq" min="-100" max="100" step="1" value="0" oninput="homeFreqChange();" />
+                        <input style="width:400px; text-align:center" type="range" name="homeFreq" id="homeFreq" min="-100" max="100" step="1" value="0" oninput="homeFreqChange();" />
                     </td>
                 </tr>
             </table>
