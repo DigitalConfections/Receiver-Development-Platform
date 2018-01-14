@@ -137,7 +137,7 @@
                 };
 
                 websock.onerror = function(evt) {
-                    console.log(evt);
+                    console.log("Websock error: " + evt);
                 };
 
                 websock.onmessage = function(evt) {
@@ -147,25 +147,37 @@
 
                     stillConnected = true;
 
-                    console.log(arr);
-                    console.log(arr[0]);
-                    console.log(arr[1]);
                     switch (arr[0]) {
 
-                        case "TIME":
+                       case "EVENT_STATE": {
+                            var event = arr[1];
+                            eventSet(event);
+                            updateTextFormatting();
+                       }
+                            break;
+
+                       case "SYNC":
                             document.getElementById("xmtrTime").innerHTML = arr[1];
                             break;
 
-                        case "MASTER_CLONE":
+                        case "CLONE":
                             document.getElementById("cloneText").value = arr[1];
                             break;
 
-                        case "CALLSIGN":
-                            document.getElementById("callText").value = arr[1];
+                        case "VERS":
+                            document.getElementById("version").value = arr[1];
                             break;
 
-                        case "EVENT":
-                            document.getElementById("eventText").value = arr[1];
+                        case "MAC":
+                            var t = "MAC: " + arr[1];
+                            document.getElementById("macAddress").innerHTML = t;
+                            console.log(t);
+                            break;
+
+//////////////////
+
+                        case "CALLSIGN":
+                            document.getElementById("callText").value = arr[1];
                             break;
 
                         case "CLASSIC_2M_FOX_ID":
@@ -213,11 +225,8 @@
                             break;
 
                         case "FOX_O_FINISH_DATE_TIME":
-                              foxOfinishDateTimeSetting = arr[1];
-
-                            //  case "BAND": // NOT USED
-                            //     document.getElementById("bandText").value = arr[1];
-                            //     break;
+                            foxOfinishDateTimeSetting = arr[1];
+                            break;
 
                         case "CLASSIC_2M_FOX_FREQ":
                             classic2mFoxFrequencySetting = arr[1];
@@ -269,12 +278,6 @@
 
                         case "SPRINT_80M_FINISH_FREQ":
                             sprintFinish80mFrequencySetting = arr[1];
-                            break;
-
-                        case "MAC":
-                            var t = "MAC: " + arr[1];
-                            document.getElementById("macAddress").innerHTML = t;
-                            console.log(t);
                             break;
 
                         default:
@@ -337,21 +340,7 @@
 
         function sendEvent() {
             var btext = document.getElementById("eventText").value;
-            btext = "EVENT," + btext;
-            console.log(btext);
-            sendToSocket(btext);
-        }
-
-        function sendFox() {
-            var btext = document.getElementById("txIDText").value;
-            btext = "FOX," + btext;
-            console.log(btext);
-            sendToSocket(btext);
-        }
-
-        function sendStart() {
-            var btext = new Date(document.getElementById("datetimeStart").value);
-            btext = "START," + btext;
+            btext = "EVENT_STATE," + btext;
             console.log(btext);
             sendToSocket(btext);
         }
@@ -368,19 +357,12 @@
             }
         }
 
-        function sendFinish() {
-            var btext = new Date(document.getElementById("datetimeFinish").value);
-            btext = "FINISH," + btext;
-            console.log(btext);
-            sendToSocket(btext);
-        }
-
-        function sendBand() {
-            var btext = document.getElementById("bandText").value;
-            btext = "BAND," + btext;
-            console.log(btext);
-            sendToSocket(btext);
-        }
+//        function sendBand() {
+//            var btext = document.getElementById("bandText").value;
+//            btext = "BAND," + btext;
+//            console.log(btext);
+//            sendToSocket(btext);
+//        }
 
         function sendFreq(freq, row) {
             var etext = document.getElementById("eventText");
@@ -514,6 +496,7 @@
             var etext = document.getElementById("eventText");
             var foxtext = document.getElementById("txIDText");
             var x;
+            var msgText = "";
 
             if (etext.value.indexOf("Classic") >= 0) {
                 x = document.getElementById("classicFoxes");
@@ -538,10 +521,31 @@
                 foxtext.value = x.options[0].value;
             }
 
-            sendFox();
+            if (etext.value.indexOf("Classic") >= 0) {
+                if(etext.value.indexOf("2m") >= 0) {
+                    classic2mIDSetting = foxtext.value;
+                    msgText = "CLASSIC_2M_FOX_ID," + classic2mIDSetting;
+                } else {
+                    classic80mIDSetting = foxtext.value;
+                    msgText = "CLASSIC_80M_FOX_ID," + classic80mIDSetting;
+                }
+            } else if (etext.value.indexOf("Sprint") >= 0) {
+                sprint80mIDSetting =  foxtext.value;
+                msgText = "SPRINT_80M_FOX_ID," + sprint80mIDSetting;
+            } else {
+                foxO_80mIDSetting = foxtext.value;
+                msgText = "FOX_O_80M_FOX_ID," + foxO_80mIDSetting;
+            }
+
+
+            console.log(msgText);
+
+            if(msgText.length != 0) {
+                sendToSocket(msgText);
+            }
         }
 
-        function eventClick() {
+        function eventSet(event) {
             var startTime = document.getElementById("datetimeStart");
             var finishTime = document.getElementById("datetimeFinish");
             var freqText1_style = document.getElementById('freqSet1').style;
@@ -556,9 +560,8 @@
             var i;
             var found = false;
             for (i = 0; i < x.options.length; i++) {
-                if (x.options[i].value == etext.value) {
-                    i = (i + 1) % x.options.length;
-                    etext.value = x.options[i].value;
+                if (x.options[i].value == event) {
+                    etext.value = event;
                     found = true;
                     break;
                 }
@@ -677,7 +680,32 @@
 
             }
 
-            sendBand();
+//            sendEvent();
+//            updateTextFormatting();
+        }
+
+        function eventClick() {
+            var etext = document.getElementById("eventText");
+            var x = document.getElementById("events");
+            var event;
+
+            var i;
+            var found = false;
+            for (i = 0; i < x.options.length; i++) {
+                if (x.options[i].value == etext.value) {
+                    i = (i + 1) % x.options.length;
+                    event = x.options[i].value;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (found == false) {
+                event = x.options[0].value;
+            }
+
+            eventSet(event);
+
             sendEvent();
             updateTextFormatting();
         }
@@ -1585,7 +1613,7 @@
     </style>
 
     <center>
-        <span style="opacity:0">
+        <span style="opacity:0; display:none;">
          <select id="clones" size="2">
             <option>Master</option>
             <option>Clone</option>
@@ -1636,7 +1664,7 @@
       </span>
 
         <h1 style="font-family:verdana; font-size:30px; color:Black; text-align:center;">Transmitter Settings</h1>
-        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">Ver 0.1 - 13 Jan 2018</p>
+        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">Ver 0.1.1 - 14 Jan 2018</p>
 
         <div>
             <table>
