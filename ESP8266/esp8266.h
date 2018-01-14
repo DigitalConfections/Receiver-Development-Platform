@@ -45,18 +45,6 @@
   #define SecondsFromMinutes(min) ((min) * 60)
 #endif
 
-#ifndef BOOL
-  typedef uint8_t BOOL;
-#endif
-
-#ifndef FALSE
-  #define FALSE (0)
-#endif
-
-#ifndef TRUE
-  #define TRUE !FALSE
-#endif
-
 #ifndef min
   #define min(x, y)  ((x) < (y) ? (x) : (y))
 #endif
@@ -75,8 +63,8 @@
 #define BRIDGE_SSID_DEFAULT "Fox_"
 #define BRIDGE_PW_DEFAULT ""
 #define BRIDGE_TCP_PORT_DEFAULT String("73")
-#define LEDS_ENABLE_DEFAULT TRUE
-#define DEBUG_PRINTS_ENABLE_DEFAULT TRUE
+#define LEDS_ENABLE_DEFAULT true
+#define DEBUG_PRINTS_ENABLE_DEFAULT true
 
 
 typedef enum

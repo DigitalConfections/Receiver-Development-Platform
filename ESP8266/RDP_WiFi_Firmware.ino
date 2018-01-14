@@ -58,6 +58,7 @@
 #include <WebSocketsServer.h>
 #include <ESP8266WiFiType.h>
 #include <time.h>
+#include "Transmitter.h"
 
 
 
@@ -73,8 +74,8 @@
 #define RED_LED (0)
 #define BLUE_LED (2)
 
-BOOL g_debug_prints_enabled = DEBUG_PRINTS_ENABLE_DEFAULT;
-BOOL g_LEDs_enabled = LEDS_ENABLE_DEFAULT;
+bool g_debug_prints_enabled = DEBUG_PRINTS_ENABLE_DEFAULT;
+bool g_LEDs_enabled = LEDS_ENABLE_DEFAULT;
 
 /*
    TCP to UART Bridge
@@ -143,10 +144,12 @@ void handleNotFound();
 
 unsigned long g_relativeTimeSeconds;
 unsigned long g_lastAccessToNISTServers = 0;
-BOOL g_timeWasSet = FALSE;
+bool g_timeWasSet = false;
 int g_blinkPeriodMillis = 500;
 
 static WiFiEventHandler e1, e2;
+
+Transmitter g_xmtr(DEBUG_PRINTS_ENABLE_DEFAULT);
 
 void setup()
 {
@@ -169,6 +172,7 @@ void setup()
   showSettings();
 
   WiFi.onEvent(eventWiFi);                                                    // Handle WiFi event
+  g_xmtr = new Transmitter(g_debug_prints_enabled);
 
 }
 
@@ -458,7 +462,7 @@ void onStationDisconnect(WiFiEventSoftAPModeStationDisconnected sta_info) {
 
 bool setupWiFiAPConnection()
 {
-  BOOL err = FALSE;
+  bool err = false;
   int tries = 0;
 
   /* We start by connecting to a WiFi network */
@@ -504,7 +508,7 @@ bool setupWiFiAPConnection()
 
     if (tries > 60)
     {
-      err = TRUE;
+      err = true;
       break;
     }
   }
@@ -596,15 +600,15 @@ void loop()
 {
   int value = 'W'; // start out functioning as a web server
   bool skipInitialCommand = true;
-  bool toggle = FALSE;
+  bool toggle = false;
   unsigned long holdTime;
   int commaLoc;
   int nextCommaLoc;
   String arg1, arg2;
-  bool argumentsRcvd = FALSE;
-  bool commandInProgress = FALSE;
+  bool argumentsRcvd = false;
+  bool commandInProgress = false;
   int escapeCount = 0;
-  bool done = FALSE;
+  bool done = false;
 
   if (!skipInitialCommand)
   {
@@ -630,7 +634,7 @@ void loop()
           /* Extract arguments from commands containing them */
           if ((value == 'M') || (value == 'm'))
           {
-            argumentsRcvd = FALSE;
+            argumentsRcvd = false;
 
             if (len > 1)
             {
@@ -695,7 +699,7 @@ void loop()
           {
             Serial.println(command + " " + String(value));
           }
-          done = TRUE;
+          done = true;
         }
         else
         {
@@ -705,10 +709,10 @@ void loop()
           }
 
           value = 'H';
-          done = TRUE;
+          done = true;
         }
 
-        commandInProgress = FALSE;
+        commandInProgress = false;
       }
       else if (Serial.available() > 0) /* search for escape sequency $$$ */
       {
@@ -724,7 +728,7 @@ void loop()
 
           if (escapeCount == 3)
           {
-            commandInProgress = TRUE;
+            commandInProgress = true;
             escapeCount = 0;
             g_blinkPeriodMillis = 250;
           }
@@ -788,7 +792,7 @@ void loop()
 
         WiFi.disconnect();
         digitalWrite(BLUE_LED, HIGH);       /* Turn off blue LED */
-        done = FALSE;
+        done = false;
       }
       break;
 
@@ -808,7 +812,7 @@ void loop()
         }
 
         digitalWrite(BLUE_LED, HIGH);    /* Turn off blue LED */
-        done = FALSE;
+        done = false;
       }
       break;
 
@@ -985,7 +989,7 @@ void loop()
 
             case LEDS_ENABLE:
               {
-                g_LEDs_enabled = (BOOL)arg2.toInt();
+                g_LEDs_enabled = (bool)arg2.toInt();
 
                 if (g_LEDs_enabled != 0)
                 {
@@ -996,7 +1000,7 @@ void loop()
 
             case DEBUG_PRINTS_ENABLE:
               {
-                g_debug_prints_enabled = (BOOL)arg2.toInt();
+                g_debug_prints_enabled = (bool)arg2.toInt();
 
                 if (g_debug_prints_enabled != 0)
                 {
@@ -1019,8 +1023,8 @@ void loop()
           Serial.println("Finished M command.");
         }
 
-        argumentsRcvd = FALSE;
-        done = FALSE;
+        argumentsRcvd = false;
+        done = false;
       }
       break;
 
@@ -1033,7 +1037,7 @@ void loop()
           showSettings();
         }
 
-        done = FALSE;
+        done = false;
       }
       break;
   }
@@ -1043,7 +1047,7 @@ void loop()
 
 void getNistTime(void)
 {
-  BOOL success = FALSE;
+  bool success = false;
   int bytesRead = 0;
   int tries = 10;
   int32_t timeVal = 0;
@@ -1067,7 +1071,7 @@ void getNistTime(void)
     return;
   }
 
-  success = FALSE;
+  success = false;
   while (!success && tries--)
   {
     if (g_debug_prints_enabled)
@@ -1206,7 +1210,7 @@ void getNistTime(void)
     tempStr = String("$TIM," + String(timeVal) + ";");
     Serial.println(tempStr);        /* Send command to set time */
 
-    g_timeWasSet = TRUE;
+    g_timeWasSet = true;
     digitalWrite(RED_LED, HIGH);    /* Turn off red LED */
   }
   else
@@ -1222,9 +1226,9 @@ void getNistTime(void)
    The NIST servers listen for a NTP request on port 123,and respond by sending a udp/ip
    data packet in the NTP format. The data packet includes a 64-bit timestamp containing
    the time in UTC seconds since January 1, 1900 with a resolution of 200 ps. */
-BOOL sendNTPpacket(String address, byte *packetBuffer)
+bool sendNTPpacket(String address, byte *packetBuffer)
 {
-  BOOL success = FALSE;
+  bool success = false;
 
   /* set all bytes in the buffer to 0 */
   memset(packetBuffer, 0, NTP_PACKET_SIZE);
@@ -1504,7 +1508,7 @@ void getNistTime(void)
 int32_t stringToTimeVal(String string)
 {
   int32_t time_sec = 0;
-  BOOL missingTens = FALSE;
+  bool missingTens = false;
   uint8_t index = 0;
   char field[3];
   char *instr, *str;
@@ -1525,7 +1529,7 @@ int32_t stringToTimeVal(String string)
 
   if (str > (instr - 2))  /* handle case of time format #:##:## */
   {
-    missingTens = TRUE;
+    missingTens = true;
     str = instr - 1;
   }
   else
@@ -1561,10 +1565,10 @@ void httpWebServerLoop()
   uint8_t i, j;
   char buf[1024];
   int bytesAvail, bytesIn;
-  BOOL done = FALSE;
-  BOOL toggle = FALSE;
+  bool done = false;
+  bool toggle = false;
   unsigned long holdTime;
-  BOOL clientConnected = FALSE;
+  bool clientConnected = false;
   int escapeCount = 0;
   int numConnected = 0;
   int hold;
@@ -1625,7 +1629,7 @@ void httpWebServerLoop()
 
               if (escapeCount == 3)
               {
-                done = TRUE;
+                done = true;
                 escapeCount = 0;
                 if (g_debug_prints_enabled)
                 {
@@ -1717,6 +1721,7 @@ void startSPIFFS()
 void startWebSocket()
 { // Start a WebSocket server
   g_webSocket.begin();      // start the websocket server
+//  g_webSocket.beginSSL(); // start secure wss support?
   g_webSocket.onEvent(webSocketEvent);  // if there's an incoming websocket message, go to function 'webSocketEvent'
   Serial.println("WebSocket server start tasks complete.");
 }
@@ -1770,7 +1775,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           g_webSocket.sendTXT(g_webSocketClient[g_numberOfSocketClients].socketID, stringObjToConstCharString(&msg), msg.length());
           Serial.println(msg);
 
-          g_main_page_served = FALSE;
+          g_main_page_served = false;
         }
 
         g_numberOfSocketClients++;
@@ -1780,7 +1785,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
     case WStype_TEXT:
       Serial.printf("[%u] get Text: %s\r\n", num, payload);
       // send data to all connected clients
-      g_webSocket.broadcastTXT(payload, length);
+      //g_webSocket.broadcastTXT(payload, length);
+      
       break;
 
     case WStype_BIN:
@@ -1817,6 +1823,69 @@ bool handleFileRead(String path)
   else
   {
     Serial.println(String("File not found in SPIFFS: ") + path);
+  }
+
+  Serial.println(String("\tFile Not Found: ") + path);  // If the file doesn't exist, return false
+  return false;
+}
+
+bool readEventFile(String eventName)
+{
+  String path = String("/defaults" + eventName + ".txt");
+
+  if (g_debug_prints_enabled)
+  {
+    Serial.println("Reading " + eventName + "settings...");
+  }
+
+  String contentType = getContentType(path);      // Get the MIME type
+  if (SPIFFS.exists(path))
+  { // If the file exists, either as a compressed archive, or normal
+    // open file for reading
+    File file = SPIFFS.open(path, "r"); // Open the file
+    String s = file.readStringUntil('\n');
+    int count = 0;
+
+    while (s.length() && count++ < NUMBER_OF_TRANSMITTER_SETTINGS)
+    {
+      if (s.indexOf(',') < 0)
+      {
+        if (g_debug_prints_enabled)
+        {
+          Serial.println("Error: illegal entry found in defaults file at line " + count);
+        }
+
+        break; // invalid line found
+      }
+
+      String settingID = s.substring(0, s.indexOf(','));
+      String value = s.substring(s.indexOf(',') + 1, s.indexOf('\n'));
+
+      if (value.charAt(0) == '"')
+      {
+        if (value.charAt(1) == '"') // handle empty string
+        {
+          value = "";
+        }
+        else // remove quotes
+        {
+          value = value.substring(1, value.length() - 2);
+        }
+      }
+
+      g_xmtr.setXmtrData(settingID, value);
+
+      if (g_debug_prints_enabled)
+      {
+        Serial.println("[" + s + "]");
+      }
+
+      s = file.readStringUntil('\n');
+    }
+
+    file.close(); // Close the file
+    Serial.println(String("\tRead file: ") + path);
+    return true;
   }
 
   Serial.println(String("\tFile Not Found: ") + path);  // If the file doesn't exist, return false
