@@ -32,7 +32,7 @@
 
 /******************************************************
  * Set the text that gets displayed to the user */
-#define SW_REVISION "X1.8.1"
+#define SW_REVISION "X1.8.3"
 
 //#define DEBUG_FUNCTIONS_ENABLE
 // #define TRANQUILIZE_WATCHDOG
@@ -66,9 +66,12 @@
 
 /******************************************************
  * EEPROM definitions */
-#define EEPROM_INITIALIZED_FLAG 0xA6
+#define EEPROM_INITIALIZED_FLAG 0xA8
 #define EEPROM_TONE_VOLUME_DEFAULT 5
 #define EEPROM_MAIN_VOLUME_DEFAULT 11
+#define EEPROM_AUDIO_RSSI_DEFAULT 0
+#define EEPROM_TONE_RSSI_DIRECTION_DEFAULT 0
+#define EEPROM_TONE_RSSI_FILTER_DEFAULT 4
 
 #define EEPROM_SI5351_CALIBRATION_DEFAULT 0x00
 #define EEPROM_CLK0_OUT_DEFAULT 133000000

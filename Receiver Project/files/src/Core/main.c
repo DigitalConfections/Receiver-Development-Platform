@@ -109,10 +109,16 @@ static volatile Frequency_Hz g_receiver_freq = 0;
 static uint8_t EEMEM ee_tone_volume_setting = EEPROM_TONE_VOLUME_DEFAULT;
 /* Headphone Driver Defines */
 static uint8_t EEMEM ee_main_volume_setting = EEPROM_MAIN_VOLUME_DEFAULT;
+static uint8_t EEMEM ee_audio_RSSI_setting = EEPROM_AUDIO_RSSI_DEFAULT;
+static uint8_t EEMEM ee_tone_RSSI_direction_setting = EEPROM_TONE_RSSI_DIRECTION_DEFAULT;
+static uint8_t EEMEM ee_rssi_filter_setting = EEPROM_TONE_RSSI_FILTER_DEFAULT;
 
 static volatile uint8_t g_main_volume = 0;
 static volatile uint8_t g_hw_main_volume = EEPROM_MAIN_VOLUME_DEFAULT;
 static volatile uint8_t g_tone_volume;
+static volatile uint8_t g_audio_RSSI = FALSE;
+static volatile uint8_t g_tone_RSSI_direction = 0;
+static volatile uint8_t g_rssi_filter = 0;
 
 #ifdef ENABLE_1_SEC_INTERRUPTS
 
@@ -133,8 +139,8 @@ static volatile uint8_t g_tone_volume;
 #define NUMBER_OF_POLLED_ADC_CHANNELS 3
 static const uint8_t activeADC[NUMBER_OF_POLLED_ADC_CHANNELS] = { RF_LEVEL, BAT_VOLTAGE, RSSI_LEVEL };
 
-static const uint16_t g_adcChannelConversionPeriod_ticks[NUMBER_OF_POLLED_ADC_CHANNELS] = { 1000, 1000, 100 };
-static volatile uint16_t g_tickCountdownADCFlag[NUMBER_OF_POLLED_ADC_CHANNELS] = { 1000, 1000, 100 };
+static const uint16_t g_adcChannelConversionPeriod_ticks[NUMBER_OF_POLLED_ADC_CHANNELS] = { 1000, 1000, 29 };
+static volatile uint16_t g_tickCountdownADCFlag[NUMBER_OF_POLLED_ADC_CHANNELS] = { 1000, 1000, 29 };
 static uint16_t g_filterADCValue[NUMBER_OF_POLLED_ADC_CHANNELS] = { 500, 500, 3 };
 static volatile BOOL g_adcUpdated[NUMBER_OF_POLLED_ADC_CHANNELS] = { FALSE, FALSE, FALSE };
 static volatile uint16_t g_lastConversionResult[NUMBER_OF_POLLED_ADC_CHANNELS];
@@ -159,6 +165,7 @@ static volatile BOOL g_enableHardwareWDResets = FALSE;
 void initializeEEPROMVars(void);
 void saveAllEEPROM(void);
 void wdt_init(WDReset resetType);
+void tonePitch(uint8_t pitch);
 
 /***********************************************************************
  * Watchdog Timer ISR
@@ -371,41 +378,53 @@ ISR( TIMER2_COMPB_vect )
 		}
 		else if(indexConversionInProcess == RSSI_READING)
 		{
-			if(delta > 50)
+			uint16_t thresh = 0;
+			
+			lastResult = holdConversionResult;
+			
+			switch(g_rssi_filter)
 			{
-				if(directionUP)
-				{
-					lastResult = holdConversionResult;
-				}
-				else
-				{
-					if(delta > 100)
-					{
-						lastResult = holdConversionResult;
-					}
-					else
-					{
-						lastResult -= 10;
-					}
-				}
+				case 1:
+				     thresh = 2500;
+				break;
+				
+				case 2:
+				     thresh = 1000;
+				break;
+				
+				case 3:
+				     thresh = 500;
+				break;
+				
+				case 4:
+				     thresh = 200;
+				break;
+				
+				case 5:
+					thresh = 50;
+				break;
+				
+				default:
+				     thresh = 5;
+				break;
+			}
 
+			if(delta > thresh)
+			{
 				g_filteredRSSI = lastResult;
 			}
 			else
 			{
-				if(directionUP)
-				{
-					lastResult = holdConversionResult;
-				}
-				else if(delta)
-				{
-					lastResult--;
-				}
-
-//				lastResult = holdConversionResult;
-				g_filteredRSSI = g_filteredRSSI << 3;
+				const int n = 3;
+				g_filteredRSSI = g_filteredRSSI << n;
 				g_filteredRSSI += lastResult;
-				g_filteredRSSI /= 9;
+				g_filteredRSSI /= ((1 << n) + 1);
+			}
+			
+			if(g_audio_RSSI)
+			{
+				g_filteredRSSI = MAX(g_filteredRSSI, 100);
+				tonePitch((g_filteredRSSI - 100) >> 3);
 			}
 		}
 
@@ -922,6 +941,10 @@ int main( void )
 	 * Initialize the receiver */
 
 	init_receiver();
+	if(g_audio_RSSI)
+	{
+		TCCR0A |= (1 << COM0B0);    /* Toggle OC0B (PD5) on Compare Match */
+	}
 	
 	/**
 	 * The watchdog must be petted periodically to keep it from barking */
@@ -1136,12 +1159,53 @@ int main( void )
 					{
 						toggle = TRUE;
 						g_lb_repeat_rssi = TRUE;
-						rxSetAttenuation(0);
+//						rxSetAttenuation(0);
 						g_debug_atten_step = 1;
 					}
 				}
 				break;
 #endif //DEBUG_FUNCTIONS_ENABLE		
+
+				case MESSAGE_TONE_RSSI:
+				{
+					if(lb_buff->fields[FIELD1][0])
+					{
+						int8_t arg;
+						arg = atoi(lb_buff->fields[FIELD1]); // Prevent optimizer from breaking this
+						if(arg > 0)
+						{
+							g_tone_RSSI_direction = 0;
+							g_audio_RSSI = 1;
+							g_rssi_filter = arg;
+						}
+						else if(arg < 0)
+						{
+							g_tone_RSSI_direction = 1;
+							g_audio_RSSI = 1;
+							g_rssi_filter = -arg;
+						}
+						else
+						{
+							g_audio_RSSI = 0;
+						}
+					}
+					else
+					{
+						g_audio_RSSI = !g_audio_RSSI;
+					}
+	
+					if(g_audio_RSSI)
+					{
+						TCCR0A |= (1 << COM0B0);    /* Toggle OC0B (PD5) on Compare Match */
+					}
+					else if(!g_beep_length)
+					{
+						TCCR0A &= ~(1 << COM0B0);   /* Turn off toggling of OC0B (PD5) */
+					}
+			
+					lb_broadcast_num((uint16_t)g_audio_RSSI, NULL);
+				}
+				break;
 
 				case MESSAGE_PREAMP:
 				{
@@ -1678,6 +1742,7 @@ int main( void )
 					linkbus_setLineTerm("\n");
 					lb_send_BND(LINKBUS_MSG_REPLY, rxGetBand());
 					lb_send_FRE(LINKBUS_MSG_REPLY, rxGetFrequency(), FALSE);
+					lb_send_value(g_audio_RSSI, "TON");
 					lb_send_FRE(LINKBUS_MSG_REPLY, rxGetCWOffset(), FALSE);
 					lb_send_value(rxGetAttenuation(), "ATT");
 					lb_send_value(rxGetPreamp(), "PRE");
@@ -1791,9 +1856,60 @@ int main( void )
 						g_rssi_countdown = 100;
 						if(g_debug_atten_step)
 						{
-							static uint8_t attenuation = 0;
-						
-							rxSetAttenuation(attenuation++);
+//							static uint8_t attenuation = 0;
+							static uint16_t pitch = 0;
+							
+							
+							if(g_beep_length ==0)
+							{
+								uint8_t cs = TCCR0B & 0x07;
+								/* 
+								1,2,3,4,5
+								1,8,64,256,1024
+								*/
+								
+								pitch++;
+								
+								uint8_t thresh;
+								if((cs == 5) || (cs == 4))
+								{
+									thresh = 64;
+								}
+								else if((cs == 3) || (cs == 2))
+								{
+									thresh = 32;	
+								}
+								else
+								{
+									thresh = 1;
+								}
+								
+								if(OCR0A> thresh)
+								{
+									OCR0A--;
+								}
+								else
+								{
+									uint8_t cs = TCCR0B & 0x07;
+									cs--;
+									if(cs == 0)
+									{ 
+										cs = ((1 << CS02) | (1 << CS00)); 
+										pitch = 0;
+									}
+									cs |= (TCCR0B & 0xF8);
+									TCCR0B = cs;                /*  Prescaler */
+									OCR0A = 255;
+								}
+
+								g_beep_length = 2*BEEP_SHORT;
+								
+								char str[20];
+								sprintf(str, "%d, %d", (TCCR0B & 0x07), OCR0A);
+								lb_broadcast_num(pitch, str);
+							}
+
+						//	rxSetAttenuation(attenuation++);
 						}
 
 #endif // DEBUG_FUNCTIONS_ENABLE
@@ -1862,25 +1978,73 @@ int main( void )
 /**********************
 **********************/
 
-	void initializeEEPROMVars(void)
+void initializeEEPROMVars(void)
+{
+	if(eeprom_read_byte(&ee_interface_eeprom_initialization_flag) == EEPROM_INITIALIZED_FLAG)
 	{
-		if(eeprom_read_byte(&ee_interface_eeprom_initialization_flag) == EEPROM_INITIALIZED_FLAG)
-		{
-			g_tone_volume = eeprom_read_byte(&ee_tone_volume_setting);
-			g_main_volume = eeprom_read_byte(&ee_main_volume_setting);
-		}
-		else
-		{
-			g_tone_volume = EEPROM_TONE_VOLUME_DEFAULT;
-			g_main_volume = EEPROM_MAIN_VOLUME_DEFAULT;
+		g_tone_volume = eeprom_read_byte(&ee_tone_volume_setting);
+		g_main_volume = eeprom_read_byte(&ee_main_volume_setting);
+		g_audio_RSSI = eeprom_read_byte(&ee_audio_RSSI_setting);
+		g_tone_RSSI_direction = eeprom_read_byte(&ee_tone_RSSI_direction_setting);
+		g_rssi_filter = eeprom_read_byte(&ee_rssi_filter_setting);
+	}
+	else
+	{
+		g_tone_volume = EEPROM_TONE_VOLUME_DEFAULT;
+		g_main_volume = EEPROM_MAIN_VOLUME_DEFAULT;
+		g_audio_RSSI = EEPROM_AUDIO_RSSI_DEFAULT;
+		g_tone_RSSI_direction = EEPROM_TONE_RSSI_DIRECTION_DEFAULT;
+		g_rssi_filter = EEPROM_TONE_RSSI_FILTER_DEFAULT;
 
-			saveAllEEPROM();
-			eeprom_write_byte(&ee_interface_eeprom_initialization_flag, EEPROM_INITIALIZED_FLAG);
-		}
+		saveAllEEPROM();
+		eeprom_write_byte(&ee_interface_eeprom_initialization_flag, EEPROM_INITIALIZED_FLAG);
+		wdt_reset();                                    /* HW watchdog */
+	}
+}
+
+void saveAllEEPROM()
+{
+	wdt_reset();                                    /* HW watchdog */
+	storeEEbyteIfChanged(&ee_tone_volume_setting, g_tone_volume);
+	storeEEbyteIfChanged(&ee_main_volume_setting, g_main_volume);
+	storeEEbyteIfChanged(&ee_audio_RSSI_setting, g_audio_RSSI);
+	storeEEbyteIfChanged(&ee_tone_RSSI_direction_setting, g_tone_RSSI_direction);
+	storeEEbyteIfChanged(&ee_rssi_filter_setting, g_rssi_filter);
+}
+	
+void tonePitch(uint8_t pitch)
+{
+	Frequency_Hz freq;
+	uint16_t prescale = 8;
+	
+	if(g_tone_RSSI_direction == 1)
+	{
+		pitch = 255 - pitch;
+	}
+	
+	freq = 15 + (13*pitch);
+					
+	TCCR0B &= 0xF8;
+
+	if(freq < 60) // 1024
+	{
+		TCCR0B |= 0x05;
+		prescale = 1024;
+	}
+	else if(freq < 240) // 256
+	{
+		TCCR0B |= 0x04;
+		prescale = 256;
+	}
+	else if(freq < 1900) // 64
+	{
+		TCCR0B |= 0x03;
+		prescale = 64;
+	}
+	else // 8
+	{
+		TCCR0B |= 0x02;
 	}
 
-	void saveAllEEPROM()
-	{
-		storeEEbyteIfChanged(&ee_tone_volume_setting, g_tone_volume);
-		storeEEbyteIfChanged(&ee_main_volume_setting, g_main_volume);
-	}
+	OCR0A =  MIN(((8000000 / (2 * prescale * freq)) - 1), 255);
+}
