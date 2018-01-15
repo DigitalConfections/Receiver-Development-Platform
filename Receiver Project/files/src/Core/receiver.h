@@ -96,6 +96,11 @@ typedef enum
 #define RX_MINIMUM_80M_FREQUENCY 3500000
 #define RX_MAXIMUM_80M_FREQUENCY 4000000
 
+#define DEFAULT_PREAMP_80M 255;
+#define DEFAULT_PREAMP_2M 1;
+#define DEFAULT_ATTENUATION 0;
+
+
 typedef struct
 {
 /*	BatteryLevel battery; */
@@ -168,5 +173,22 @@ typedef enum
 /**
  */
 RadioBand bandForFrequency(Frequency_Hz freq);
+
+/**
+ */
+uint8_t rxSetPreamp(uint8_t setting);
+
+/**
+ */
+uint8_t rxGetPreamp(void);
+
+/**
+ */
+uint8_t rxSetAttenuation(uint8_t att);
+
+/**
+ */
+uint8_t rxGetAttenuation(void);
+
 
 #endif  /* RECEIVER_H_ */

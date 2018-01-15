@@ -45,7 +45,8 @@ static const char textHelp[][40] = { "\nCommands:\n",
 "  O [Hz]            - CW Offset\n",
 "  A [0-100]         - Attenuation\n",
 "  S[S]              - RSSI\n",
-"  TIM [hh:mm:ss]    - RTC Time\n",
+//"  TIM [hh:mm:ss]    - RTC Time\n",
+"  TON [-1|0|1]      - Tone RSSI\n",
 "  VOL <M:T> [0-15]  - Main/Tone Vol\n",
 "  P                 - Perm\n",
 "  RST               - Reset\n",
@@ -295,8 +296,14 @@ void lb_send_Help(void)
 	sprintf(g_tempMsgBuff, "\n*** %s Ver. %s ***", PRODUCT_NAME_LONG, SW_REVISION);
 #endif
 	
+	while(linkbus_send_text(g_tempMsgBuff));
+	while(linkbusTxInProgress());
+
+#ifdef TRANQUILIZE_WATCHDOG
+	sprintf(g_tempMsgBuff, "\nNote: Watchdog disabled in this build!");
 	while(linkbus_send_text(g_tempMsgBuff)); 
 	while(linkbusTxInProgress());
+#endif // TRANQUILIZE_WATCHDOG
 	
 	for(int i=0; i<13; i++)
 	{
@@ -332,6 +339,15 @@ void lb_echo_char(uint8_t c)
 	g_tempMsgBuff[0] = c;
 	g_tempMsgBuff[1] = '\0';
 	linkbus_send_text(g_tempMsgBuff);
+}
+
+BOOL lb_send_string(char* str)
+{
+	if(str == NULL) return TRUE;
+	if(strlen(str) > LINKBUS_MAX_MSG_LENGTH) return TRUE;
+	strcpy(g_tempMsgBuff, str);
+	linkbus_send_text(g_tempMsgBuff);
+	return FALSE;
 }
 
 void lb_poweroff_msg(uint8_t sec)

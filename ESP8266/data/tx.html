@@ -1,0 +1,1915 @@
+<head>
+    <title>Tx</title>
+    <style type="text/css">
+        input[type="text"]:value {
+            -webkit-text-font-weight: bold;
+        }
+
+        ::placeholder {
+            color: red;
+            opacity: 1; /* Firefox */
+        }
+
+        :-ms-input-placeholder { /* Internet Explorer 10-11 */
+           color: red;
+        }
+
+        ::-ms-input-placeholder { /* Microsoft Edge */
+           color: red;
+        }
+
+
+        ::-webkit-input-placeholder { /* Chrome/Opera/Safari */
+          color: red;
+        }
+
+        ::-moz-placeholder { /* Firefox 19+ */
+          color: red;
+        }
+
+        :-moz-placeholder { /* Firefox 18- */
+          color: red;
+        }
+
+    </style>
+</head>
+
+<body onload="javascript:start();">
+    <script type="text/javascript">
+        var timer = 0;
+        var timeUpdateTimer = 0;
+        var homeTimer = 0;
+        var band = "2m";
+
+        var freq1FrequencyHz = "144520000";
+        var freq2FrequencyHz = "144530000";
+        var freq3FrequencyHz = "144540000";
+        var freq4FrequencyHz = "144550000";
+
+        var freq1HeaderText = "Fox Frequency";
+        var freq2HeaderText = "Finish Frequency";
+        var freq3HeaderText = "Spectator Frequency";
+        var freq4HeaderText = "Finish Frequency";
+
+        var stillConnected = false;
+        var lastPacketTime = 0;
+        var webSocketTxTimer = 0;
+        var lastSocketTxMessage;
+
+        ///////////////////////////////
+        // Settings
+        var masterCloneSetting;
+        var callsignSetting = "Callsign";
+        var classic2mIDSetting = "Finish - MO";
+        var classic80mIDSetting = "Finish - MO";
+        var sprint80mIDSetting = "Finish - MO";
+        var foxO_80mIDSetting = "Finish - MO"; 
+        var classic2MstartDateTimeSetting = "2018-01-01T00:00:00";
+        var classic2MfinishDateTimeSetting = "2018-01-01T00:00:00";
+        var classic80MstartDateTimeSetting = "2018-01-01T00:00:00";
+        var classic80MfinishDateTimeSetting = "2018-01-01T00:00:00";
+        var sprintStartDateTimeSetting = "2018-01-01T00:00:00";
+        var sprintFinishDateTimeSetting = "2018-01-01T00:00:00";
+        var foxOstartDateTimeSetting = "2018-01-01T00:00:00";
+        var foxOfinishDateTimeSetting = "2018-01-01T00:00:00";
+        var classic2mFoxFrequencySetting = "144500000"; // Classic event only (e.g., 144.500 MHz)
+        var classic2mFinishFrequencySetting = "144900000"; // Classic event only (e.g., 144.900 MHz)
+        var classic80mFoxFrequencySetting = "3510000"; // Classic event only (e.g., 3.510 MHz)
+        var classic80mFinishFrequencySetting = "3600000"; // Classic, Fox-O events only (e.g., 3.600 MHz)
+        var fox_O_80mFoxFrequency1Setting = "3510000"; // Fox-O event only (e.g., 3.510 MHz)
+        var fox_O_80mFoxFrequency2Setting = "3540000"; // Fox-O event only (e.g., 3.540 MHz)
+        var fox_O_80mFoxFrequency3Setting = "3570000"; // Fox-O event only (e.g., 3.570 MHz)
+        var fox_O_80mFinishFrequencySetting = "3600000"; // Fox-O event only (e.g., 3.570 MHz)
+        var sprintSpectator80mFrequencySetting = "3550000"; // Sprint event only (e.g., 3.550 MHz)
+        var sprintSlow80mFrequencySetting = "3530000"; // Sprint event only (e.g., 3.530 MHz)
+        var sprintFast80mFrequencySetting = "3570000"; // Sprint event only (e.g., 3.570 MHz)
+        var sprintFinish80mFrequencySetting = "3600000"; // Sprint event only (e.g., 3.600 MHz)
+
+        var bandSetting;
+        var macSetting;
+        ///////////////////////////////
+
+        var websock;
+
+        timeUpdateTimer = setInterval(function() {
+            updateTime();
+        }, 1000);
+
+        function start() {
+            var websocketcreated = true;
+            var host = String(window.location.hostname);
+
+            console.log("Host: " + host);
+
+            if(host.length > 0) {
+                try {
+                    websock = new WebSocket("ws://" + window.location.hostname + ":81/");
+                } catch (err) {
+                    document.getElementById("xmtrTime").innerHTML = "Disconnected";
+                    console.log("Unable to create web socket");
+                    websocketcreated = false;
+                    eventClick();
+                }
+            } else {
+                document.getElementById("xmtrTime").innerHTML = "Disconnected";
+                console.log("No websocket host available.");
+                websocketcreated = false;
+                eventClick();
+            }
+
+            if (websocketcreated == true) {
+                document.getElementById("xmtrTime").innerHTML = "Connected";
+
+                websock.onopen = function(evt) {
+                    console.log("websock open");
+                    websocketcreated = true;
+                    stillConnected = true;
+                    eventClick();
+                };
+
+                websock.onclose = function(evt) {
+                    console.log("websock close");
+                    if(websocketcreated == true) { // handle test case where server refuses websocket
+                        eventClick();
+                    }
+                    websocketcreated = false;
+                    stillConnected = false;
+                };
+
+                websock.onerror = function(evt) {
+                    console.log("Websock error: " + evt);
+                };
+
+                websock.onmessage = function(evt) {
+                    console.log(evt);
+                    var str = evt.data;
+                    var arr = str.split(",");
+
+                    stillConnected = true;
+
+                    switch (arr[0]) {
+
+                       case "EVENT_STATE": {
+                            var event = arr[1];
+                            eventSet(event);
+                            updateTextFormatting();
+                       }
+                            break;
+
+                       case "SYNC":
+                            document.getElementById("xmtrTime").innerHTML = arr[1];
+                            break;
+
+                        case "CLONE":
+                            document.getElementById("cloneText").value = arr[1];
+                            break;
+
+                        case "VERS":
+                            document.getElementById("version").value = arr[1];
+                            break;
+
+                        case "MAC":
+                            var t = "MAC: " + arr[1];
+                            document.getElementById("macAddress").innerHTML = t;
+                            console.log(t);
+                            break;
+
+//////////////////
+
+                        case "CALLSIGN":
+                            document.getElementById("callText").value = arr[1];
+                            break;
+
+                        case "CLASSIC_2M_FOX_ID":
+                            classic2mIDSetting = arr[1];
+                            break;
+
+                        case "CLASSIC_80M_FOX_ID":
+                            classic80mIDSetting = arr[1];
+                            break;
+
+                        case "SPRINT_80M_FOX_ID":
+                            sprint80mIDSetting = arr[1];
+                            break;
+
+                        case "FOX_O_80M_FOX_ID":
+                            foxO_80mIDSetting = arr[1];
+                            break;
+
+                        case "CLASSIC_2M_START_DATE_TIME":
+                            classic2MstartDateTimeSetting = arr[1];
+                            break;
+
+                        case "CLASSIC_2M_FINISH_DATE_TIME":
+                            classic2MfinishDateTimeSetting = arr[1];
+                            break;
+
+                        case "CLASSIC_80M_START_DATE_TIME":
+                            classic80MstartDateTimeSetting = arr[1];
+                            break;
+
+                        case "CLASSIC_80M_FINISH_DATE_TIME":
+                            classic80MfinishDateTimeSetting = arr[1];
+                            break;
+
+                        case "SPRINT_START_DATE_TIME":
+                            sprintStartDateTimeSetting = arr[1];
+                            break;
+
+                        case "SPRINT_FINISH_DATE_TIME":
+                            sprintFinishDateTimeSetting = arr[1];
+                            break;
+
+                        case "FOX_O_START_DATE_TIME":
+                            foxOstartDateTimeSetting = arr[1];
+                            break;
+
+                        case "FOX_O_FINISH_DATE_TIME":
+                            foxOfinishDateTimeSetting = arr[1];
+                            break;
+
+                        case "CLASSIC_2M_FOX_FREQ":
+                            classic2mFoxFrequencySetting = arr[1];
+                            freq1FrequencyHz = classic2mFoxFrequencySetting;
+                            freq1String(freq1FrequencyHz);
+                            break;
+
+                        case "CLASSIC_2M_FINISH_FREQ":
+                            classic2mFinishFrequencySetting = arr[1];
+                            freq2FrequencyHz = classic2mFinishFrequencySetting;
+                            freq2String(freq2FrequencyHz);
+                            break;
+
+                        case "CLASSIC_80M_FOX_FREQ":
+                            classic80mFoxFrequencySetting = arr[1];
+                            break;
+
+                        case "CLASSIC_80M_FINISH_FREQ":
+                            classic80mFinishFrequencySetting = arr[1];
+                            break;
+
+                        case "FOX_O_80M_FOX1_FREQ":
+                            fox_O_80mFoxFrequency1Setting = arr[1];
+                            break;
+
+                        case "FOX_O_80M_FOX2_FREQ":
+                            fox_O_80mFoxFrequency2Setting = arr[1];
+                            break;
+
+                        case "FOX_O_80M_FOX3_FREQ":
+                            fox_O_80mFoxFrequency3Setting = arr[1];
+                            break;
+
+                        case "FOX_O_80M_FINISH_FREQ":
+                            fox_O_80mFinishFrequencySetting = arr[1];
+                            break;
+
+                        case "SPRINT_80M_SPCECTATOR_FREQ":
+                            sprintSpectator80mFrequencySetting = arr[1];
+                            break;
+
+                        case "SPRINT_80M_SLOW_FREQ":
+                            sprintSlow80mFrequencySetting = arr[1];
+                            break;
+
+                        case "SPRINT_80M_FAST_FREQ":
+                            sprintFast80mFrequencySetting = arr[1];
+                            break;
+
+                        case "SPRINT_80M_FINISH_FREQ":
+                            sprintFinish80mFrequencySetting = arr[1];
+                            break;
+
+                        default:
+                            break;
+                    }
+                };
+            }
+        }
+
+        function clamp(min, num, max) {
+            return num <= min ? min : num >= max ? max : num;
+        }
+
+        function sendToSocket(msg) {
+            var now = Date.now();
+            var dif = now - lastPacketTime;
+
+            if (msg === lastSocketTxMessage) {
+                return;
+            }
+
+            if (webSocketTxTimer != 0) {
+                clearInterval(webSocketTxTimer);
+                webSocketTxTimer = 0;
+            }
+
+            if (dif > 100) {
+                if (stillConnected) websock.send(msg);
+                lastPacketTime = now;
+                lastSocketTxMessage = msg;
+            } else {
+                webSocketTxTimer = setInterval(function() {
+                    sendToSocket(msg);
+                }, 200);
+            }
+
+            console.log(now, lastPacketTime, dif);
+        }
+
+        function syncClock() {
+            var d = new Date();
+            var btext = d.toISOString();
+            btext = "SYNC," + btext;
+            console.log(btext);
+            sendToSocket(btext);
+        }
+
+        function sendClone() {
+            btext = "CLONE," + masterCloneSetting;
+            console.log(btext);
+            sendToSocket(btext);
+        }
+
+        function sendCall() {
+            var btext = document.getElementById("callText").value;
+            btext = "CALL," + btext;
+            console.log(btext);
+            sendToSocket(btext);
+        }
+
+        function sendEvent() {
+            var btext = document.getElementById("eventText").value;
+            btext = "EVENT_STATE," + btext;
+            console.log(btext);
+            sendToSocket(btext);
+        }
+
+        function sendTime(timeVal, timeType) {
+            var d = new Date(forceValueToLocalTime(timeVal));
+ 
+            try {
+                var tText = timeType + "," + d.toISOString();
+                console.log(tText);
+                sendToSocket(tText);
+            } catch (err) {
+                console.log("sendTime() failed: " + err);
+            }
+        }
+
+//        function sendBand() {
+//            var btext = document.getElementById("bandText").value;
+//            btext = "BAND," + btext;
+//            console.log(btext);
+//            sendToSocket(btext);
+//        }
+
+        function sendFreq(freq, row) {
+            var etext = document.getElementById("eventText");
+            var msgText = "";
+
+            if (etext.value.indexOf("Classic") >= 0) {
+                if(etext.value.indexOf("2m") >= 0) {
+                    switch(row) {
+                        case 1: {
+                            msgText = "FREQ_C2M_FOX," + freq;
+                        }
+                        break;
+
+                        case 2: {
+                            msgText = "FREQ_C2M_FIN," + freq;
+                        }
+                        break;
+
+                        default: {
+                        }
+                        break;
+                    }
+                } else {
+                    switch(row) {
+                        case 1: {
+                            msgText = "FREQ_C80M_FOX," + freq;
+                        }
+                        break;
+
+                        case 2: {
+                            msgText = "FREQ_C80M_FIN," + freq;
+                        }
+                        break;
+
+                        default: {
+                        }
+                        break;
+                    }
+                }
+
+            } else if (etext.value.indexOf("Sprint") >= 0) {
+                switch(row) {
+                    case 1: {
+                        msgText = "FREQ_S80M_FFOX," + freq;
+                    }
+                    break;
+
+                    case 2: {
+                        msgText = "FREQ_S80M_SFOX," + freq;
+                    }
+                    break;
+
+                    case 3: {
+                        msgText = "FREQ_S80M_SPEC," + freq;
+                    }
+                    break;
+
+                    case 4: {
+                        msgText = "FREQ_S80M_FIN," + freq;
+                    }
+                    break;
+
+                    default: {
+                    }
+                    break;
+                }
+            } else {
+                switch(row) {
+                    case 1: {
+                        msgText = "FREQ_F80M_FOX1," + freq;
+                    }
+                    break;
+
+                    case 2: {
+                        msgText = "FREQ_F80M_FOX2," + freq;
+                    }
+                    break;
+
+                    case 3: {
+                        msgText = "FREQ_F80M_FOX3," + freq;
+                    }
+                    break;
+
+                    case 4: {
+                        msgText = "FREQ_F80M_FIN," + freq;
+                    }
+                    break;
+
+                    default: {
+                    }
+                    break;
+                }
+            }
+
+            console.log(msgText);
+
+            if(msgText.length != 0) {
+                sendToSocket(msgText);
+            }
+        }
+
+        function masterClick() {
+            var checkBox = document.getElementById("masterCheckBox");
+            if (checkBox.checked == true) {
+                masterCloneSetting = "Master";
+            } else {
+                masterCloneSetting = "Clone";
+            }
+
+            sendClone();
+        }
+
+        function callSignEntered() {
+            var x = document.getElementById("callText");
+            var callString = x.value;
+            var isValid = false;
+
+            if (hasNumber(callString) && hasAlpha(callString) && (callString.length > 2)) {
+                x.style.color = "blue";
+                isValid = true;
+            } else {
+                x.style.color = "red";
+            }
+            
+            if (isValid == true) {
+              sendCall();
+            }
+        }
+
+        function foxClick() {
+            var etext = document.getElementById("eventText");
+            var foxtext = document.getElementById("txIDText");
+            var x;
+            var msgText = "";
+
+            if (etext.value.indexOf("Classic") >= 0) {
+                x = document.getElementById("classicFoxes");
+            } else if (etext.value.indexOf("Sprint") >= 0) {
+                x = document.getElementById("sprintFoxes");
+            } else {
+                x = document.getElementById("foxoFoxes");
+            }
+
+            var i;
+            var found = false;
+            for (i = 0; i < x.options.length; i++) {
+                if (x.options[i].value == foxtext.value) {
+                    i = (i + 1) % x.options.length;
+                    foxtext.value = x.options[i].value;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (found == false) {
+                foxtext.value = x.options[0].value;
+            }
+
+            if (etext.value.indexOf("Classic") >= 0) {
+                if(etext.value.indexOf("2m") >= 0) {
+                    classic2mIDSetting = foxtext.value;
+                    msgText = "CLASSIC_2M_FOX_ID," + classic2mIDSetting;
+                } else {
+                    classic80mIDSetting = foxtext.value;
+                    msgText = "CLASSIC_80M_FOX_ID," + classic80mIDSetting;
+                }
+            } else if (etext.value.indexOf("Sprint") >= 0) {
+                sprint80mIDSetting =  foxtext.value;
+                msgText = "SPRINT_80M_FOX_ID," + sprint80mIDSetting;
+            } else {
+                foxO_80mIDSetting = foxtext.value;
+                msgText = "FOX_O_80M_FOX_ID," + foxO_80mIDSetting;
+            }
+
+
+            console.log(msgText);
+
+            if(msgText.length != 0) {
+                sendToSocket(msgText);
+            }
+        }
+
+        function eventSet(event) {
+            var startTime = document.getElementById("datetimeStart");
+            var finishTime = document.getElementById("datetimeFinish");
+            var freqText1_style = document.getElementById('freqSet1').style;
+            var freqText2_style = document.getElementById('freqSet2').style;
+            var freqText3_style = document.getElementById('freqSet3').style;
+            var freqText4_style = document.getElementById('freqSet4').style;
+            var foxtext = document.getElementById("txIDText");
+            var btext = document.getElementById("bandText");
+            var etext = document.getElementById("eventText");
+            var x = document.getElementById("events");
+
+            var i;
+            var found = false;
+            for (i = 0; i < x.options.length; i++) {
+                if (x.options[i].value == event) {
+                    etext.value = event;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (found == false) {
+                etext.value = x.options[0].value;
+            }
+
+            if (etext.value.indexOf("Classic") >= 0) {
+                var freq1heading = document.getElementById('freqSet1Heading');
+                var freq2heading = document.getElementById('freqSet2Heading');
+
+                showFreqSet1();
+                showFreqSet2();
+                hideFreqSet3();
+                hideFreqSet4();
+
+                freq1heading.innerHTML = "Foxes Frequency";
+                freq2heading.innerHTML = "Finish Frequency";
+
+                if (etext.value.indexOf("2m") >= 0) {
+                    band = "2m";
+                    freq1FrequencyHz = classic2mFoxFrequencySetting;
+                    freq2FrequencyHz = classic2mFinishFrequencySetting;
+                    btext.value = "2m";
+                    foxtext.value = classic2mIDSetting;
+                    startTime.value = classic2MstartDateTimeSetting;
+                    finishTime.value = classic2MfinishDateTimeSetting;
+                } else {
+                    band = "80m";
+                    freq1FrequencyHz = classic80mFoxFrequencySetting;
+                    freq2FrequencyHz = classic80mFinishFrequencySetting;
+                    btext.value = "80m";
+                    foxtext.value = classic80mIDSetting;
+                    startTime.value = classic80MstartDateTimeSetting;
+                    finishTime.value = classic80MfinishDateTimeSetting;
+                }
+
+                freq1String(freq1FrequencyHz);
+                freq2String(freq2FrequencyHz);
+                resetFreq1Slider();
+                resetFreq2Slider();
+
+            } else if (etext.value.indexOf("Sprint") >= 0) {
+                showFreqSet1();
+                showFreqSet2();
+                showFreqSet3();
+                showFreqSet4();
+
+                var freq1heading = document.getElementById('freqSet1Heading');
+                var freq2heading = document.getElementById('freqSet2Heading');
+                var freq3heading = document.getElementById('freqSet3Heading');
+                var freq4heading = document.getElementById('freqSet4Heading');
+
+                freq1heading.innerHTML = "Fast Frequency";
+                freq2heading.innerHTML = "Slow Frequency";
+                freq3heading.innerHTML = "Spectator Frequency";
+                freq4heading.innerHTML = "Finish Frequency";
+
+                freq1FrequencyHz = sprintFast80mFrequencySetting;
+                freq2FrequencyHz = sprintSlow80mFrequencySetting;
+                freq3FrequencyHz = sprintSpectator80mFrequencySetting;
+                freq4FrequencyHz = sprintFinish80mFrequencySetting;
+
+                freq1String(freq1FrequencyHz);
+                freq2String(freq2FrequencyHz);
+                freq3String(freq3FrequencyHz);
+                freq4String(freq4FrequencyHz);
+
+                resetFreq1Slider();
+                resetFreq2Slider();
+                resetFreq3Slider();
+                resetFreq4Slider();
+
+                btext.value = "80m";
+                foxtext.value = sprint80mIDSetting;
+                startTime.value = sprintStartDateTimeSetting;
+                finishTime.value = sprintFinishDateTimeSetting;
+
+            } else {
+                showFreqSet1();
+                showFreqSet2();
+                showFreqSet3();
+                showFreqSet4();
+
+                var freq1heading = document.getElementById('freqSet1Heading');
+                var freq2heading = document.getElementById('freqSet2Heading');
+                var freq3heading = document.getElementById('freqSet3Heading');
+                var freq4heading = document.getElementById('freqSet4Heading');
+
+                freq1heading.innerHTML = "Fox Frequency 1";
+                freq2heading.innerHTML = "Fox Frequency 2";
+                freq3heading.innerHTML = "Fox Frequency 3";
+                freq4heading.innerHTML = "Finish Frequency";
+
+                freq1FrequencyHz = fox_O_80mFoxFrequency1Setting;
+                freq2FrequencyHz = fox_O_80mFoxFrequency2Setting;
+                freq3FrequencyHz = fox_O_80mFoxFrequency3Setting;
+                freq4FrequencyHz = fox_O_80mFinishFrequencySetting;
+
+                freq1String(freq1FrequencyHz);
+                freq2String(freq2FrequencyHz);
+                freq3String(freq3FrequencyHz);
+                freq4String(freq4FrequencyHz);
+
+                resetFreq1Slider();
+                resetFreq2Slider();
+                resetFreq3Slider();
+                resetFreq4Slider();
+
+                btext.value = "80m";
+                foxtext.value = foxO_80mIDSetting;
+                startTime.value = foxOstartDateTimeSetting;
+                finishTime.value = foxOfinishDateTimeSetting;
+
+            }
+
+//            sendEvent();
+//            updateTextFormatting();
+        }
+
+        function eventClick() {
+            var etext = document.getElementById("eventText");
+            var x = document.getElementById("events");
+            var event;
+
+            var i;
+            var found = false;
+            for (i = 0; i < x.options.length; i++) {
+                if (x.options[i].value == etext.value) {
+                    i = (i + 1) % x.options.length;
+                    event = x.options[i].value;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (found == false) {
+                event = x.options[0].value;
+            }
+
+            eventSet(event);
+
+            sendEvent();
+            updateTextFormatting();
+        }
+
+        function forceValueToLocalTime(val) {
+            var sub = val.slice(0, 16); // remove seconds
+            sub = sub + "Z"; // for to UTC
+            var tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
+            var d = new Date(sub);
+            var t = d.getTime() + tzoffset;
+            var localISOTime = "";
+            if(t>0) {
+                 localISOTime = (new Date(t)).toISOString();
+            }
+            return localISOTime;   
+        }
+
+//        function forceValueToUTCTime(val) {
+//            var sub = val.slice(0, 16); // remove seconds
+//            sub = sub + "Z"; // for to UTC
+//            var tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
+//            var d = new Date(sub);
+//            var t = d.getTime() + tzoffset;
+//            var localISOTime = "";
+//            if(t>0) {
+//                 localISOTime = (new Date(t)).toISOString();
+//            }
+//            return localISOTime;   
+//        }
+
+        function updateTime() {
+            var date = Date();
+            document.getElementById("currentTime").innerHTML = date;
+            updateTextFormatting();
+        }
+
+        function newStartTime() {
+            var etext = document.getElementById("eventText");
+            var s = document.getElementById("datetimeStart").value;
+
+            if (etext.value.indexOf("Classic 2m") >= 0) {
+                classic2MstartDateTimeSetting = s;
+                sendTime(s, "START_C2M");
+            } else if (etext.value.indexOf("Classic 80m") >= 0) {
+                classic80MstartDateTimeSetting = s;
+                sendTime(s, "START_C80M");
+            } else if (etext.value.indexOf("Sprint") >= 0) {
+                sprintStartDateTimeSetting = s;
+                sendTime(s, "START_S80M");
+            } else {
+                foxOstartDateTimeSetting = s;
+                sendTime(s, "START_F80M");
+            }
+        }
+
+        function newFinishTime() {
+            var etext = document.getElementById("eventText");
+            var s = document.getElementById("datetimeFinish").value;
+
+            if (etext.value.indexOf("Classic 2m") >= 0) {
+                classic2MfinishDateTimeSetting = s;
+                sendTime(s, "FINISH_C2M");
+            } else if (etext.value.indexOf("Classic 80m") >= 0) {
+                classic80MfinishDateTimeSetting = s;
+                sendTime(s, "FINISH_C80M");
+            } else if (etext.value.indexOf("Sprint") >= 0) {
+                sprintFinishDateTimeSetting = s;
+                sendTime(s, "FINISH_S80M");
+            } else {
+                foxOfinishDateTimeSetting = s;
+                sendTime(s, "FINISH_F80M");
+            }
+        }
+
+        function hasNumber(myString) {
+            return /\d/.test(myString);
+        }
+
+        function hasAlpha(myString) {
+            return /\D/.test(myString);
+        }
+
+        function updateTextFormatting() {
+            var callsignText = document.getElementById("callText");
+            var callString = String(callsignText.value);
+
+            if(stillConnected == false)
+            {
+                var fTime = document.getElementById("xmtrTime");
+
+                fTime.innerHTML = "Disconnected";
+                fTime.style.color = "red";
+            }
+
+            if (hasNumber(callString) && hasAlpha(callString) && (callString.length > 2)) {
+                callsignText.style.color = "blue";
+            } else {
+                callsignText.style.color = "red";
+            }
+
+            var startTime = document.getElementById("datetimeStart");
+            var finishTime = document.getElementById("datetimeFinish");
+            var startTimeMsg = document.getElementById("startTimeMsg");
+            var finishTimeMsg = document.getElementById("finishTimeMsg");
+            var txt = startTime.value;
+
+            var ss = new Date(forceValueToLocalTime(startTime.value));
+            var fs = new Date(forceValueToLocalTime(finishTime.value));
+            var ns = new Date();
+     
+            var n = ns.getTime();
+            var f = fs.getTime();
+            var s = ss.getTime();
+
+            startTimeMsg.style.color = "black";
+            finishTimeMsg.style.color = "black";
+
+            if (n > s) {
+                if (n > f) {
+                    startTimeMsg.style.color = "red";
+                    startTimeMsg.innerHTML = "&lt;Event Disabled";
+                    finishTimeMsg.innerHTML = "";
+                    startTime.style.color = "gray";
+                    finishTime.style.color = "gray";
+                } else if ((f - n) > 10) {
+                    startTimeMsg.innerHTML = "&lt;Manual Start";
+                    startTime.style.color = "gray";
+                    finishTime.style.color = "blue";
+                    var duration = Math.ceil((f - n) / 60000);
+                    var msg = "&lt;in " + duration + " mins";
+                    finishTimeMsg.innerHTML = msg;
+                } else {
+                    finishTime.style.color = "red";
+                    finishTimeMsg.style.color = "red";
+                    finishTimeMsg.innerHTML = "&lt;Event Too Short!";
+                }
+            } else {
+                startTime.style.color = "blue";
+                startTimeMsg.innerHTML = "&lt;Timed Start";
+
+                if (s > f) {
+                    finishTimeMsg.innerHTML = "&lt;Never Ends";
+                    finishTime.style.color = "gray";
+                } else if ((f - s) > 10) {
+                    finishTime.style.color = "blue";
+                    var duration = (f - s) / 60000;
+                    var msg = "&lt; " + duration + " mins";
+                    finishTimeMsg.innerHTML = msg;
+                } else {
+                    finishTime.style.color = "red";
+                    finishTimeMsg.style.color = "red";
+                    finishTimeMsg.innerHTML = "&lt;Event Too Short!";
+                }
+
+            }
+
+            var freq1 = document.getElementById("freq1Text");
+            var freq2 = document.getElementById("freq2Text");
+
+            var b = document.getElementById("bandText");
+            var dif12, dif13, dif14, dif23, dif24, dif34;
+
+            if (freq1 && freq2) {
+                dif12 = Math.abs(Number(freq1FrequencyHz) - Number(freq2FrequencyHz))
+
+                var freq3 = document.getElementById("freq3Text");
+                var freq4 = document.getElementById("freq4Text");
+                var etext = document.getElementById("eventText");
+
+                if (etext.value.indexOf("Classic") >= 0) {
+                    dif13 = 999999;
+                    dif14 = 999999;
+                    dif23 = 999999;
+                    dif24 = 999999;
+                    dif34 = 999999;
+                } else {
+                    if (freq3 && freq4) {
+                        dif13 = Math.abs(Number(freq1FrequencyHz) - Number(freq3FrequencyHz));
+                        dif14 = Math.abs(Number(freq1FrequencyHz) - Number(freq4FrequencyHz));
+                        dif23 = Math.abs(Number(freq2FrequencyHz) - Number(freq3FrequencyHz));
+                        dif24 = Math.abs(Number(freq2FrequencyHz) - Number(freq4FrequencyHz));
+                        dif34 = Math.abs(Number(freq3FrequencyHz) - Number(freq4FrequencyHz));
+
+                        if (b.value == "2m") {
+                            if ((Number(freq3FrequencyHz) < 144500000) || (Number(freq3FrequencyHz) > 144900000) || (dif13 < 200000) || (dif23 < 200000) || (dif34 < 200000)) {
+                                freq3.style.color = "red";
+                            } else {
+                                freq3.style.color = "blue";
+                            }
+
+                            if ((Number(freq4FrequencyHz) < 144500000) || (Number(freq4FrequencyHz) > 144900000) || (dif14 < 200000) || (dif24 < 200000) || (dif34 < 200000)) {
+                                freq4.style.color = "red";
+                            } else {
+                                freq4.style.color = "blue";
+                            }
+                        } else {
+                            if ((freq3FrequencyHz < 3510000) || (freq3FrequencyHz > 3600000) || (dif13 < 20000) || (dif23 < 20000) || (dif34 < 30000)) {
+                                freq3.style.color = "red";
+                            } else {
+                                freq3.style.color = "blue";
+                            }
+
+                            if ((freq4FrequencyHz < 3510000) || (freq4FrequencyHz > 3600000) || (dif14 < 20000) || (dif24 < 20000) || (dif34 < 30000)) {
+                                freq4.style.color = "red";
+                            } else {
+                                freq4.style.color = "blue";
+                            }
+                        }
+                    }
+                }
+
+                if (b.value == "2m") {
+                    if ((Number(freq1FrequencyHz) < 144500000) || (Number(freq1FrequencyHz) > 144900000) || (dif12 < 200000) || (dif13 < 200000) || (dif14 < 200000)) {
+                        freq1.style.color = "red";
+                    } else {
+                        freq1.style.color = "blue";
+                    }
+
+                    if ((Number(freq2FrequencyHz) < 144500000) || (Number(freq2FrequencyHz) > 144900000) || (dif12 < 200000) || (dif23 < 200000) || (dif24 < 200000)) {
+                        freq2.style.color = "red";
+                    } else {
+                        freq2.style.color = "blue";
+                    }
+                } else {
+                    if ((freq1FrequencyHz < 3510000) || (freq1FrequencyHz > 3600000) || (dif12 < 20000) || (dif13 < 20000) || (dif14 < 30000)) {
+                        freq1.style.color = "red";
+                    } else {
+                        freq1.style.color = "blue";
+                    }
+
+                    if ((freq2FrequencyHz < 3510000) || (freq2FrequencyHz > 3600000) || (dif12 < 20000) || (dif23 < 20000) || (dif24 < 30000)) {
+                        freq2.style.color = "red";
+                    } else {
+                        freq2.style.color = "blue";
+                    }
+                }
+            }
+
+            var fTime = document.getElementById("xmtrTime");
+
+            if (fTime.innerHTML.indexOf("Disconnected") !== -1) {
+                fTime.style.color = "red";
+            } else {
+                fTime.style.color = "black";
+            }
+        }
+
+        function pad(num, size) {
+            var s = "000000000" + num;
+            return s.substr(s.length - size);
+        }
+
+        ////////////////////////////////////////////////////////////
+
+        function freq1Change() {
+            var freq = document.querySelector("#freq");
+            var count = document.querySelector(".freq1val");
+            var f = Math.floor(freq.value);
+
+            if (f > 0) {
+                count.textContent = "\xa0\xa0>\xa0\xa0\xa0>>\xa0\xa0\xa0>>>";
+            } else if (f < 0) {
+                count.textContent = "<<<\xa0\xa0\xa0<<\xa0\xa0\xa0<\xa0\xa0";
+            } else {
+                count.textContent = "<<<\xa0\xa0\xa0<<\xa0\xa0\xa0<\xa0\xa0\xa0>\xa0\xa0\xa0>>\xa0\xa0\xa0>>>";
+            }
+
+            if (timer != 0) {
+                clearInterval(timer);
+                timer = 0;
+            }
+
+            if (f != 0) {
+                if (f < 0) f = -f;
+                var time = 500 - (5 * f);
+                timer = setInterval(function() {
+                    incFreq1();
+                }, time);
+            }
+        }
+
+        function freq2Change() {
+            var freq = document.querySelector("#freq2");
+            var count = document.querySelector(".freq2val");
+            var f = Math.floor(freq.value);
+
+            if (f > 0) {
+                count.textContent = "\xa0\xa0>\xa0\xa0\xa0>>\xa0\xa0\xa0>>>";
+            } else if (f < 0) {
+                count.textContent = "<<<\xa0\xa0\xa0<<\xa0\xa0\xa0<\xa0\xa0";
+            } else {
+                count.textContent = "<<<\xa0\xa0\xa0<<\xa0\xa0\xa0<\xa0\xa0\xa0>\xa0\xa0\xa0>>\xa0\xa0\xa0>>>";
+            }
+
+            if (homeTimer != 0) {
+                clearInterval(homeTimer);
+                homeTimer = 0;
+            }
+
+            if (f != 0) {
+                if (f < 0) f = -f;
+                var time = 500 - (5 * f);
+                homeTimer = setInterval(function() {
+                    incFreq2();
+                }, time);
+            }
+        }
+
+        function freq3Change() {
+            var freq = document.querySelector("#freq3");
+            var count = document.querySelector(".freq3val");
+            var f = Math.floor(freq.value);
+
+            if (f > 0) {
+                count.textContent = "\xa0\xa0>\xa0\xa0\xa0>>\xa0\xa0\xa0>>>";
+            } else if (f < 0) {
+                count.textContent = "<<<\xa0\xa0\xa0<<\xa0\xa0\xa0<\xa0\xa0";
+            } else {
+                count.textContent = "<<<\xa0\xa0\xa0<<\xa0\xa0\xa0<\xa0\xa0\xa0>\xa0\xa0\xa0>>\xa0\xa0\xa0>>>";
+            }
+
+            if (timer != 0) {
+                clearInterval(timer);
+                timer = 0;
+            }
+
+            if (f != 0) {
+                if (f < 0) f = -f;
+                var time = 500 - (5 * f);
+                timer = setInterval(function() {
+                    incFreq3();
+                }, time);
+            }
+        }
+
+        function freq4Change() {
+            var freq = document.querySelector("#freq4");
+            var count = document.querySelector(".freq4val");
+            var f = Math.floor(freq.value);
+
+            if (f > 0) {
+                count.textContent = "\xa0\xa0>\xa0\xa0\xa0>>\xa0\xa0\xa0>>>";
+            } else if (f < 0) {
+                count.textContent = "<<<\xa0\xa0\xa0<<\xa0\xa0\xa0<\xa0\xa0";
+            } else {
+                count.textContent = "<<<\xa0\xa0\xa0<<\xa0\xa0\xa0<\xa0\xa0\xa0>\xa0\xa0\xa0>>\xa0\xa0\xa0>>>";
+            }
+
+            if (homeTimer != 0) {
+                clearInterval(homeTimer);
+                homeTimer = 0;
+            }
+
+            if (f != 0) {
+                if (f < 0) f = -f;
+                var time = 500 - (5 * f);
+                homeTimer = setInterval(function() {
+                    incFreq4();
+                }, time);
+            }
+        }
+
+        ////////////////////////////////////////////////////////////
+
+        function incFreq1Click() {
+            var val;
+
+            if (band == "2m") {
+                val = Number(freq1FrequencyHz) + 5000;
+
+                freq1FrequencyHz = clamp(Number("144000000"), val, Number("148000000"));
+            } else {
+                val = Number(freq1FrequencyHz) + 100;
+
+                freq1FrequencyHz = clamp(Number("3500000"), val, Number("4000000"));
+            }
+
+            freq1String(freq1FrequencyHz)
+            sendFreq(freq1FrequencyHz, 1);
+        }
+
+        function incFreq2Click() {
+            var val;
+
+            if (band == "2m") {
+                val = Number(freq2FrequencyHz) + 5000;
+
+                freq2FrequencyHz = clamp(Number("144000000"), val, Number("148000000"));
+            } else {
+                val = Number(freq2FrequencyHz) + 100;
+
+                freq2FrequencyHz = clamp(Number("3500000"), val, Number("4000000"));
+            }
+
+            freq2String(freq2FrequencyHz);
+            sendFreq(freq2FrequencyHz, 2);
+        }
+
+        function incFreq3Click() {
+            var val;
+
+            if (band == "2m") {
+                val = Number(freq3FrequencyHz) + 5000;
+
+                freq3FrequencyHz = clamp(Number("144000000"), val, Number("148000000"));
+            } else {
+                val = Number(freq3FrequencyHz) + 100;
+
+                freq3FrequencyHz = clamp(Number("3500000"), val, Number("4000000"));
+            }
+
+            freq3String(freq3FrequencyHz)
+            sendFreq(freq3FrequencyHz, 3);
+        }
+
+        function incFreq4Click() {
+            var val;
+
+            if (band == "2m") {
+                val = Number(freq4FrequencyHz) + 5000;
+
+                freq4FrequencyHz = clamp(Number("144000000"), val, Number("148000000"));
+            } else {
+                val = Number(freq4FrequencyHz) + 100;
+
+                freq4FrequencyHz = clamp(Number("3500000"), val, Number("4000000"));
+            }
+
+            freq4String(freq4FrequencyHz)
+            sendFreq(freq4FrequencyHz, 4);
+        }
+
+        ////////////////////////////////////////////////////////////
+
+        function decFreq1Click() {
+            var val;
+
+            if (band == "2m") {
+                val = Number(freq1FrequencyHz) - 5000;
+
+                freq1FrequencyHz = clamp(Number("144000000"), val, Number("148000000"));
+            } else {
+                val = Number(freq1FrequencyHz) - 100;
+
+                freq1FrequencyHz = clamp(Number("3500000"), val, Number("4000000"));
+            }
+
+            freq1String(freq1FrequencyHz)
+            sendFreq(freq1FrequencyHz, 1);
+       }
+
+        function decFreq2Click() {
+            var val;
+
+            if (band == "2m") {
+                val = Number(freq2FrequencyHz) - 5000;
+
+                freq2FrequencyHz = clamp(Number("144000000"), val, Number("148000000"));
+            } else {
+                val = Number(freq2FrequencyHz) - 100;
+
+                freq2FrequencyHz = clamp(Number("3500000"), val, Number("4000000"));
+            }
+
+            freq2String(freq2FrequencyHz);
+            sendFreq(freq2FrequencyHz, 2);
+        }
+
+        function decFreq3Click() {
+            var val;
+
+            if (band == "2m") {
+                val = Number(freq3FrequencyHz) - 5000;
+
+                freq3FrequencyHz = clamp(Number("144000000"), val, Number("148000000"));
+            } else {
+                val = Number(freq3FrequencyHz) - 100;
+
+                freq3FrequencyHz = clamp(Number("3500000"), val, Number("4000000"));
+            }
+
+            freq3String(freq3FrequencyHz)
+            sendFreq(freq3FrequencyHz, 3);
+        }
+
+        function decFreq4Click() {
+            var val;
+
+            if (band == "2m") {
+                val = Number(freq4FrequencyHz) - 5000;
+
+                freq4FrequencyHz = clamp(Number("144000000"), val, Number("148000000"));
+            } else {
+                val = Number(freq4FrequencyHz) - 100;
+
+                freq4FrequencyHz = clamp(Number("3500000"), val, Number("4000000"));
+            }
+
+            freq4String(freq4FrequencyHz)
+            sendFreq(freq4FrequencyHz, 4);
+        }
+
+        ////////////////////////////////////////////////////////////
+
+        function incFreq1() {
+            var ftext = document.getElementById("freq1Text");
+            var freq = document.querySelector("#freq");
+            var f = Math.floor(Number(freq.value));
+            var val;
+
+            if (f != 0) {
+                if (band == "2m") {
+                    if (f < 0) {
+                        val = Number(freq1FrequencyHz) - 5000;
+                    } else {
+                        val = Number(freq1FrequencyHz) + 5000;
+                    }
+
+                    freq1FrequencyHz = clamp(Number("144000000"), val, Number("148000000"));
+                } else {
+                    if (f < 0) {
+                        val = Number(freq1FrequencyHz) - 100;
+                    } else {
+                        val = Number(freq1FrequencyHz) + 100;
+                    }
+
+                    freq1FrequencyHz = clamp(Number("3500000"), val, Number("4000000"));
+                }
+
+                freq1String(freq1FrequencyHz);
+                sendFreq(freq1FrequencyHz, 1);
+            } else {
+                clearInterval(timer);
+                timer = 0;
+            }
+        }
+
+        function incFreq2() {
+            var ftext = document.getElementById("freq2Text");
+            var freq = document.querySelector("#freq2");
+            var f = Math.floor(Number(freq.value));
+            var val;
+
+            if (f != 0) {
+                if (band == "2m") {
+                    if (f < 0) {
+                        val = Number(freq2FrequencyHz) - 5000;
+
+                    } else {
+                        val = Number(freq2FrequencyHz) + 5000;
+                    }
+
+                    freq2FrequencyHz = clamp(Number("144000000"), val, Number("148000000"));
+                } else {
+                    if (f < 0) {
+                        val = Number(freq2FrequencyHz) - 100;
+                    } else {
+                        val = Number(freq2FrequencyHz) + 100;
+                    }
+
+                    freq2FrequencyHz = clamp(Number("3500000"), val, Number("4000000"));
+                }
+
+                freq2String(freq2FrequencyHz);
+                sendFreq(freq2FrequencyHz, 2);
+            } else {
+                clearInterval(homeTimer);
+                homeTimer = 0;
+            }
+        }
+
+        function incFreq3() {
+            var ftext = document.getElementById("freq3Text");
+            var freq = document.querySelector("#freq3");
+            var f = Math.floor(Number(freq.value));
+            var val;
+
+            if (f != 0) {
+                if (band == "2m") {
+                    if (f < 0) {
+                        val = Number(freq3FrequencyHz) - 5000;
+                    } else {
+                        val = Number(freq3FrequencyHz) + 5000;
+                    }
+
+                    freq3FrequencyHz = clamp(Number("144000000"), val, Number("148000000"));
+                } else {
+                    if (f < 0) {
+                        val = Number(freq3FrequencyHz) - 100;
+                    } else {
+                        val = Number(freq3FrequencyHz) + 100;
+                    }
+
+                    freq3FrequencyHz = clamp(Number("3500000"), val, Number("4000000"));
+                }
+
+                freq3String(freq3FrequencyHz);
+                sendFreq(freq3FrequencyHz, 3);
+            } else {
+                clearInterval(timer);
+                timer = 0;
+            }
+        }
+
+        function incFreq4() {
+            var ftext = document.getElementById("freq4Text");
+            var freq = document.querySelector("#freq4");
+            var f = Math.floor(Number(freq.value));
+            var val;
+
+            if (f != 0) {
+                if (band == "2m") {
+                    if (f < 0) {
+                        val = Number(freq4FrequencyHz) - 5000;
+
+                    } else {
+                        val = Number(freq4FrequencyHz) + 5000;
+                    }
+
+                    freq4FrequencyHz = clamp(Number("144000000"), val, Number("148000000"));
+                } else {
+                    if (f < 0) {
+                        val = Number(freq4FrequencyHz) - 100;
+                    } else {
+                        val = Number(freq4FrequencyHz) + 100;
+                    }
+
+                    freq4FrequencyHz = clamp(Number("3500000"), val, Number("4000000"));
+                }
+
+                freq4String(freq4FrequencyHz);
+                sendFreq(freq4FrequencyHz, 4);
+            } else {
+                clearInterval(homeTimer);
+                homeTimer = 0;
+            }
+        }
+
+        ////////////////////////////////////////////////////////////
+
+        function resetFreq1Slider() {
+            var freq = document.querySelector("#freq");
+            var count = document.querySelector(".freq1val");
+
+            freq.value = 0;
+            count.textContent = "<<<\xa0\xa0\xa0<<\xa0\xa0\xa0<\xa0\xa0\xa0>\xa0\xa0\xa0>>\xa0\xa0\xa0>>>";
+        }
+
+        function resetFreq2Slider() {
+            var freq = document.querySelector("#freq2");
+            var count = document.querySelector(".freq2val");
+
+            freq.value = 0;
+            count.textContent = "<<<\xa0\xa0\xa0<<\xa0\xa0\xa0<\xa0\xa0\xa0>\xa0\xa0\xa0>>\xa0\xa0\xa0>>>";
+        }
+
+        function resetFreq3Slider() {
+            var freq = document.querySelector("#freq3");
+            var count = document.querySelector(".freq3val");
+
+            freq.value = 0;
+            count.textContent = "<<<\xa0\xa0\xa0<<\xa0\xa0\xa0<\xa0\xa0\xa0>\xa0\xa0\xa0>>\xa0\xa0\xa0>>>";
+        }
+
+        function resetFreq4Slider() {
+            var freq = document.querySelector("#freq4");
+            var count = document.querySelector(".freq4val");
+
+            freq.value = 0;
+            count.textContent = "<<<\xa0\xa0\xa0<<\xa0\xa0\xa0<\xa0\xa0\xa0>\xa0\xa0\xa0>>\xa0\xa0\xa0>>>";
+        }
+
+        ////////////////////////////////////////////////////////////
+
+        function freq1String(myString) {
+            var fox = document.getElementById("freq1Text");
+            var val = Number(myString);
+            var newString = String(Math.floor(val / 1000000)) + "." + pad(Math.floor(((val % 1000000) / 1000)), 3) + "." + pad((val % 1000), 3);
+            if (fox) fox.value = newString;
+        }
+
+        function freq2String(myString) {
+            var f = document.getElementById("freq2Text");
+            var val = Number(myString);
+            var newString = String(Math.floor(val / 1000000)) + "." + pad(Math.floor(((val % 1000000) / 1000)), 3) + "." + pad((val % 1000), 3);
+            if (f) f.value = newString;
+        }
+
+        function freq3String(myString) {
+            var f = document.getElementById("freq3Text");
+            var val = Number(myString);
+            var newString = String(Math.floor(val / 1000000)) + "." + pad(Math.floor(((val % 1000000) / 1000)), 3) + "." + pad((val % 1000), 3);
+            if (f) f.value = newString;
+        }
+
+        function freq4String(myString) {
+            var f = document.getElementById("freq4Text");
+            var val = Number(myString);
+            var newString = String(Math.floor(val / 1000000)) + "." + pad(Math.floor(((val % 1000000) / 1000)), 3) + "." + pad((val % 1000), 3);
+            if (f) f.value = newString;
+        }
+
+        ////////////////////////////////////////////////////////////
+
+        function showFreqSet1() {
+            var x = document.getElementById("freqSet1");
+            x.style.display = "block";
+
+        }
+
+        function hideFreqSet1() {
+            var x = document.getElementById("freqSet1");
+            x.style.display = "none";
+        }
+
+        ////////////
+
+        function showFreqSet2() {
+            var x = document.getElementById("freqSet2");
+            x.style.display = "block";
+
+        }
+
+        function hideFreqSet2() {
+            var x = document.getElementById("freqSet2");
+            x.style.display = "none";
+        }
+
+        ////////////
+
+        function showFreqSet3() {
+            var x = document.getElementById("freqSet3");
+            x.style.display = "block";
+
+        }
+
+        function hideFreqSet3() {
+            var x = document.getElementById("freqSet3");
+            x.style.display = "none";
+        }
+
+        ////////////
+
+        function showFreqSet4() {
+            var x = document.getElementById("freqSet4");
+            x.style.display = "block";
+
+        }
+
+        function hideFreqSet4() {
+            var x = document.getElementById("freqSet4");
+            x.style.display = "none";
+        }
+
+        ////////////////////////////////////////////////////////////
+
+        window.addEventListener("mouseup", function() {
+            if (document.getElementById("freq").value != 0) {
+                resetFreq1Slider();
+            }
+        });
+
+        window.addEventListener("touchend", function() {
+            if (document.getElementById("freq").value != 0) {
+                resetFreq1Slider();
+            }
+        });
+
+        window.addEventListener("click", function() {
+            if (document.getElementById("freq").value != 0) {
+                resetFreq1Slider();
+            }
+        });
+
+        ////////////
+
+        window.addEventListener("mouseup", function() {
+            if (document.getElementById("freq2").value != 0) {
+                resetFreq2Slider();
+            }
+        });
+
+        window.addEventListener("touchend", function() {
+            if (document.getElementById("freq2").value != 0) {
+                resetFreq2Slider();
+            }
+        });
+
+        window.addEventListener("click", function() {
+            if (document.getElementById("freq2").value != 0) {
+                resetFreq2Slider();
+            }
+        });
+
+        ////////////
+
+        window.addEventListener("mouseup", function() {
+            if (document.getElementById("freq3").value != 0) {
+                resetFreq3Slider();
+            }
+        });
+
+        window.addEventListener("touchend", function() {
+            if (document.getElementById("freq3").value != 0) {
+                resetFreq3Slider();
+            }
+        });
+
+        window.addEventListener("click", function() {
+            if (document.getElementById("freq3").value != 0) {
+                resetFreq3Slider();
+            }
+        });
+
+        ////////////
+
+        window.addEventListener("mouseup", function() {
+            if (document.getElementById("freq4").value != 0) {
+                resetFreq4Slider();
+            }
+        });
+
+        window.addEventListener("touchend", function() {
+            if (document.getElementById("freq4").value != 0) {
+                resetFreq4Slider();
+            }
+        });
+
+        window.addEventListener("click", function() {
+            if (document.getElementById("freq4").value != 0) {
+                resetFreq4Slider();
+            }
+        });
+        ////////////////////////////////////////////////////////////
+    </script>
+
+    <style>
+        /* The container */
+        
+        .container {
+            display: block;
+            position: relative;
+            padding-left: 35px;
+            margin-bottom: 12px;
+            font-family: verdana;
+            cursor: pointer;
+            font-size: 22px;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+        /* Hide the browser's default checkbox */
+        
+        .container input {
+            position: absolute;
+            opacity: 0;
+            cursor: pointer;
+        }
+        /* Create a custom checkbox */
+        
+        .checkmark {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 25px;
+            width: 25px;
+            background-color: #eee;
+        }
+        /* On mouse-over, add a grey background color */
+        
+        .container:hover input ~ .checkmark {
+            background-color: #ccc;
+        }
+        /* When the checkbox is checked, add a blue background */
+        
+        .container input:checked ~ .checkmark {
+            background-color: #2196F3;
+        }
+        /* Create the checkmark/indicator (hidden when not checked) */
+        
+        .checkmark:after {
+            content: "";
+            position: absolute;
+            display: none;
+        }
+        /* Show the checkmark when checked */
+        
+        .container input:checked ~ .checkmark:after {
+            display: block;
+        }
+        /* Style the checkmark/indicator */
+        
+        .container .checkmark:after {
+            left: 9px;
+            top: 5px;
+            width: 5px;
+            height: 10px;
+            border: solid white;
+            border-width: 0 3px 3px 0;
+            -webkit-transform: rotate(45deg);
+            -ms-transform: rotate(45deg);
+            transform: rotate(45deg);
+        }
+    </style>
+
+    <center>
+        <span style="opacity:0; display:none;">
+         <select id="clones" size="2">
+            <option>Master</option>
+            <option>Clone</option>
+         </select>
+
+         <select id="events" size="3">
+            <option>Classic 2m</option>
+            <option>Classic 80m</option>
+            <option>Sprint</option>
+            <option>Fox-O</option>
+         </select>
+
+         <select id="classicFoxes" size="6">
+            <option>Fox 1 - MOE</option>
+            <option>Fox 2 - MOI</option>
+            <option>Fox 3 - MOS</option>
+            <option>Fox 4 - MOH</option>
+            <option>Fox 5 - MO5</option>
+            <option>Finish - MO</option>
+         </select>
+
+         <select id="sprintFoxes" size="12">
+            <option>Fox 1S - Slow MOE</option>
+            <option>Fox 2S - Slow MOI</option>
+            <option>Fox 3S - Slow MOS</option>
+            <option>Fox 4S - Slow MOH</option>
+            <option>Fox 5S - Slow MO5</option>
+            <option>Spectator - S</option>
+            <option>Fox 1F - Fast MOE</option>
+            <option>Fox 2F - Fast MOI</option>
+            <option>Fox 3F - Fast MOS</option>
+            <option>Fox 4F - Fast MOH</option>
+            <option>Fox 5F - Fast MO5</option>
+            <option>Finish - MO</option>
+         </select>
+
+         <select id="foxoFoxes" size="4">
+            <option>Fox Freq 1</option>
+            <option>Fox Freq 2</option>
+            <option>Fox Freq 3</option>
+            <option>Finish - MO</option>
+         </select>
+
+         <select id="bands" size="2">
+         <option>2 meters</option>
+         <option>80 meters</option>
+         </select>
+      </span>
+
+        <h1 style="font-family:verdana; font-size:30px; color:Black; text-align:center;">Transmitter Settings</h1>
+        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">Ver 0.1.1 - 14 Jan 2018</p>
+
+        <div>
+            <table>
+                <tr>
+                    <td style="width:400px; height:50px; text-align:right; vertical-align:middle;">
+                        <p id="xmtrTime" style="font-family:verdana; font-size:15px; color:Red; font-weight:bold; text-align:center;">Disconnected</p>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="width:400px; height:50px; text-align:right; vertical-align:middle;">
+                        <p id="currentTime" style="font-family:verdana; font-size:15px; color:Black; font-weight:bold; text-align:center;">Updating...</p>
+                    </td>
+
+                    <td style="width:100px; height:50px; text-align:left; vertical-align:middle;">
+                        <button id="SyncButton" class="button" style="background-color:#EEE;" onclick="syncClock();">Sync</button>
+                    </td>
+                </tr>
+            </table>
+
+            <table>
+                <tr>
+                    <td style="font-family:verdana; height:25px; text-align:right; vertical-align:middle;">Check to clone others:</td>
+
+                    <td>
+                        <label class="container">Master
+                            <input type="checkbox" id="masterCheckBox" onclick="masterClick();">
+                            <span class="checkmark"></span>
+                        </label>
+                    </td>
+
+                    <td> </td>
+                </tr>
+
+                <tr>
+                    <td style="font-family:verdana; font-size:20px; font-weight:bold; color:Black; text-align:right">Callsign:</td>
+
+                    <td>
+                        <input type="text" id="callText" style="font-family:verdana; font-size:20px; font-weight:bold; color:Blue;" name="callText" placeholder="Callsign" oninput="callSignEntered()"/>
+                    </td>
+
+                    <td> </td>
+                </tr>
+            </table>
+
+            <table>
+                <tr>
+                    <td style="font-family:verdana; text-align: center">======</td>
+                </tr>
+            </table>
+
+            <table>
+                <tr>
+                    <td style="font-family:verdana; font-size:20px; font-weight:bold; text-align:right">Event:</td>
+
+                    <td>
+                        <input type="text" list="events" id="eventText" name="eventText" style="font-family:verdana; font-size:20px; font-weight:bold; color:Blue;" value="" readonly="readonly" />
+                    </td>
+
+                    <td style="width:14.4px; text-align: left">
+                        <button id="EventButton" class="button" style="background-color:#EEE" onclick="eventClick();">Event</button>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style="font-family:verdana; font-size:20px; font-weight:bold; text-align:right">Fox:</td>
+
+                    <td>
+                        <input type="text" list="classicFoxes" id="txIDText" name="txIDText" style="font-family:verdana; font-size:20px; font-weight:bold; color:Blue;" value="Fox 1 - MOE" readonly="readonly" />
+                    </td>
+
+                    <td style="width:14.4px; text-align: left">
+                        <button id="FoxButton" class="button" style="background-color:#EEE" onclick="foxClick();">Fox</button>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td style="font-family:verdana; font-size:20px; font-weight:bold; text-align:right">Start:</td>
+
+                    <td>
+                        <input id="datetimeStart" type="datetime-local" style="font-family:verdana; font-size:20px; font-weight:bold; width:400px;" oninput="newStartTime();" />
+                    </td>
+
+                    <td id="startTimeMsg" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center"></td>
+                </tr>
+
+                <tr>
+                    <td style="font-family:verdana; font-size:20px; font-weight:bold; text-align:right">Finish:</td>
+
+                    <td>
+                        <input id="datetimeFinish" type="datetime-local" style="font-family:verdana; font-size:20px; font-weight:bold; width:400px;" oninput="newFinishTime();" />
+                    </td>
+
+                    <td id="finishTimeMsg" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center"></td>
+                </tr>
+
+                <tr>
+                    <td style="font-family:verdana; font-size:20px; font-weight:bold; text-align:right">Band:</td>
+
+                    <td style="font-family:verdana; font-size:20px; font-weight:bold; text-align:left;">
+                        <input type="text" list="bands" id="bandText" name="bandText" style="font-size:20px; font-weight:bold; text-align:center" value="2m" readonly="readonly" />
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </center>
+
+    <center>
+        <div id="freqSet1">
+            <h4 id="freqSet1Heading" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center">Fox Frequency</h4>
+
+            <table>
+                <tr>
+                    <td>
+                        <button id="FreqDownButton" class="button" style="font-family:verdana; background-color:#EEE" onclick="decFreq1Click();">DEC</button>
+                    </td>
+
+                    <td>
+                        <input type="text" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center" id="freq1Text" name="freq1Text" value="144600000" readonly="readonly" />
+                    </td>
+
+                    <td style="width:14.4px; text-align: left">
+                        <button id="FreqUpButton" class="button" style="background-color:#EEE" onclick="incFreq1Click();">INC</button>
+                    </td>
+                </tr>
+            </table>
+
+            <div>
+                <span class="freq1val" style="text-align:center color:black"></span>
+
+                <table>
+                    <tr>
+                        <td></td>
+
+                        <td style="width:400px; text-align:center">
+                            <input style="font-family:verdana; font-size:20px; width:400px; text-align:center color:black font-weight:bold;" type="range" name="freq" id="freq" min="-100" max="100" step="1" value="0" oninput="freq1Change();" />
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <div id="freqSet2">
+            <h4 id="freqSet2Heading" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center">Finish Frequency</h4>
+
+            <table>
+                <tr>
+                    <td>
+                        <button id="freq2DownButton" class="button" style="background-color:#EEE" onclick="decFreq2Click();">DEC</button>
+                    </td>
+
+                    <td style="text-align:center color:black font-weight:bold;">
+                        <input type="text" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center" id="freq2Text" name="freq2Text" value="144900000" readonly="readonly" />
+                    </td>
+
+                    <td style="width:14.4px; text-align:left">
+                        <button id="freq2UpButton" class="button" style="background-color:#EEE" onclick="incFreq2Click();">INC</button>
+                    </td>
+                </tr>
+            </table>
+
+            <div>
+                <span class="freq2val" style="text-align:center color:black"></span>
+
+                <table>
+                    <tr>
+                        <td></td>
+
+                        <td style="width:400px; text-align: center">
+                            <input style="font-family:verdana; font-size:20px; width:400px; text-align:center" type="range" name="freq2" id="freq2" min="-100" max="100" step="1" value="0" oninput="freq2Change();" />
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <div id="freqSet3">
+            <h4 id="freqSet3Heading" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center">Frequency3</h4>
+
+            <table>
+                <tr>
+                    <td>
+                        <button id="freq3DownButton" class="button" style="background-color:#EEE" onclick="decFreq3Click();">DEC</button>
+                    </td>
+
+                    <td>
+                        <input type="text" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center" id="freq3Text" name="freq3Text" value="144600000" readonly="readonly" />
+                    </td>
+
+                    <td style="width:14.4px; text-align: left">
+                        <button id="freq3UpButton" class="button" style="background-color:#EEE" onclick="incFreq3Click();">INC</button>
+                    </td>
+                </tr>
+            </table>
+
+            <div>
+                <span class="freq3val" style="text-align:center color:black"></span>
+
+                <table>
+                    <tr>
+                        <td></td>
+
+                        <td style="width:400px; text-align:center">
+                            <input style="width:400px; text-align:center color:black font-weight:bold;" type="range" name="freq3" id="freq3" min="-100" max="100" step="1" value="0" oninput="freq3Change();" />
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <div id="freqSet4">
+            <h4 id="freqSet4Heading" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center">Frequency4</h4>
+
+            <table>
+                <tr>
+                    <td>
+                        <button id="freq4DownButton" class="button" style="background-color:#EEE" onclick="decFreq4Click();">DEC</button>
+                    </td>
+
+                    <td>
+                        <input type="text" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center" id="freq4Text" name="freq4Text" value="144600000" readonly="readonly" />
+                    </td>
+
+                    <td style="width:14.4px; text-align: left">
+                        <button id="freq4UpButton" class="button" style="background-color:#EEE" onclick="incFreq4Click();">INC</button>
+                    </td>
+                </tr>
+            </table>
+
+            <div>
+                <span class="freq4val" style="text-align:center color:black"></span>
+
+                <table>
+                    <tr>
+                        <td></td>
+
+                        <td style="width:400px; text-align:center">
+                            <input style="font-family:verdana; font-size:20px; width:400px; text-align:center color:black font-weight:bold;" type="range" name="freq4" id="freq4" min="-100" max="100" step="1" value="0" oninput="freq4Change();" />
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <h3 id="macAddress" style="font-family:verdana; font-size:15px; font-weight:bold; text-align:center">Waiting for MAC Address</h3>
+    </center>
+</body>
+
+</html>
