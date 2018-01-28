@@ -56,35 +56,41 @@
 #define ADDR_OLATA 0x14
 #define ADDR_OLATB 0x15
 
+static uint8_t g_data[2] = {0, 0};
+
 #ifdef SELECTIVELY_DISABLE_OPTIMIZATION
 	void __attribute__((optimize("O0"))) mcp23017_init(void)
 #else
 	void mcp23017_init(void)
 #endif
 {
-	uint8_t data[2] = {0, 0};
-		
-	/*
-	* PortA
-	*	P
-	*/
-
-	data[0] = 0b00100000; // disable SEQOP
-	if(i2c_device_write(MCP23017_I2C_SLAVE_ADDR_A100, ADDR_IOCON, data, 1))
+	g_data[0] = 0b00100000; // disable SEQOP
+	if(i2c_device_write(MCP23017_I2C_SLAVE_ADDR_A100, ADDR_IOCON, g_data, 1))
 	{
-		data[0] = 0;
+		g_data[0] = 0;
 	}
 	
-	data[0] = 0b00000111;
-	if(i2c_device_write(MCP23017_I2C_SLAVE_ADDR_A100, ADDR_IODIRA, data, 1))
+	/*
+	* PortA
+	*	PA0 - 80m Antenna Detect 0 (input)
+	*	PA1 - 80m Antenna Detect 1 (input)
+	*	PA2 - 2m Antenna Detect (input)
+	*	PA3 - VHF enable (high)
+	*	PA4 - HF enable (high)
+	*	PA5 - Test Point
+	*	PA6 - T enable (transmit switch - high)
+	*	PA7 - R enable (receive switch - high)
+	*/
+	g_data[0] = 0b00000111;
+	if(i2c_device_write(MCP23017_I2C_SLAVE_ADDR_A100, ADDR_IODIRA, g_data, 1))
 	{
-		data[0] = 0;
+		g_data[0] = 0;
 	}
 
-	data[0] = 0b10101000; // 0b00000000;
-	if(i2c_device_write(MCP23017_I2C_SLAVE_ADDR_A100, ADDR_OLATA, data, 1))
+	g_data[0] = 0b00000000;
+	if(i2c_device_write(MCP23017_I2C_SLAVE_ADDR_A100, ADDR_OLATA, g_data, 1))
 	{
-		data[0] = 0;
+		g_data[0] = 0;
 	}
 
 	/*
@@ -98,39 +104,44 @@
 	*	PB6 - Headphone Power Latch (high)
 	*	PB7 - Client UART Enable (low)
 	*/
-	data[0] = 0b00000011;
-	i2c_device_write(MCP23017_I2C_SLAVE_ADDR_A100, ADDR_IODIRB, data, 1);
-
-	data[0] = 0b10000000;
-	i2c_device_write(MCP23017_I2C_SLAVE_ADDR_A100, ADDR_OLATB, data, 1);
-}
-
-void mcp23017_writePort( uint8_t data, uint8_t port)
-{
-	if(port == MCP23017_PORTA)
+	g_data[0] = 0b00000011;
+	if(i2c_device_write(MCP23017_I2C_SLAVE_ADDR_A100, ADDR_IODIRB, g_data, 1))
 	{
-		i2c_device_write(MCP23017_I2C_SLAVE_ADDR_A100, ADDR_GPIOA, &data, 1);
+		g_data[0] = 0;
 	}
-	else
+
+	g_data[0] = 0b10000000; // 0b10001100;
+	if(i2c_device_write(MCP23017_I2C_SLAVE_ADDR_A100, ADDR_OLATB, g_data, 1))
 	{
-		i2c_device_write(MCP23017_I2C_SLAVE_ADDR_A100, ADDR_GPIOB, &data, 1);
+		g_data[0] = 0;
 	}
 }
 
-BOOL mcp23017_readPort(uint8_t *data, uint8_t port)
+void mcp23017_set( DIbit bit, BOOL value)
 {
-	BOOL failure;
-
-	if(port == MCP23017_PORTA)
+	uint8_t mask = (1 << bit);	
+	mcp23017_readPort(g_data, MCP23017_PORTB);
+	
+	if(value)
 	{
-		failure = i2c_device_read(MCP23017_I2C_SLAVE_ADDR_A100, ADDR_GPIOA, data, 1);
+		g_data[0] |= mask;
 	}
 	else
 	{
-		failure = i2c_device_read(MCP23017_I2C_SLAVE_ADDR_A100, ADDR_GPIOB, data, 1);
+		g_data[0] &= ~mask;
 	}
+	
+	mcp23017_writePort(g_data[0], ADDR_GPIOB);
+}
 
-	return(failure);
+void mcp23017_writePort( uint8_t databyte, ExpanderPort port)
+{
+	i2c_device_write(MCP23017_I2C_SLAVE_ADDR_A100, (port == MCP23017_PORTA) ? ADDR_GPIOA:ADDR_GPIOB, &databyte, 1);
+}
+
+BOOL mcp23017_readPort(uint8_t *databyte, ExpanderPort port)
+{
+	return(i2c_device_read(MCP23017_I2C_SLAVE_ADDR_A100, (port == MCP23017_PORTA) ? ADDR_GPIOA:ADDR_GPIOB, databyte, 1));
 }
 
 #endif  /* #ifdef INCLUDE_MCP23017_SUPPORT */

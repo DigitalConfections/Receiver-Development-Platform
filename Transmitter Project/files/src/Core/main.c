@@ -34,6 +34,7 @@
 #include "i2c.h"
 #include "linkbus.h"
 #include "transmitter.h"
+#include "huzzah.h"
 #include "util.h"
 
 #include <avr/io.h>
@@ -67,7 +68,7 @@ static volatile BOOL g_powering_off = FALSE;
 
 static volatile BOOL g_radio_port_changed = FALSE;
 static volatile uint16_t g_beep_length = 0;
-static volatile BOOL g_volume_set_beep_delay = 0;
+static volatile uint16_t g_linkbus_init_delay = 0;
 
 static volatile uint16_t g_tick_count = 0;
 static volatile BOOL g_battery_measurements_active = FALSE;
@@ -141,8 +142,8 @@ static volatile uint8_t g_rssi_filter = 0;
 #define NUMBER_OF_POLLED_ADC_CHANNELS 3
 static const uint8_t activeADC[NUMBER_OF_POLLED_ADC_CHANNELS] = { RF_LEVEL, BAT_VOLTAGE, RSSI_LEVEL };
 
-static const uint16_t g_adcChannelConversionPeriod_ticks[NUMBER_OF_POLLED_ADC_CHANNELS] = { 1000, 1000, 29 };
-static volatile uint16_t g_tickCountdownADCFlag[NUMBER_OF_POLLED_ADC_CHANNELS] = { 1000, 1000, 29 };
+static const uint16_t g_adcChannelConversionPeriod_ticks[NUMBER_OF_POLLED_ADC_CHANNELS] = { TIMER2_0_5HZ, TIMER2_0_5HZ, TIMER2_20HZ };
+static volatile uint16_t g_tickCountdownADCFlag[NUMBER_OF_POLLED_ADC_CHANNELS] = { TIMER2_0_5HZ, TIMER2_0_5HZ, TIMER2_20HZ };
 static uint16_t g_filterADCValue[NUMBER_OF_POLLED_ADC_CHANNELS] = { 500, 500, 3 };
 static volatile BOOL g_adcUpdated[NUMBER_OF_POLLED_ADC_CHANNELS] = { FALSE, FALSE, FALSE };
 static volatile uint16_t g_lastConversionResult[NUMBER_OF_POLLED_ADC_CHANNELS];
@@ -207,6 +208,19 @@ void __attribute__((optimize("O1"))) wdt_init(WDReset resetType)
 }
 
 
+ISR( INT0_vect )
+{
+#ifdef ENABLE_1_SEC_INTERRUPTS
+	g_seconds_count++;
+	g_seconds_int = TRUE;
+#else
+	if(g_terminal_mode)
+	{
+		lb_send_string("\nError: INT0 occurred!\n");
+	}
+#endif
+}
+
 /***********************************************************************
  * Timer/Counter2 Compare Match A ISR
  *
@@ -247,7 +261,7 @@ ISR( TIMER2_COMPB_vect )
 	{
 		g_LB_broadcast_interval--;
 	}
-
+	
 	static BOOL volumeSetInProcess = FALSE;
 	static BOOL beepInProcess = FALSE;
 
@@ -691,7 +705,7 @@ ISR(USART_RX_vect)
 							}
 						}
 
-						charIndex++;
+						charIndex = MIN(charIndex+1, LINKBUS_MAX_MSG_FIELD_LENGTH);
 					}
 				}
 				else
@@ -715,7 +729,7 @@ ISR(USART_RX_vect)
 						}
 
 						receiving_msg = TRUE;
-						charIndex++;
+						charIndex = MIN(charIndex+1, LINKBUS_MAX_MSG_FIELD_LENGTH);
 					}
 				}
 
@@ -795,7 +809,7 @@ ISR(USART_RX_vect)
 			{
 				if(g_LB_attached_device == NO_ID)
 				{
-					buff->id = MESSAGE_TTY;
+					buff->id = LINKBUS_MSG_UNKNOWN;
 					charIndex = LINKBUS_MAX_MSG_LENGTH;
 					field_len = 0;
 					msg_ID = LINKBUS_MSG_UNKNOWN;
@@ -879,6 +893,7 @@ ISR( PCINT2_vect )
 int main( void )
 {
 	BOOL attach_success = TRUE; // Start out in TTY terminal communication mode
+	BOOL err = FALSE;
 	uint16_t hold_tick_count = 0;
 	LinkbusRxBuffer* lb_buff = 0;
 
@@ -912,8 +927,9 @@ int main( void )
 	// PD6 = Test Point
 	// PD7 =  Port expander interrupt B
 
-		DDRD  = 0b00000010;     /* All pins in PORTD are inputs, except PD5 (tone out), PD6 (audio pwr) and PD7 (LCD reset) */
-		PORTD = 0b11111100;     /* Pull-ups enabled on all input pins, all outputs set to high except PD6 (audio power) */
+//		DDRD  = 0b00000010;     /* Set PORTD pin data directions */
+		DDRD  = 0b00000000;     /* Set PORTD pin data directions */
+		PORTD = 0b11111100;     /* Enable pull-ups on input pins, and set output levels on all outputs */
 
 	/**
 	 * Set up PortC */
@@ -928,7 +944,6 @@ int main( void )
 
 		DDRC = 0b00000011;                                          /* PC4 and PC5 are inputs (should be true by default); PC2 and PC3 are used for their ADC function; PC1 and PC0 outputs control main volume */
 		PORTC = (I2C_PINS | (1 << PORTC2));                         /* Set all Port C pins low, except I2C lines and PC2; includes output port PORTC0 and PORTC1 (main volume controls) */
-		linkbus_init();
 
 	/**
 	 * PD5 (OC0B) is PWM output for AM modulation generation
@@ -952,10 +967,13 @@ int main( void )
 
 	/**
 	 * Set up pin interrupts */
-		PCICR |= (1 << PCIE2) | (1 << PCIE1) | (1 << PCIE0);    /* Enable pin change interrupts PCI2, PCI1 and PCI0 */
-		PCMSK2 |= 0b10001000;                                   /* Enable port D pin change interrupts PD3 and PD7 */
-//		PCMSK1 |= (1 << PCINT10);                               /* Enable port C pin change interrupts on pin PC2 */
-//		PCMSK0 |= (1 << PORTB2);                                /* Do not enable interrupts until HW is ready */
+	PCICR |= (1 << PCIE2) | (1 << PCIE1) | (1 << PCIE0);    /* Enable pin change interrupts PCI2, PCI1 and PCI0 */
+	PCMSK2 |= 0b10001000;                                   /* Enable port D pin change interrupts */
+//	PCMSK1 |= (1 << PCINT10);                               /* Enable port C pin change interrupts on pin PC2 */
+//	PCMSK0 |= (1 << PORTB2);                                /* Do not enable interrupts until HW is ready */
+
+	EICRA  |= ((1 << ISC01) | (1 << ISC00));	/* Configure INT0 for RTC 1-second interrupts */
+	EIMSK |= (1 << INT0);		
 
 	cpu_irq_enable();                                           /* same as sei(); */
 
@@ -965,12 +983,14 @@ int main( void )
 	 * Enable watchdog interrupts before performing I2C calls that might cause a lockup */
 #ifndef TRANQUILIZE_WATCHDOG
 	wdt_init(WD_SW_RESETS);
+	wdt_reset();                                    /* HW watchdog */
 #endif // TRANQUILIZE_WATCHDOG
 
 	/**
-	 * Initialize the receiver */
+	 * Initialize the transmitter */
+	err = init_transmitter();
 
-	init_receiver();
+
 	if(g_audio_RSSI)
 	{
 		TCCR0A |= (1 << COM0B0);    /* Toggle OC0B (PD5) on Compare Match */
@@ -985,14 +1005,29 @@ int main( void )
 //	ad5245_set_potentiometer(TONE_POT_VAL(g_tone_volume));    /* move to receiver initialization */
 
 	mcp23017_init();
+//	wifi_power(ON); // power on WiFi
+//	wifi_reset(OFF); // bring WiFi out of reset
+	// Uncomment the two lines above and set a breakpoint after this line to permit serial access to ESP8266 serial lines for programming
+	// You can then set a breakpoint on the line below to keep the serial port from being initialized
+	linkbus_init(BAUD);
 
 	wdt_reset();                                    /* HW watchdog */
 
 	if(g_terminal_mode)
 	{
-		lb_send_NewLine();
-		lb_send_Help();
-		lb_send_NewPrompt();		
+		if(err)
+		{
+			lb_send_NewLine();
+			lb_send_string("Init error!");
+			lb_send_NewPrompt();		
+			
+		}
+		else
+		{
+			lb_send_NewLine();
+			lb_send_Help();
+			lb_send_NewPrompt();		
+		}
 	}
 	else 
 	{
@@ -1025,27 +1060,31 @@ int main( void )
 	wdt_init(WD_HW_RESETS); /* enable hardware interrupts */
 #endif // TRANQUILIZE_WATCHDOG
 	
-	g_initialization_complete = TRUE;
 
 	while(1)
 	{
 		/**************************************
-		 * Beep once at new volume level if the volume was set
-		 ***************************************/
-		if(g_volume_set_beep_delay)
-		{
-			g_volume_set_beep_delay--;
-
-			if(!g_volume_set_beep_delay)
-			{
-				g_beep_length = BEEP_SHORT;
-			}
-		}
-
-		/**************************************
 		* The watchdog must be petted periodically to keep it from barking
 		**************************************/
 		cli(); wdt_reset(); /* HW watchdog */ sei();
+
+		/**************************************
+		 * Delay before re-enabling linkbus receive
+		 ***************************************/
+		if(g_linkbus_init_delay)
+		{
+			g_linkbus_init_delay--;
+
+			if(!g_linkbus_init_delay)
+			{
+				cli();
+				linkbus_init(BAUD);
+				sei();
+				lb_send_NewLine();
+//				lb_send_Help();
+				lb_send_NewPrompt();	
+			}
+		}
 
 		/***************************************
 		* Check for Power Off
@@ -1081,7 +1120,7 @@ int main( void )
 					if(!g_power_off_countdown)
 					{
 						saveAllEEPROM();
-						PORTB &= ~(1 << PORTB1);    /* latch power off */
+//						PORTB &= ~(1 << PORTB1);    /* latch power off */
 						g_power_off_countdown = POWER_OFF_DELAY;
 
 						while(1)    /* wait for power-off */
@@ -1114,7 +1153,7 @@ int main( void )
 				g_low_voltage_shutdown_delay = LOW_VOLTAGE_DELAY;
 				g_power_off_countdown = POWER_OFF_DELAY;    /* restart countdown */
 
-				PORTB |= (1 << PORTB1); /* latch power on */
+//				PORTB |= (1 << PORTB1); /* latch power on */
 			}
 			else
 			{
@@ -1237,12 +1276,39 @@ int main( void )
 					
 					if(lb_buff->fields[FIELD1][0])
 					{
-						uint8_t setting = atol(lb_buff->fields[FIELD1]);
+						uint8_t setting = atoi(lb_buff->fields[FIELD1]);
 						
 						result = rxSetPreamp(setting);
 					}
 					
 					lb_broadcast_num((uint16_t)result, NULL);
+
+				}
+				break;
+				
+				case MESSAGE_WIFI:
+				{
+					BOOL result = wifi_enabled();
+					
+					if(lb_buff->fields[FIELD1][0])
+					{
+						result = atoi(lb_buff->fields[FIELD1]);
+						
+						cli(); 
+						linkbus_disable();
+						sei();	
+						wifi_power(result);
+						g_terminal_mode = !result;
+						wifi_reset(g_terminal_mode);
+						linkbus_setTerminalMode(g_terminal_mode);
+
+						if(result != 2)
+						{
+							g_linkbus_init_delay = 2500;
+						}
+					}
+					
+					if(g_terminal_mode) lb_broadcast_num((uint16_t)result, NULL);
 
 				}
 				break;
@@ -1304,6 +1370,8 @@ int main( void )
 				
 				case MESSAGE_TIME:
 				{
+					if(lb_buff->type == LINKBUS_MSG_COMMAND) // ignore replies since, as the time source, we should never be sending queries anyway
+					{
 						if(lb_buff->fields[FIELD1][0])
 						{
 							volatile int32_t time = -1; // prevent optimizer from breaking this
@@ -1327,15 +1395,22 @@ int main( void )
 								#endif
 							}
 						}
-
-						if(lb_buff->type == LINKBUS_MSG_QUERY)
+					}
+					else if(lb_buff->type == LINKBUS_MSG_QUERY)
+					{
+						static int32_t lastTime = 0;
+						#ifdef INCLUDE_DS3231_SUPPORT
+							
+						if(g_seconds_count != lastTime)
 						{
-							#ifdef INCLUDE_DS3231_SUPPORT
-								int32_t time;
-								ds3231_read_time(&time, NULL, Time_Format_Not_Specified);
-								lb_send_TIM(LINKBUS_MSG_REPLY, time);
-							#endif
+							int32_t time;
+							ds3231_read_time(&time, NULL, Time_Format_Not_Specified);
+							lb_send_TIM(LINKBUS_MSG_REPLY, time);
+								
+							lastTime = g_seconds_count;
 						}
+						#endif
+					}
 				}
 				break;
 
@@ -1567,155 +1642,22 @@ int main( void )
 				}
 				break;
 
-				case MESSAGE_VOLUME:
-				{
-					VolumeType volType;
-					BOOL valid = FALSE;
-
-					if(lb_buff->fields[FIELD1][0] == 'T')   /* volume type field */
-					{
-						valid = TRUE;
-						volType = TONE_VOLUME;
-					}
-					else if(lb_buff->fields[FIELD1][0] == 'M')
-					{
-						valid = TRUE;
-						volType = MAIN_VOLUME;
-					}
-
-					if(valid)
-					{
-						IncrType direction = NOCHANGE;
-						int16_t holdVol = -1;
-
-						if(lb_buff->fields[FIELD2][0])
-						{
-							if(lb_buff->fields[FIELD2][0] == '+')
-							{
-								direction = UP;
-							}
-							else if(lb_buff->fields[FIELD2][0] == '-')
-							{
-								direction = DOWN;
-							}
-							else
-							{
-								holdVol = atoi(lb_buff->fields[FIELD2]);
-								direction = SETTOVALUE;
-							}
-						}
-
-						if(volType == TONE_VOLUME)
-						{
-							if(holdVol < 0)
-							{
-								holdVol = g_tone_volume;
-							}
-
-							if(direction == UP)
-							{
-								if(holdVol < MAX_TONE_VOLUME_SETTING)
-								{
-									holdVol++;
-								}
-							}
-							else if(direction == DOWN)
-							{
-								if(holdVol)
-								{
-									holdVol--;
-								}
-							}
-
-							if(holdVol > MAX_TONE_VOLUME_SETTING)
-							{
-								holdVol = MAX_TONE_VOLUME_SETTING;
-							}
-							else if(holdVol < 0)
-							{
-								holdVol = 0;
-							}
-
-							if(holdVol != g_tone_volume)
-							{
-								ad5245_set_potentiometer(TONE_POT_VAL(holdVol));
-								g_tone_volume = (uint8_t)holdVol;
-							}
-
-							g_volume_set_beep_delay = 20;
-						}
-						else    /* volType == MAIN_VOLUME */
-						{
-							if(direction == UP)
-							{
-								if(g_main_volume < MAX_MAIN_VOLUME_SETTING)
-								{
-									g_main_volume++;
-								}
-							}
-							else if(direction == DOWN)
-							{
-								if(g_main_volume)
-								{
-									g_main_volume--;
-								}
-							}
-							else if(direction == SETTOVALUE)
-							{
-								if(holdVol > MAX_MAIN_VOLUME_SETTING)
-								{
-									g_main_volume = MAX_MAIN_VOLUME_SETTING;
-								}
-								else if(holdVol < 0)
-								{
-									g_main_volume = 0;
-								}
-								else
-								{
-									g_main_volume = holdVol;
-								}
-							}
-
-							g_volume_set_beep_delay = 20;
-						}
-
-						saveAllEEPROM();
-
-						if(g_terminal_mode)
-						{
-							if(volType == MAIN_VOLUME)
-							{
-								lb_send_value(g_main_volume, "MAIN VOL");
-							}
-							else
-							{
-								lb_send_value(g_tone_volume, "TONE VOL");
-							}
-						}
-						else
-						{
-							if(lb_buff->type == LINKBUS_MSG_QUERY)  /* Query */
-							{
-								/* Send a reply */
-								lb_send_VOL(LINKBUS_MSG_REPLY, volType, VOL_NOT_SPECIFIED);
-							}
-						}
-					}
-				}
-				break;
-
 				case MESSAGE_TTY:
 				{
-					g_terminal_mode = !g_terminal_mode;
+					g_terminal_mode = TRUE;
 					linkbus_setTerminalMode(g_terminal_mode);
+					
+					cli(); 
+					linkbus_disable();
+					sei();	
+					wifi_reset(ON);
+					wifi_power(OFF);
+					g_linkbus_init_delay = 2500;
 
-					if(g_terminal_mode)
-					{
-						g_LB_broadcasts_enabled = 0;    /* disable all broadcasts */
-						attach_success = TRUE;          /* stop any ongoing ID messages */
-						g_send_ID_countdown = 0;
-						linkbus_setLineTerm("\n\n");
-					}
+					g_LB_broadcasts_enabled = 0;    /* disable all broadcasts */
+					attach_success = TRUE;          /* stop any ongoing ID messages */
+					g_send_ID_countdown = 0;
+					linkbus_setLineTerm("\n\n");
 				}
 				break;
 

@@ -437,7 +437,7 @@
 
 /**
  */
-void si5351_init(Si5351_Xtal_load_pF, Frequency_Hz);
+BOOL si5351_init(Si5351_Xtal_load_pF, Frequency_Hz);
 
 /**
  */

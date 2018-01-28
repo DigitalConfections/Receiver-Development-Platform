@@ -195,9 +195,9 @@
 		return(g_activeBand);
 	}
 
-	void init_receiver(void)
+	BOOL init_transmitter(void)
 	{
-		si5351_init(SI5351_CRYSTAL_LOAD_6PF, 0);
+		if(si5351_init(SI5351_CRYSTAL_LOAD_6PF, 0)) return TRUE;
 
 //		g_freq_2m = DEFAULT_RX_2M_FREQUENCY;
 //		g_freq_80m = DEFAULT_RX_80M_FREQUENCY;
@@ -231,6 +231,8 @@
 		}
 
 		g_rx_initialized = TRUE;
+		
+		return FALSE;
 	}
 	
 	void store_receiver_values(void)

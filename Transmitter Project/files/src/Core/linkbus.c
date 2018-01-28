@@ -31,6 +31,7 @@
 #include <avr/wdt.h>
 
 /* Global Variables */
+static volatile BOOL g_bus_disabled = TRUE;
 static volatile BOOL g_lb_terminal_mode = TRUE;
 static const char crlf[] = "\n";
 static char lineTerm[8] = "\n";
@@ -45,9 +46,8 @@ static const char textHelp[][40] = { "\nCommands:\n",
 "  O [Hz]            - CW Offset\n",
 "  A [0-100]         - Attenuation\n",
 "  S[S]              - RSSI\n",
-//"  TIM [hh:mm:ss]    - RTC Time\n",
+"  TIM [hh:mm:ss]    - RTC Time\n",
 "  TON [-1|0|1]      - Tone RSSI\n",
-"  VOL <M:T> [0-15]  - Main/Tone Vol\n",
 "  P                 - Perm\n",
 "  RST               - Reset\n",
 "  ?                 - Info\n"
@@ -223,17 +223,34 @@ void linkbus_reset_rx(void)
 	}
 }
 
-void linkbus_init(void)
+void linkbus_init(uint32_t baud)
 {
 	memset(rx_buffer, 0, sizeof(rx_buffer));
 	/*Set baud rate */
-	UBRR0H = ((unsigned char)(MYUBRR >> 8));
-	UBRR0L = (unsigned char)MYUBRR;
+	uint16_t myubrr = MYUBRR(baud);
+	UBRR0H = (uint8_t)(myubrr >> 8);
+	UBRR0L = (uint8_t)myubrr;
 	/* Enable receiver and transmitter and related interrupts */
 	UCSR0B = (1 << RXEN0) | (1 << TXEN0) | (1 << RXCIE0);
 /*	UCSR0B = (1<<RXEN0) | (1<<TXEN0); */
 	/* Set frame format: 8data, 2stop bit */
 	UCSR0C = (1 << USBS0) | (3 << UCSZ00);
+	g_bus_disabled = FALSE;
+}
+
+void linkbus_disable(void)
+{
+	uint8_t bufferIndex;
+	
+	g_bus_disabled = TRUE;
+	UCSR0B = 0;
+	linkbus_end_tx();
+	memset(rx_buffer, 0, sizeof(rx_buffer));
+	
+	for(bufferIndex=0; bufferIndex<LINKBUS_NUMBER_OF_TX_MSG_BUFFERS; bufferIndex++)
+	{
+		tx_buffer[bufferIndex][0] = '\0';
+	}
 }
 
 void linkbus_setTerminalMode(BOOL on)
@@ -254,6 +271,8 @@ void linkbus_setTerminalMode(BOOL on)
 BOOL linkbus_send_text(char* text)
 {
 	BOOL err = TRUE;
+	
+	if(g_bus_disabled) return err;
 
 	if(text)
 	{
@@ -290,6 +309,9 @@ void lb_send_WDTError(void)
  ************************************************************************/
 void lb_send_Help(void)
 {
+	if(g_bus_disabled) return;
+	if(!g_lb_terminal_mode) return;
+
 #ifdef DEBUG_FUNCTIONS_ENABLE
 	sprintf(g_tempMsgBuff, "\n*** %s Debug Ver. %s ***", PRODUCT_NAME_LONG, SW_REVISION);
 #else
@@ -321,7 +343,14 @@ void lb_send_Help(void)
 
 void lb_send_NewPrompt(void)
 {
-	linkbus_send_text((char*)textPrompt);
+	if(g_lb_terminal_mode)
+	{
+		linkbus_send_text((char*)textPrompt);
+	}
+	else
+	{
+		linkbus_send_text((char*)crlf);
+	}
 }
 
 void lb_send_NewLine(void)

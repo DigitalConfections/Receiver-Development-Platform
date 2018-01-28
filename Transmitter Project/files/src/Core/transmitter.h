@@ -134,7 +134,7 @@ typedef enum
 #ifdef INCLUDE_RECEIVER_SUPPORT
 /**
  */
-	void init_receiver(void);
+	BOOL init_transmitter(void);
 
 /**
  */

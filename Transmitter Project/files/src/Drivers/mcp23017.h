@@ -32,8 +32,32 @@
 #ifndef MCP23017_H_
 #define MCP23017_H_
 
-#define MCP23017_PORTA 0
-#define MCP23017_PORTB 1
+typedef enum {
+	MCP23017_PORTA,
+	MCP23017_PORTB,
+} ExpanderPort;
+
+	/* PortB
+	*	PB0 - FTDI Present Input (low)
+	*	PB1 - Clone Present Input (low)
+	*	PB2 - WiFi Reset Output (low)
+	*	PB3 - WiFi Module Power Enable Output (high)
+	*	PB4 - DI Master/Clone Output (high = Master; low = Clone)
+	*	PB5 - Audio Amp Enable Output (high)
+	*	PB6 - Headphone Power Latch (high)
+	*	PB7 - Client UART Enable (low)
+	*/
+
+typedef enum {
+	FTDI_PRESENT,
+	CLONE_PRESENT,
+	WIFI_RESET,
+	WIFI_POWER_ENABLE,
+	MASTER_DEVICE,
+	AUDIO_AMP_ENABLE,
+	POWER_LATCH_ENABLE,
+	CLIENT_UART_ENABLE
+} DIbit;	
 
 /**
  */
@@ -45,7 +69,11 @@ void mcp23017_writePort(uint8_t data, uint8_t port);
 
 /**
  */
-BOOL mcp23017_readPort(uint8_t *portData, uint8_t port);
+BOOL mcp23017_readPort(uint8_t *databyte, ExpanderPort port);
+
+/**
+ */
+void mcp23017_set( DIbit bit, BOOL value);
 
 
 #endif  /* MCP23017_H_ */

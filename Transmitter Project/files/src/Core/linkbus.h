@@ -41,7 +41,7 @@
 
 #define FOSC 8000000    /* Clock Speed */
 #define BAUD 9600
-#define MYUBRR (FOSC / 16 / BAUD - 1)
+#define MYUBRR(b) (FOSC / 16 / (b) - 1)
 
 typedef enum
 {
@@ -95,7 +95,7 @@ typedef enum
 	MESSAGE_SETCLK1 = 'C' * 100 + 'K' * 10 + '1',   /* $CK1,Fhz,on; // FHz=freq_in_Hz nc=null; on=1 off=0 nc=null */
 	MESSAGE_SETCLK2 = 'C' * 100 + 'K' * 10 + '2',   /* $CK2,Fhz,on; // FHz=freq_in_Hz nc=null; on=1 off=0 nc=null */
 	MESSAGE_BATTERY = 'B' * 100 + 'A' * 10 + 'T',   /* $BAT? / !BAT; // Subscribe to battery voltage reports */
-	MESSAGE_VOLUME  = 'V' * 100 + 'O' * 10 + 'L',   /* $VOL,,; / $VOL? / !VOL,,; // Set volume: field1 = VolumeType; field2 = Setting */
+//	MESSAGE_VOLUME  = 'V' * 100 + 'O' * 10 + 'L',   /* $VOL,,; / $VOL? / !VOL,,; // Set volume: field1 = VolumeType; field2 = Setting */
 	MESSAGE_BCR = 'B' * 100 + 'C' * 10 + 'R',       /* Broadcast Request: $BCR,? $BCR,; // Start and stop broadcasts of data identified in field1 */
 	MESSAGE_TTY = 'T' * 100 + 'T' * 10 + 'Y',       /* Adjust for PC communications interface (add crlf, etc.) */
 
@@ -120,6 +120,7 @@ typedef enum
 	
 	/* UTILITY MESSAGES */
 	MESSAGE_RESET = 'R' * 100 + 'S' * 10 + 'T',		/* Processor reset */
+	MESSAGE_WIFI = 'W' * 10 + 'I',					/* Enable/disable WiFi */
 
 #ifdef DEBUG_FUNCTIONS_ENABLE
 	MESSAGE_DEBUG = 'D' * 100 + 'B' * 10 + 'G',		/* Used for debug only */
@@ -173,7 +174,7 @@ typedef struct
 
 /**
  */
-void linkbus_init(void);
+void linkbus_init(uint32_t baud);
 
 /**
  */
@@ -182,6 +183,11 @@ void linkbus_end_tx(void);
 /**
  */
 void linkbus_reset_rx(void);
+
+/**
+ * Immediately turns off receiver and flushes receive buffer
+ */
+void linkbus_disable(void);
 
 /**
  */

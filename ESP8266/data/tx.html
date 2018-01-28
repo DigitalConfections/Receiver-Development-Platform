@@ -92,7 +92,7 @@
         var websock;
 
         timeUpdateTimer = setInterval(function() {
-            updateTime();
+            if(!stillConnected) updateTime();
         }, 1000);
 
         function start() {
@@ -157,7 +157,10 @@
                             break;
 
                        case "SYNC":
+                       {
                             document.getElementById("xmtrTime").innerHTML = arr[1];
+                            updateTime();
+                       }
                             break;
 
                         case "CLONE":
@@ -1664,7 +1667,7 @@
       </span>
 
         <h1 style="font-family:verdana; font-size:30px; color:Black; text-align:center;">Transmitter Settings</h1>
-        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">Ver 0.1.1 - 14 Jan 2018</p>
+        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">Ver 0.1.2 - 27 Jan 2018</p>
 
         <div>
             <table>

@@ -41,10 +41,6 @@ bool Transmitter::setXmtrData(String id, String value) {
   {
     callsignSetting = value;
   }
-  else if (id.equalsIgnoreCase(MANUAL_OR_TIMED_SETTING))
-  {
-    manualTimingSetting = value;
-  }
   else if (id.equalsIgnoreCase(CLASSIC_2M_ID_SETTING))
   {
     classic2mIDSetting = value;
@@ -97,7 +93,7 @@ bool Transmitter::setXmtrData(String id, String value) {
   {
     classic2mFoxFrequencySetting = value;
   }
-  else if (id.equalsIgnoreCase(CLASSIC_2M_HOME_FREQUENCY_SETTING))
+  else if (id.equalsIgnoreCase(CLASSIC_2M_FINISH_FREQUENCY_SETTING))
   {
     classic2mHomeFrequencySetting = value; // Classic event only (e.g., 144.900 MHz)
   }
@@ -105,7 +101,7 @@ bool Transmitter::setXmtrData(String id, String value) {
   {
     classic80mFoxFrequency1Setting = value; // Classic event only (e.g., 3.510 MHz)
   }
-  else if (id.equalsIgnoreCase(CLASSIC_80M_HOME_FREQUENCY_SETTING))
+  else if (id.equalsIgnoreCase(CLASSIC_80M_FINISH_FREQUENCY_SETTING))
   {
     classic80mHomeFrequencySetting = value; // Classic, Fox-O events only (e.g., 3.600 MHz)
   }
@@ -121,7 +117,7 @@ bool Transmitter::setXmtrData(String id, String value) {
   {
     fox_O_80mFoxFrequency3Setting = value; // Fox-O event only (e.g., 3.570 MHz)
   }
-  else if (id.equalsIgnoreCase(FOX_O_80M_HOME_FREQUENCY_SETTING))
+  else if (id.equalsIgnoreCase(FOX_O_80M_FINISH_FREQUENCY_SETTING))
   {
     fox_O_80mHomeFrequencySetting = value; // Fox-O event only (e.g., 3.570 MHz)
   }
