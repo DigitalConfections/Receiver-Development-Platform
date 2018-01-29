@@ -2578,7 +2578,7 @@ void handleLBMessage(String message)
     }
     else
     {
-      temp = (100. * ((FULLY_CHARGED_BATTERY_mV - payload.toFloat()) / (FULLY_CHARGED_BATTERY_mV - FULLY_DEPLETED_BATTERY_mV) )) + 0.5;
+      temp = (100. * ((payload.toFloat() - FULLY_DEPLETED_BATTERY_mV) / (FULLY_CHARGED_BATTERY_mV - FULLY_DEPLETED_BATTERY_mV) )) + 0.5;
     }
 
     char dataStr[4];
