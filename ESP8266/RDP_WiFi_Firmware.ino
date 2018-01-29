@@ -118,6 +118,7 @@ unsigned int g_localPort = 2390;    /* local port to listen for UDP  packets */
 /* HTTP web server */
 ESP8266WebServer g_http_server(80); /* HTTP server on port 80 */
 WebSocketsServer g_webSocket = WebSocketsServer(81);  // create a websocket server on port 81
+String g_AP_NameString;
 
 typedef struct webSocketClient {
   uint8_t webID;
@@ -136,7 +137,6 @@ String g_softAP_IP_addr;
 bool g_main_page_served = false;
 
 void handleRoot();              // function prototypes for HTTP handlers
-void handleLED();
 void handleNotFound();
 
 /*
@@ -290,14 +290,6 @@ void handleLogin()
   }
 }
 
-
-void handleLED()
-{ // If a POST request is made to URI /LED
-  digitalWrite(RED_LED, !digitalRead(RED_LED));    /* Toggle red LED */
-  g_http_server.sendHeader("Location", "/");       // Add a header to respond with a new location for the browser to go to the home page again
-  g_http_server.send(303);                         // Send it back to the browser with an HTTP status 303 (See Other) to redirect
-}
-
 void handleNotFound()
 { // if the requested file or page doesn't exist, return a 404 not found error
   if (!handleFileRead(g_http_server.uri()))
@@ -354,10 +346,12 @@ bool setupHTTP_AP()
   /* Create a somewhat unique SSID */
   uint8_t mac[WL_MAC_ADDR_LENGTH];
   WiFi.softAPmacAddress(mac);
-  String macID = String(mac[WL_MAC_ADDR_LENGTH - 2], HEX) +
+  String macID = String(mac[WL_MAC_ADDR_LENGTH - 4], HEX) +
+                 String(mac[WL_MAC_ADDR_LENGTH - 3], HEX) +
+                 String(mac[WL_MAC_ADDR_LENGTH - 2], HEX) +
                  String(mac[WL_MAC_ADDR_LENGTH - 1], HEX);
   macID.toUpperCase();
-  String ap_NameString = String("Tx_" + macID);
+  g_AP_NameString = String("Tx_" + macID);
 
   IPAddress apIP = stringToIP(g_softAP_IP_addr);
 
@@ -370,11 +364,11 @@ bool setupHTTP_AP()
 
   if (g_bridgePW.length() > 0)
   {
-    success = WiFi.softAP(stringObjToConstCharString(&ap_NameString), stringObjToConstCharString(&g_bridgePW));
+    success = WiFi.softAP(stringObjToConstCharString(&g_AP_NameString), stringObjToConstCharString(&g_bridgePW));
   }
   else
   {
-    success = WiFi.softAP(stringObjToConstCharString(&ap_NameString));
+    success = WiFi.softAP(stringObjToConstCharString(&g_AP_NameString));
   }
 
   if (success)
@@ -392,7 +386,6 @@ bool setupHTTP_AP()
 
     /* Start TCP listener on port TCP_PORT */
     g_http_server.on("/", HTTP_GET, handleRoot);     // Call the 'handleRoot' function when a client requests URI "/"
-    g_http_server.on("/LED", HTTP_POST, handleLED);  // Call the 'handleLED' function when a POST request is made to URI "/LED"
     g_http_server.on("/login", HTTP_POST, handleLogin); // Call the 'handleLogin' function when a POST request is made to URI "/login"
 
     g_http_server.on("/upload", HTTP_GET, []() {                 // if the client requests the upload page
@@ -420,7 +413,7 @@ bool setupHTTP_AP()
 
     if (g_debug_prints_enabled)
     {
-      Serial.print(ap_NameString + " server started: ");
+      Serial.print(g_AP_NameString + " server started: ");
       Serial.println(myIP);
     }
   }
@@ -453,6 +446,7 @@ void onNewStation(WiFiEventSoftAPModeStationConnected sta_info) {
         Serial.printf("WebID# %d. MAC address : %s\n", g_webSocketClient[i].webID, g_webSocketClient[i].macAddr);
       }
     }
+
     sprintf(g_webSocketClient[g_numberOfWebClients].macAddr, "%02X:%02X:%02X:%02X:%02X:%02X", MAC2STR(sta_info.mac));
     g_webSocketClient[g_numberOfWebClients].webID = sta_info.aid;
 
@@ -1716,6 +1710,15 @@ void httpWebServerLoop()
       if (g_numberOfSocketClients > 0)
       {
         if (toggle) Serial.printf("$TIM?"); // request latest time once per second
+
+        if (!(holdTime % 12))
+        {
+          Serial.printf("$TEM?"); // request temperature reading
+        }
+        else if (!(holdTime % 15))
+        {
+          Serial.printf("$BAT?"); // request battery level reading
+        }
       }
     }
   }
@@ -1808,21 +1811,20 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           {
             Serial.println("Sending MAC address:");
           }
-          String msg = String("MAC," + String(g_webSocketClient[g_numberOfSocketClients].macAddr));
+
+          String msg = String( String(COMMAND_MAC) + "," + String(g_webSocketClient[g_numberOfSocketClients].macAddr) );
           g_webSocket.sendTXT(g_webSocketClient[g_numberOfSocketClients].socketID, stringObjToConstCharString(&msg), msg.length());
           if (g_debug_prints_enabled)
           {
             Serial.println(msg);
           }
 
-          msg = String("TIME," + String(asctime (timeinfo)));
+          msg = String( String(COMMAND_SSID) + "," + g_AP_NameString );
           g_webSocket.sendTXT(g_webSocketClient[g_numberOfSocketClients].socketID, stringObjToConstCharString(&msg), msg.length());
           if (g_debug_prints_enabled)
           {
             Serial.println(msg);
           }
-
-          //         Serial.printf("$TIM?"); // Request current time setting from Transmitter
 
           g_main_page_served = false;
         }
@@ -2537,6 +2539,61 @@ void handleLBMessage(String message)
       //      {
       //  Serial.println(msg);
       //      }
+    }
+  }
+  else if (type == MESSAGE_TEMP)
+  {
+    int16_t rawtemp = payload.toInt();
+    bool negative =  rawtemp & 0x8000;
+    if (negative) rawtemp &= 0x7FFF;
+    float temp = (rawtemp >> 8) + (0.25 * ((rawtemp & 0x00C0) >> 6)) + 0.05;
+    if (negative) temp = -temp;
+
+    char dataStr[6]; // allow for possible negative sign
+    dtostrf(temp, 4, 1, dataStr);
+    dataStr[5] = '\0';
+
+    String msg = String(String(COMMAND_TEMPERATURE) + "," + dataStr + "C");
+
+    for (int i = 0; i < g_numberOfSocketClients; i++)
+    {
+      g_webSocket.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
+      if (g_debug_prints_enabled)
+      {
+        Serial.println(msg);
+      }
+    }
+  }
+  else if (type == MESSAGE_BATTERY)
+  {
+    float temp = payload.toFloat();
+
+    if (temp > FULLY_CHARGED_BATTERY_mV)
+    {
+      temp = 100.;
+    }
+    else if (temp < FULLY_DEPLETED_BATTERY_mV)
+    {
+      temp = 0;
+    }
+    else
+    {
+      temp = (100. * ((FULLY_CHARGED_BATTERY_mV - payload.toFloat()) / (FULLY_CHARGED_BATTERY_mV - FULLY_DEPLETED_BATTERY_mV) )) + 0.5;
+    }
+
+    char dataStr[4];
+    dtostrf(temp, 3, 0, dataStr);
+    dataStr[3] = '\0';
+
+    String msg = String(String(COMMAND_BATTERY) + "," + dataStr + "%");
+
+    for (int i = 0; i < g_numberOfSocketClients; i++)
+    {
+      g_webSocket.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
+      if (g_debug_prints_enabled)
+      {
+        Serial.println(msg);
+      }
     }
   }
 }

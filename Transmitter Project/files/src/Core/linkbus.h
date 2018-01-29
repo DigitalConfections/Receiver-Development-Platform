@@ -30,6 +30,7 @@
 #include "transmitter.h"
 #include "si5351.h"
 
+#define INKBUS_TERMINAL_MODE_DEFAULT FALSE
 #define LINKBUS_MAX_MSG_LENGTH 75
 #define LINKBUS_MIN_MSG_LENGTH 3    /* shortest message: $TTY; */
 #define LINKBUS_MAX_MSG_FIELD_LENGTH 21
@@ -86,16 +87,11 @@ typedef enum
 {
 	MESSAGE_EMPTY = 0,
 
-	/* STARTUP MESSAGES */
-	MESSAGE_ID = 'I' * 10 + 'D',                    /* Send self ID, and ack rec'd ID: $ID,,; // field1=MyID; field2=OtherID */
-
 	/* TEST EQUIPMENT MESSAGE FAMILY (TEST DEVICE MESSAGING) */
 	MESSAGE_BAND = 'B' * 100 + 'N' * 10 + 'D',      /* $BND,; / $BND? / !BND,; // Set band; field1 = RadioBand */
 	MESSAGE_SETCLK0 = 'C' * 100 + 'K' * 10 + '0',   /* $CK0,Fhz,on; // FHz=freq_in_Hz nc=null; on=1 off=0 nc=null */
 	MESSAGE_SETCLK1 = 'C' * 100 + 'K' * 10 + '1',   /* $CK1,Fhz,on; // FHz=freq_in_Hz nc=null; on=1 off=0 nc=null */
 	MESSAGE_SETCLK2 = 'C' * 100 + 'K' * 10 + '2',   /* $CK2,Fhz,on; // FHz=freq_in_Hz nc=null; on=1 off=0 nc=null */
-	MESSAGE_BATTERY = 'B' * 100 + 'A' * 10 + 'T',   /* $BAT? / !BAT; // Subscribe to battery voltage reports */
-//	MESSAGE_VOLUME  = 'V' * 100 + 'O' * 10 + 'L',   /* $VOL,,; / $VOL? / !VOL,,; // Set volume: field1 = VolumeType; field2 = Setting */
 	MESSAGE_BCR = 'B' * 100 + 'C' * 10 + 'R',       /* Broadcast Request: $BCR,? $BCR,; // Start and stop broadcasts of data identified in field1 */
 	MESSAGE_TTY = 'T' * 100 + 'T' * 10 + 'Y',       /* Adjust for PC communications interface (add crlf, etc.) */
 
@@ -104,11 +100,11 @@ typedef enum
 	/*	DUAL-BAND RX MESSAGE FAMILY (FUNCTIONAL MESSAGING) */
 	MESSAGE_SET_FREQ = 'F' * 100 + 'R' * 10 + 'E',  /* $FRE,Fhz; / $FRE,FHz? / !FRE,; // Set/request current receive frequency */
 	MESSAGE_TIME = 'T' * 100 + 'I' * 10 + 'M',      /* $TIM,time; / !TIM,time; / $TIM,? // Set/request RTC time */
-	MESSAGE_BAT_BC = 'B',                           /* Battery broadcast data */
+	MESSAGE_BAT = 'B' * 100 + 'A' * 10 + 'T',       /* Battery charge data */
 	MESSAGE_RSSI_BC = 'S',                          /* RSSI broadcast data */
 	MESSAGE_RSSI_REPEAT_BC = 'S' * 10 + 'S',		/* RSSI repeat broadcast toggle */
 	MESSAGE_RF_BC = 'R',                            /* RF level broadcast data */
-	MESSAGE_TEMPERATURE_BC = 'T',                   /* Temperature broadcast data */
+	MESSAGE_TEMP = 'T' * 100 + 'E' * 10 + 'M',      /* Temperature  data */
 	MESSAGE_PERM = 'P',								/* Saves most settings to EEPROM "perm" */
 	MESSAGE_CW_OFFSET = 'O',						/* Sets or returns the CW offset in Hz */
 	MESSAGE_ATTENUATION = 'A',                      /* Sets receiver attenuation (0-255) */
@@ -219,10 +215,6 @@ void linkbus_setTerminalMode(BOOL on);
 
 /**
  */
-void lb_send_ID(LBMessageType msgType, DeviceID myID, DeviceID otherID);
-
-/**
- */
 void lb_send_FRE(LBMessageType msgType, Frequency_Hz freq, BOOL isMemoryValue);
 
 /**
@@ -240,10 +232,6 @@ void lb_send_VOL(LBMessageType msgType, VolumeType type, VolumeSetting volume);
 /**
  */
 void lb_send_BCR(LBbroadcastType bcType, BOOL start);
-
-/**
- */
-void lb_broadcast_bat(uint16_t data);
 
 /**
  */

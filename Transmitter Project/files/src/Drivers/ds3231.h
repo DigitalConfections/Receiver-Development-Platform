@@ -53,6 +53,11 @@
  *  offset - time in seconds since midnight
  */
 	void ds3231_set_time(int32_t secondsSinceMidnight);
+	
+/**
+ *
+ */
+	BOOL ds3231_get_temp(int16_t * val);
 
 /**
  *  Turn on/off 1-second square wave on the INT/SQW pin.

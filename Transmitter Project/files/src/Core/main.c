@@ -68,7 +68,7 @@ static volatile BOOL g_powering_off = FALSE;
 
 static volatile BOOL g_radio_port_changed = FALSE;
 static volatile uint16_t g_beep_length = 0;
-static volatile uint16_t g_linkbus_init_delay = 0;
+static volatile uint8_t g_wifi_enable_delay = 0;
 
 static volatile uint16_t g_tick_count = 0;
 static volatile BOOL g_battery_measurements_active = FALSE;
@@ -84,7 +84,7 @@ static volatile BOOL g_initialization_complete = FALSE;
 /* Linkbus variables */
 static DeviceID g_LB_attached_device = NO_ID;
 static uint16_t g_LB_broadcasts_enabled = 0;
-static BOOL g_terminal_mode = TRUE;
+static BOOL g_terminal_mode = INKBUS_TERMINAL_MODE_DEFAULT;
 static BOOL g_lb_repeat_rssi = FALSE;
 static uint16_t g_rssi_countdown = 0;
 
@@ -213,6 +213,21 @@ ISR( INT0_vect )
 #ifdef ENABLE_1_SEC_INTERRUPTS
 	g_seconds_count++;
 	g_seconds_int = TRUE;
+	
+	/**************************************
+	 * Delay before re-enabling linkbus receive
+	 ***************************************/
+	if(g_wifi_enable_delay)
+	{
+		g_wifi_enable_delay--;
+
+		if(!g_wifi_enable_delay)
+		{
+			wifi_power(ON); // power on WiFi
+			wifi_reset(OFF); // bring WiFi out of reset
+		}
+	}
+
 #else
 	if(g_terminal_mode)
 	{
@@ -942,8 +957,8 @@ int main( void )
 	// PC6 = Reset
 	// PC7 = N/A
 
-		DDRC = 0b00000011;                                          /* PC4 and PC5 are inputs (should be true by default); PC2 and PC3 are used for their ADC function; PC1 and PC0 outputs control main volume */
-		PORTC = (I2C_PINS | (1 << PORTC2));                         /* Set all Port C pins low, except I2C lines and PC2; includes output port PORTC0 and PORTC1 (main volume controls) */
+	DDRC = 0b00000011;                                          /* PC4 and PC5 are inputs (should be true by default); PC2 and PC3 are used for their ADC function; PC1 and PC0 outputs control main volume */
+	PORTC = (I2C_PINS | (1 << PORTC2));                         /* Set all Port C pins low, except I2C lines and PC2; includes output port PORTC0 and PORTC1 (main volume controls) */
 
 	/**
 	 * PD5 (OC0B) is PWM output for AM modulation generation
@@ -989,7 +1004,6 @@ int main( void )
 	/**
 	 * Initialize the transmitter */
 	err = init_transmitter();
-
 
 	if(g_audio_RSSI)
 	{
@@ -1037,8 +1051,6 @@ int main( void )
 			;                                           /* wait until transmit finishes */
 		}
 		wdt_reset();
-
-		lb_send_ID(LINKBUS_MSG_COMMAND, RECEIVER_ID, NO_ID);
 	}
 	
 	wdt_reset();
@@ -1049,6 +1061,7 @@ int main( void )
 			g_seconds_count = 0;    /* sync seconds count to clock */
 			ds3231_1s_sqw(ON);
 	   #endif    /* #ifdef ENABLE_1_SEC_INTERRUPTS */
+		g_wifi_enable_delay = 4;
 	#endif
 
 	while(linkbusTxInProgress())
@@ -1067,24 +1080,6 @@ int main( void )
 		* The watchdog must be petted periodically to keep it from barking
 		**************************************/
 		cli(); wdt_reset(); /* HW watchdog */ sei();
-
-		/**************************************
-		 * Delay before re-enabling linkbus receive
-		 ***************************************/
-		if(g_linkbus_init_delay)
-		{
-			g_linkbus_init_delay--;
-
-			if(!g_linkbus_init_delay)
-			{
-				cli();
-				linkbus_init(BAUD);
-				sei();
-				lb_send_NewLine();
-//				lb_send_Help();
-				lb_send_NewPrompt();	
-			}
-		}
 
 		/***************************************
 		* Check for Power Off
@@ -1304,7 +1299,7 @@ int main( void )
 
 						if(result != 2)
 						{
-							g_linkbus_init_delay = 2500;
+							linkbus_init(BAUD);
 						}
 					}
 					
@@ -1582,38 +1577,6 @@ int main( void )
 				}
 				break;
 
-				case MESSAGE_ID:
-				{
-					if(lb_buff->fields[FIELD1][0])
-					{
-						g_LB_attached_device = atoi(lb_buff->fields[FIELD1]);
-						DeviceID reportedID = NO_ID;
-
-						if(lb_buff->fields[FIELD2][0])
-						{
-							reportedID = atoi(lb_buff->fields[FIELD2]);
-						}
-
-
-							if(reportedID != RECEIVER_ID)
-							{
-								lb_send_ID(LINKBUS_MSG_REPLY, RECEIVER_ID, g_LB_attached_device);
-								attach_success = FALSE;
-								g_send_ID_countdown = SEND_ID_DELAY;
-							}
-							else
-							{
-								if(!attach_success)
-								{
-									lb_send_ID(LINKBUS_MSG_REPLY, RECEIVER_ID, g_LB_attached_device);
-								}
-								attach_success = TRUE;  /* stop any ongoing ID messages */
-								g_send_ID_countdown = 0;
-							}
-					}
-				}
-				break;
-
 				case MESSAGE_BAND:
 				{
 					RadioBand band;
@@ -1652,12 +1615,13 @@ int main( void )
 					sei();	
 					wifi_reset(ON);
 					wifi_power(OFF);
-					g_linkbus_init_delay = 2500;
 
 					g_LB_broadcasts_enabled = 0;    /* disable all broadcasts */
 					attach_success = TRUE;          /* stop any ongoing ID messages */
 					g_send_ID_countdown = 0;
 					linkbus_setLineTerm("\n\n");
+					
+					linkbus_init(BAUD);
 				}
 				break;
 
@@ -1676,14 +1640,16 @@ int main( void )
 				}
 				break;
 
-				case MESSAGE_BAT_BC:
+				case MESSAGE_BAT:
 				{
-					lb_broadcast_bat(g_lastConversionResult[BATTERY_READING]);
+					lb_broadcast_num(g_lastConversionResult[BATTERY_READING], "!BAT");
 				}
 				break;
 
-				case MESSAGE_TEMPERATURE_BC:
+				case MESSAGE_TEMP:
 				{
+					int16_t v;
+					if(!ds3231_get_temp(&v)) lb_broadcast_num(v, "!TEM");
 				}
 				break;
 				
@@ -1715,7 +1681,7 @@ int main( void )
 					lb_send_value(g_main_volume, "MAIN VOL");
 					lb_send_value(g_tone_volume, "TONE VOL");
 					cli(); wdt_reset(); /* HW watchdog */ sei();
-					lb_broadcast_bat(g_lastConversionResult[BATTERY_READING]);
+					lb_broadcast_num(g_lastConversionResult[BATTERY_READING], "BAT");
 					lb_broadcast_rssi(g_lastConversionResult[RSSI_READING]);
 					linkbus_setLineTerm("\n\n");
 					cli(); wdt_reset(); /* HW watchdog */ sei();
@@ -1895,7 +1861,7 @@ int main( void )
 						if(g_adcUpdated[BATTERY_READING])
 						{
 							uint16_t v = (uint16_t)( ( 1000 * ( (uint32_t)(g_lastConversionResult[BATTERY_READING] + POWER_SUPPLY_VOLTAGE_DROP_MV) ) ) / BATTERY_VOLTAGE_COEFFICIENT ); /* round up and adjust for voltage divider and drops */
-							lb_broadcast_bat(v);
+					        lb_broadcast_num(v, "BAT");
 							g_adcUpdated[BATTERY_READING] = FALSE;
 							g_LB_broadcast_interval = 100;                                                                                                                              /* minimum delay before next broadcast */
 						}
@@ -1932,7 +1898,7 @@ int main( void )
 					{
 						tries--;
 						g_send_ID_countdown = SEND_ID_DELAY;
-						lb_send_ID(LINKBUS_MSG_COMMAND, RECEIVER_ID, g_LB_attached_device);
+//						lb_send_ID(LINKBUS_MSG_COMMAND, RECEIVER_ID, g_LB_attached_device);
 					}
 				}
 			}

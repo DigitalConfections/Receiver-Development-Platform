@@ -1,3 +1,5 @@
+<!DOCTYPE html>
+
 <head>
     <title>Tx</title>
     <style type="text/css">
@@ -30,7 +32,6 @@
         :-moz-placeholder { /* Firefox 18- */
           color: red;
         }
-
     </style>
 </head>
 
@@ -176,6 +177,25 @@
                             document.getElementById("macAddress").innerHTML = t;
                             console.log(t);
                             break;
+
+                        case "BAT":
+                            var t = "Battery: " + arr[1];
+                            document.getElementById("batteryLevel").innerHTML = t;
+                            console.log(t);
+                            break;
+
+                        case "TEMP":
+                            var t = "Temp: " + arr[1];
+                            document.getElementById("temperature").innerHTML = t;
+                            console.log(t);
+                            break;
+
+                        case "SSID":
+                            var t = "SSID: " + arr[1];
+                            document.getElementById("ssid").innerHTML = t;
+                            console.log(t);
+                            break;
+
 
 //////////////////
 
@@ -1545,8 +1565,9 @@
         ////////////////////////////////////////////////////////////
     </script>
 
-    <style>
-        /* The container */
+    <div>
+        <span style="opacity:0; display:none;">
+       /* The container */
         
         .container {
             display: block;
@@ -1613,7 +1634,8 @@
             -ms-transform: rotate(45deg);
             transform: rotate(45deg);
         }
-    </style>
+        </span>
+    </div>
 
     <center>
         <span style="opacity:0; display:none;">
@@ -1667,28 +1689,43 @@
       </span>
 
         <h1 style="font-family:verdana; font-size:30px; color:Black; text-align:center;">Transmitter Settings</h1>
-        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">Ver 0.1.2 - 27 Jan 2018</p>
+        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">Ver 0.1.4 - 29 Jan 2018</p>
 
         <div>
             <table>
                 <tr>
-                    <td style="width:400px; height:50px; text-align:right; vertical-align:middle;">
-                        <p id="xmtrTime" style="font-family:verdana; font-size:15px; color:Red; font-weight:bold; text-align:center;">Disconnected</p>
+                    <td style="width:200px; height:50px; text-align:right; vertical-align:middle;">
+                        <p id="batteryLevel" style="font-family:verdana; font-size:15px; color:Black; font-weight:bold; text-align:center;">Battery: ?</p>
                     </td>
-                </tr>
-                <tr>
-                    <td style="width:400px; height:50px; text-align:right; vertical-align:middle;">
-                        <p id="currentTime" style="font-family:verdana; font-size:15px; color:Black; font-weight:bold; text-align:center;">Updating...</p>
+                    <td style="width:200px; height:50px; text-align:right; vertical-align:middle;">
+                        <p id="temperature" style="font-family:verdana; font-size:15px; color:Black; font-weight:bold; text-align:center;">Temp: ?</p>
                     </td>
-
-                    <td style="width:100px; height:50px; text-align:left; vertical-align:middle;">
-                        <button id="SyncButton" class="button" style="background-color:#EEE;" onclick="syncClock();">Sync</button>
+                    <td style="width:200px; height:50px; text-align:right; vertical-align:middle;">
+                        <p id="ssid" style="font-family:verdana; font-size:15px; color:Black; font-weight:bold; text-align:center;">SSID: ?</p>
                     </td>
                 </tr>
             </table>
 
             <table>
                 <tr>
+                    <td style="width:400px; text-align:right; vertical-align:middle;">
+                        <p id="xmtrTime" style="font-family:verdana; font-size:15px; color:Red; font-weight:bold; text-align:center;">Disconnected</p>
+                    </td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td style="width:400px; text-align:right; vertical-align:middle;">
+                        <p id="currentTime" style="font-family:verdana; font-size:15px; color:Black; font-weight:bold; text-align:center;">Updating...</p>
+                    </td>
+
+                    <td style="width:100px; text-align:left; vertical-align:middle;">
+                        <button id="SyncButton" class="button" style="background-color:#EEE;" onclick="syncClock();">Sync</button>
+                    </td>
+                </tr>
+            </table>
+
+            <table>
+                <tr style="height:75px;">
                     <td style="font-family:verdana; height:25px; text-align:right; vertical-align:middle;">Check to clone others:</td>
 
                     <td>
@@ -1705,7 +1742,7 @@
                     <td style="font-family:verdana; font-size:20px; font-weight:bold; color:Black; text-align:right">Callsign:</td>
 
                     <td>
-                        <input type="text" id="callText" style="font-family:verdana; font-size:20px; font-weight:bold; color:Blue;" name="callText" placeholder="Callsign" oninput="callSignEntered()"/>
+                        <input type="text" id="callText" style="font-family:verdana; font-size:20px; font-weight:bold; color:Blue;" name="callText" placeholder="Callsign" oninput="callSignEntered()" />
                     </td>
 
                     <td> </td>
@@ -1769,6 +1806,7 @@
                     <td style="font-family:verdana; font-size:20px; font-weight:bold; text-align:left;">
                         <input type="text" list="bands" id="bandText" name="bandText" style="font-size:20px; font-weight:bold; text-align:center" value="2m" readonly="readonly" />
                     </td>
+                    <td></td>
                 </tr>
             </table>
         </div>

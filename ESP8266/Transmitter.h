@@ -3,6 +3,9 @@
 
 #include <Arduino.h>
 
+#define FULLY_CHARGED_BATTERY_mV 4200.
+#define FULLY_DEPLETED_BATTERY_mV 3200.
+
 #define MASTER_OR_CLONE_SETTING "MASTER_CLONE"
 #define CALLSIGN_SETTING "CALLSIGN"
 #define CLASSIC_2M_ID_SETTING "CLASSIC_2M_FOX_ID"
@@ -34,12 +37,17 @@
 // UI States and Actions
 #define EVENT_DISPLAYED_STATE "EVENT_STATE"
 #define COMMAND_SYNC_TIME "SYNC"
+#define COMMAND_TEMPERATURE "TEMP"
+#define COMMAND_SSID "SSID"
+#define COMMAND_BATTERY "BAT"
 #define COMMAND_CLONE "CLONE"
 #define COMMAND_VERSION "VERS"
 #define COMMAND_MAC "MAC"
 
 // LinkBus Commands
 #define MESSAGE_TIME "TIM"
+#define MESSAGE_TEMP "TEM"
+#define MESSAGE_BATTERY "BAT"
 
 class Transmitter {
   public:

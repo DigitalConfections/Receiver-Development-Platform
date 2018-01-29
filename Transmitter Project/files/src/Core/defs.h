@@ -32,7 +32,7 @@
 
 /******************************************************
  * Set the text that gets displayed to the user */
-#define SW_REVISION "X2.1.2"
+#define SW_REVISION "X2.1.3"
 
 //#define DEBUG_FUNCTIONS_ENABLE
 //#define TRANQUILIZE_WATCHDOG

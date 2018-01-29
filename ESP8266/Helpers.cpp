@@ -5,14 +5,14 @@
  */
 const char * stringObjToConstCharString(String *val)
 {
-  char str[50]; 
+  char str[50];
 
   strcpy(str, (*val).c_str());
-  
-  for(int i=0; i<strlen(str); i++)
+
+  for (int i = 0; i < strlen(str); i++)
   {
     char c = str[i];
-    if((!(isalnum(c) || isprint(c))) || (c == 13))
+    if ((!(isalnum(c) || isprint(c))) || (c == 13))
     {
       str[i] = '\0';
       break;
@@ -21,7 +21,7 @@ const char * stringObjToConstCharString(String *val)
 
   *val = str;
 
-  return((const char*)(*val).c_str());
+  return ((const char*)(*val).c_str());
 }
 
 
@@ -128,12 +128,22 @@ int32_t stringToTimeVal(String string)
   char field[3];
   char *instr, *str;
   char c_str[10];
+  float seconds = 0;
 
   // handle 2018-01-26T18:15:49.769Z format
   int tee = string.indexOf("T");
-  if(tee > 0)
+  if (tee > 0)
   {
-    string = string.substring(tee+1);
+    string = string.substring(tee + 1);
+
+    int decimal = string.indexOf(".");
+
+    if (decimal > 2)
+    {
+      String s = string.substring(decimal - 2, decimal + 4);
+      seconds = s.toFloat();
+      seconds += 0.7;  // round up and account for latency
+    }
   }
 
   strcpy(c_str, string.c_str());
@@ -174,9 +184,17 @@ int32_t stringToTimeVal(String string)
   time_sec += SecondsFromMinutes(atol(field));
   index++;
 
-  field[0] = str[index++];
-  field[1] = str[index++];    /* seconds */
-  time_sec += atoi(field);
+  if (seconds > 0) // we have already calculated seconds
+  {
+     seconds += (float)time_sec;
+     time_sec = (int32_t)seconds;
+  }
+  else
+  {
+    field[0] = str[index++];
+    field[1] = str[index++];    /* seconds */
+    time_sec += atoi(field);
+  }
 
   return (time_sec);
 }

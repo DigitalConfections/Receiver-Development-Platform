@@ -32,14 +32,14 @@
 
 /* Global Variables */
 static volatile BOOL g_bus_disabled = TRUE;
-static volatile BOOL g_lb_terminal_mode = TRUE;
+static volatile BOOL g_lb_terminal_mode = INKBUS_TERMINAL_MODE_DEFAULT;
 static const char crlf[] = "\n";
 static char lineTerm[8] = "\n";
 static const char textPrompt[] = "RDP> ";
 static const char textWDT[] = "*** WDT Reset! ***\n";
 
 static const char textHelp[][40] = { "\nCommands:\n",
-"  B                 - Battery\n",
+"  BAT               - Battery\n",
 "  BND [2|80]        - Rx Band\n",
 "  FRE [M<1:5>] [Hz] - Rx Freq\n",
 "  PRE [0-255]       - Preamp\n",
@@ -619,51 +619,9 @@ void lb_send_BCR(LBbroadcastType bcType, BOOL start)
 	linkbus_send_text(g_tempMsgBuff);
 }
 
-void lb_send_ID(LBMessageType msgType, DeviceID myID, DeviceID otherID)
-{
-	char prefix = '$';
-	char m[4] = "\0";
-	char o[4] = "\0";
-
-	if(msgType == LINKBUS_MSG_REPLY)
-	{
-		prefix = '!';
-	}
-
-	if(myID != NO_ID)
-	{
-		sprintf(m, "%d", myID);
-	}
-	if(otherID != NO_ID)
-	{
-		sprintf(o, "%d", otherID);
-	}
-
-	sprintf(g_tempMsgBuff, "%cID,%s,%s;", prefix, m, o);
-	linkbus_send_text(g_tempMsgBuff);
-}
-
 void lb_send_sync(void)
 {
 	sprintf(g_tempMsgBuff, ".....");
-	linkbus_send_text(g_tempMsgBuff);
-}
-
-void lb_broadcast_bat(uint16_t data)
-{
-	char t[6] = "\0";
-
-	sprintf(t, "%d", data);
-
-	if(g_lb_terminal_mode)
-	{
-		sprintf(g_tempMsgBuff, "> BAT=%s%s", t, lineTerm);
-	}
-	else
-	{
-		sprintf(g_tempMsgBuff, "!B,%s;", t);
-	}
-
 	linkbus_send_text(g_tempMsgBuff);
 }
 
@@ -707,6 +665,7 @@ void lb_broadcast_num(uint16_t data, char* str)
 	char t[6] = "\0";
 
 	sprintf(t, "%u", data);
+	g_tempMsgBuff[0] = '\0';
 
 	if(g_lb_terminal_mode)
 	{
@@ -723,10 +682,10 @@ void lb_broadcast_num(uint16_t data, char* str)
 	{
 		if(str)
 		{
-			sprintf(g_tempMsgBuff, "!%s,%s;", str, t);
+			sprintf(g_tempMsgBuff, "%s,%s;", str, t);
 		}
 	}
 
-	linkbus_send_text(g_tempMsgBuff);
+	if(g_tempMsgBuff[0]) linkbus_send_text(g_tempMsgBuff);
 }
 

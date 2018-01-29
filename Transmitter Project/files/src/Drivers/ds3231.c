@@ -123,6 +123,23 @@
 			}
 		}
 	}
+	
+	
+	BOOL ds3231_get_temp(int16_t * val)
+	{
+		uint8_t data[2] = { 0, 0 };
+		BOOL result = i2c_device_read(DS3231_I2C_SLAVE_ADDR, RTC_TEMP_MSB, data, 2);
+		
+		if(!result)
+		{
+			*val = data[0];
+			*val = *val << 8;
+			*val |= data[1];
+		}
+		
+		return result;
+	}
+
 
 
 	void ds3231_set_time(int32_t secondsSinceMidnight)
