@@ -75,6 +75,7 @@
 #define BLUE_LED (2)
 
 bool g_debug_prints_enabled = DEBUG_PRINTS_ENABLE_DEFAULT;
+uint8_t g_debug_level_enabled = 0;
 bool g_LEDs_enabled = LEDS_ENABLE_DEFAULT;
 
 /*
@@ -117,6 +118,7 @@ unsigned int g_localPort = 2390;    /* local port to listen for UDP  packets */
 /* HTTP web server */
 ESP8266WebServer g_http_server(80); /* HTTP server on port 80 */
 WebSocketsServer g_webSocket = WebSocketsServer(81);  // create a websocket server on port 81
+String g_AP_NameString;
 
 typedef struct webSocketClient {
   uint8_t webID;
@@ -135,7 +137,6 @@ String g_softAP_IP_addr;
 bool g_main_page_served = false;
 
 void handleRoot();              // function prototypes for HTTP handlers
-void handleLED();
 void handleNotFound();
 
 /*
@@ -149,15 +150,24 @@ int g_blinkPeriodMillis = 500;
 
 static WiFiEventHandler e1, e2;
 
-Transmitter g_xmtr(DEBUG_PRINTS_ENABLE_DEFAULT);
+Transmitter *g_xmtr;
 
 void setup()
 {
   Serial.begin(SERIAL_BAUD_RATE);
-  while (!Serial)
-  {
-    ;                           /* Wait for UART to initialize */
-  }
+  //Serial.setDebugOutput(false);
+  //delay(10);
+  //system_set_os_print(false);
+  //delay(10);
+  //system_uart_swap();
+  //delay(10);
+  //  system_set_os_print(0);
+  //  Serial.begin(SERIAL_BAUD_RATE);
+  //  while (!Serial)
+  //  {
+  //    ;                           /* Wait for UART to initialize */
+  //  }
+
   pinMode(RED_LED, OUTPUT);       /* Allow the red LED to be controlled */
   pinMode(BLUE_LED, OUTPUT);      /* Initialize the BUILTIN_LED pin as an output */
   digitalWrite(RED_LED, HIGH);    /* Turn off red LED */
@@ -171,9 +181,11 @@ void setup()
 
   showSettings();
 
-  WiFi.onEvent(eventWiFi);                                                    // Handle WiFi event
-  g_xmtr = new Transmitter(g_debug_prints_enabled);
+#if WIFI_DEBUG_PRINTS_ENABLED
+  WiFi.onEvent(eventWiFi);      // Handle WiFi event
+#endif
 
+  g_xmtr = new Transmitter(g_debug_prints_enabled);
 }
 
 /********************************************************
@@ -215,8 +227,8 @@ void eventWiFi(WiFiEvent_t event) {
       Serial.println(String("[AP] " + e + ", Probe Request Recieved"));
       break;
   }
-
 }
+
 
 /********************************************************
   /*  WiFi Connection Status                              *
@@ -278,14 +290,6 @@ void handleLogin()
   }
 }
 
-
-void handleLED()
-{ // If a POST request is made to URI /LED
-  digitalWrite(RED_LED, !digitalRead(RED_LED));    /* Toggle red LED */
-  g_http_server.sendHeader("Location", "/");       // Add a header to respond with a new location for the browser to go to the home page again
-  g_http_server.send(303);                         // Send it back to the browser with an HTTP status 303 (See Other) to redirect
-}
-
 void handleNotFound()
 { // if the requested file or page doesn't exist, return a 404 not found error
   if (!handleFileRead(g_http_server.uri()))
@@ -307,7 +311,10 @@ void handleNotFound()
   {
     String filename = String(g_http_server.uri());
 
-    Serial.println("File read:" + filename);
+    if (g_debug_prints_enabled)
+    {
+      Serial.println("File read:" + filename);
+    }
 
     if (filename.indexOf("tx.html") >= 0)
     {
@@ -323,8 +330,11 @@ bool setupHTTP_AP()
   g_numberOfSocketClients = 0;
   g_numberOfWebClients = 0;
   Serial.setDebugOutput(true);
+
+#if WIFI_DEBUG_PRINTS_ENABLED
   Serial.printf("Initial connection status: %d\n", WiFi.status());
   WiFi.printDiag(Serial);
+#endif
 
   WiFi.mode(WIFI_AP_STA);
   // Event subscription
@@ -336,10 +346,12 @@ bool setupHTTP_AP()
   /* Create a somewhat unique SSID */
   uint8_t mac[WL_MAC_ADDR_LENGTH];
   WiFi.softAPmacAddress(mac);
-  String macID = String(mac[WL_MAC_ADDR_LENGTH - 2], HEX) +
+  String macID = String(mac[WL_MAC_ADDR_LENGTH - 4], HEX) +
+                 String(mac[WL_MAC_ADDR_LENGTH - 3], HEX) +
+                 String(mac[WL_MAC_ADDR_LENGTH - 2], HEX) +
                  String(mac[WL_MAC_ADDR_LENGTH - 1], HEX);
   macID.toUpperCase();
-  String ap_NameString = String("Tx_" + macID);
+  g_AP_NameString = String("Tx_" + macID);
 
   IPAddress apIP = stringToIP(g_softAP_IP_addr);
 
@@ -352,11 +364,11 @@ bool setupHTTP_AP()
 
   if (g_bridgePW.length() > 0)
   {
-    success = WiFi.softAP(stringObjToConstCharString(&ap_NameString), stringObjToConstCharString(&g_bridgePW));
+    success = WiFi.softAP(stringObjToConstCharString(&g_AP_NameString), stringObjToConstCharString(&g_bridgePW));
   }
   else
   {
-    success = WiFi.softAP(stringObjToConstCharString(&ap_NameString));
+    success = WiFi.softAP(stringObjToConstCharString(&g_AP_NameString));
   }
 
   if (success)
@@ -374,7 +386,6 @@ bool setupHTTP_AP()
 
     /* Start TCP listener on port TCP_PORT */
     g_http_server.on("/", HTTP_GET, handleRoot);     // Call the 'handleRoot' function when a client requests URI "/"
-    g_http_server.on("/LED", HTTP_POST, handleLED);  // Call the 'handleLED' function when a POST request is made to URI "/LED"
     g_http_server.on("/login", HTTP_POST, handleLogin); // Call the 'handleLogin' function when a POST request is made to URI "/login"
 
     g_http_server.on("/upload", HTTP_GET, []() {                 // if the client requests the upload page
@@ -402,7 +413,7 @@ bool setupHTTP_AP()
 
     if (g_debug_prints_enabled)
     {
-      Serial.print(ap_NameString + " server started: ");
+      Serial.print(g_AP_NameString + " server started: ");
       Serial.println(myIP);
     }
   }
@@ -413,46 +424,67 @@ bool setupHTTP_AP()
 
 // Manage incoming device connection on ESP access point
 void onNewStation(WiFiEventSoftAPModeStationConnected sta_info) {
+#if WIFI_DEBUG_PRINTS_ENABLED
   Serial.println("New Station :");
   Serial.println("Station List");
+#endif
 
   if (g_numberOfWebClients > MAX_NUMBER_OF_WEB_CLIENTS)
   {
-    Serial.printf("ERROR: Number of web clients (%d) exceeds MAX_NUMBER_OF_WEB_CLIENTS.", g_numberOfWebClients);
-    // TODO: attempt to recover gracefully
+    if (g_debug_prints_enabled)
+    {
+      Serial.printf("ERROR: Number of web clients (%d) exceeds MAX_NUMBER_OF_WEB_CLIENTS.", g_numberOfWebClients);
+      // TODO: attempt to recover gracefully
+    }
   }
   else
   {
-    for (int i = 0; i < g_numberOfWebClients; i++)
+    if (g_debug_prints_enabled)
     {
-      Serial.printf("WebID# %d. MAC address : %s\n", g_webSocketClient[i].webID, g_webSocketClient[i].macAddr);
+      for (int i = 0; i < g_numberOfWebClients; i++)
+      {
+        Serial.printf("WebID# %d. MAC address : %s\n", g_webSocketClient[i].webID, g_webSocketClient[i].macAddr);
+      }
     }
 
     sprintf(g_webSocketClient[g_numberOfWebClients].macAddr, "%02X:%02X:%02X:%02X:%02X:%02X", MAC2STR(sta_info.mac));
     g_webSocketClient[g_numberOfWebClients].webID = sta_info.aid;
-    Serial.printf("WebID# %d. MAC address : %s\n", g_webSocketClient[g_numberOfWebClients].webID, g_webSocketClient[g_numberOfWebClients].macAddr);
-    g_numberOfWebClients++;
 
+    if (g_debug_prints_enabled)
+    {
+      Serial.printf("WebID# %d. MAC address : %s\n", g_webSocketClient[g_numberOfWebClients].webID, g_webSocketClient[g_numberOfWebClients].macAddr);
+    }
+
+    g_numberOfWebClients++;
     startWebSocket(); // Start a WebSocket server
   }
 }
 
 void onStationDisconnect(WiFiEventSoftAPModeStationDisconnected sta_info) {
   if (g_numberOfWebClients) g_numberOfWebClients--;
-  Serial.println("Station Exit :");
+  if (g_debug_prints_enabled)
+  {
+    Serial.println("Station Exit :");
+  }
 
   if (g_numberOfWebClients > MAX_NUMBER_OF_WEB_CLIENTS)
   {
-    Serial.printf("ERROR: Number of web clients (%d) exceeds MAX_NUMBER_OF_WEB_CLIENTS.", g_numberOfWebClients);
-    // TODO: attempt to recover gracefully
+    if (g_debug_prints_enabled)
+    {
+      Serial.printf("ERROR: Number of web clients (%d) exceeds MAX_NUMBER_OF_WEB_CLIENTS.", g_numberOfWebClients);
+      // TODO: attempt to recover gracefully
+    }
   }
   else
   {
-    for (int i = 0; i < g_numberOfWebClients; i++)
+    if (g_debug_prints_enabled)
     {
-      if (g_webSocketClient[i].webID == sta_info.aid)
+      for (int i = 0; i < g_numberOfWebClients; i++)
       {
-        Serial.printf("WebID# %d. sockID# %d. MAC address : %s\n", g_webSocketClient[i].webID, g_webSocketClient[i].socketID, g_webSocketClient[i].macAddr);
+        if (g_webSocketClient[i].webID == sta_info.aid)
+        {
+          Serial.printf("WebID# %d. sockID# %d. MAC address : %s\n", g_webSocketClient[i].webID, g_webSocketClient[i].socketID, g_webSocketClient[i].macAddr);
+        }
       }
     }
   }
@@ -609,6 +641,8 @@ void loop()
   bool commandInProgress = false;
   int escapeCount = 0;
   bool done = false;
+
+  g_debug_prints_enabled = DEBUG_PRINTS_ENABLE_DEFAULT; // kluge override of saved settings
 
   if (!skipInitialCommand)
   {
@@ -1207,8 +1241,8 @@ void getNistTime(void)
 
     timeVal = stringToTimeVal(utcTimeSinceMidnight);
 
-    tempStr = String("$TIM," + String(timeVal) + ";");
-    Serial.println(tempStr);        /* Send command to set time */
+    //    tempStr = String("$TIM," + String(timeVal) + ";");
+    //   Serial.println(tempStr);        /* Send command to set time */
 
     g_timeWasSet = true;
     digitalWrite(RED_LED, HIGH);    /* Turn off red LED */
@@ -1473,12 +1507,12 @@ void getNistTime(void)
         }
 
         timeVal = stringToTimeVal(line);
-        tempStr = String("$TIM," + String(timeVal) + ";");
-
-        if (g_debug_prints_enabled)
-        {
-          Serial.println(tempStr);
-        }
+        //       tempStr = String("$TIM," + String(timeVal) + ";");
+        //
+        //       if (g_debug_prints_enabled)
+        //       {
+        //         Serial.println(tempStr);
+        //       }
 
         done = 1;
         g_timeWasSet = TRUE;
@@ -1505,61 +1539,6 @@ void getNistTime(void)
 #endif  /* USE_UDP_FOR_TIME_RETRIEVAL */
 
 
-int32_t stringToTimeVal(String string)
-{
-  int32_t time_sec = 0;
-  bool missingTens = false;
-  uint8_t index = 0;
-  char field[3];
-  char *instr, *str;
-  char c_str[10];
-
-  strcpy(c_str, string.c_str());
-  str = c_str;
-
-  field[2] = '\0';
-  field[1] = '\0';
-
-  instr = strchr(str, ':');
-
-  if (instr == NULL)
-  {
-    return ( time_sec);
-  }
-
-  if (str > (instr - 2))  /* handle case of time format #:##:## */
-  {
-    missingTens = true;
-    str = instr - 1;
-  }
-  else
-  {
-    str = instr - 2;
-  }
-
-  /* hh:mm:ss or h:mm:ss */
-  field[0] = str[index++];        /* tens of hours or hours */
-  if (!missingTens)
-  {
-    field[1] = str[index++];    /* hours */
-  }
-
-  time_sec = SecondsFromHours(atol(field));
-  index++;
-
-  field[0] = str[index++];
-  field[1] = str[index++];    /* minutes */
-  time_sec += SecondsFromMinutes(atol(field));
-  index++;
-
-  field[0] = str[index++];
-  field[1] = str[index++];    /* seconds */
-  time_sec += atoi(field);
-
-  return (time_sec);
-}
-
-
 void httpWebServerLoop()
 {
   uint8_t i, j;
@@ -1572,6 +1551,8 @@ void httpWebServerLoop()
   int escapeCount = 0;
   int numConnected = 0;
   int hold;
+  String lb_message = "";
+  int messageLength = 0;
 
   if (g_debug_prints_enabled)
   {
@@ -1581,7 +1562,10 @@ void httpWebServerLoop()
   i = WiFi.softAPgetStationNum();
   if (i > 0)
   {
-    Serial.println(String("Stations already connected:" + String(i) + " ...disconnecting..."));
+    if (g_debug_prints_enabled)
+    {
+      Serial.println(String("Stations already connected:" + String(i) + " ...disconnecting..."));
+    }
     //    WiFi.disconnect();
     //    ESP.restart();
     //    WiFi.mode(WIFI_OFF);
@@ -1591,9 +1575,11 @@ void httpWebServerLoop()
     e1 = WiFi.onSoftAPModeStationConnected(onNewStation);
     e2 = WiFi.onSoftAPModeStationDisconnected(onStationDisconnect);
     i = WiFi.softAPgetStationNum();
-    Serial.println(String("Stations already connected:" + String(i)));
+    if (g_debug_prints_enabled)
+    {
+      Serial.println(String("Stations already connected:" + String(i)));
+    }
   }
-
 
   while (!done)
   {
@@ -1619,119 +1605,171 @@ void httpWebServerLoop()
 
       if (bytesIn > 0)
       {
-        /*push UART data to all connected telnet clients */
+        buf[bytesIn] = '\0';
+
+        for (j = 0; j < bytesIn; j++)
         {
-          for (j = 0; j < bytesIn; j++)
+          if (buf[j] == '$')
           {
-            if (buf[j] == '$')
+            escapeCount++;
+
+            if (escapeCount == 3)
             {
-              escapeCount++;
-
-              if (escapeCount == 3)
-              {
-                done = true;
-                escapeCount = 0;
-                if (g_debug_prints_enabled)
-                {
-                  Serial.println("Web Server closed");
-                }
-
-                WiFi.softAPdisconnect(true);
-              }
-            }
-            else if ((buf[j] == 'H') || (buf[j] == 'h'))
-            {
-              time_t rawtime;
-              struct tm * timeinfo;
-              time ( &rawtime );
-              timeinfo = localtime ( &rawtime );
-
-              for (uint8_t i = 0; i < g_numberOfSocketClients; i++)
-              {
-                String msg = String("MAC," + String(g_webSocketClient[i].macAddr));
-                g_webSocket.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
-
-                msg = String("TIME," + String(asctime (timeinfo)));
-                Serial.println("Time sent =" + msg);
-                g_webSocket.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
-
-
-              }
-            }
-            else if ((buf[j] == 'S') || (buf[j] == 's'))
-            {
-              for (uint8_t i = 0; i < g_numberOfSocketClients; i++)
-              {
-                String msg = String("START," + String("2018-01-02T00:52")); // yyyy-MM-ddThh:mm
-                g_webSocket.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
-              }
-            }
-            else if ((buf[j] == 'F') || (buf[j] == 'f'))
-            {
-              for (uint8_t i = 0; i < g_numberOfSocketClients; i++)
-              {
-                String msg = String("FINISH," + String("2018-01-02T00:52")); // yyyy-MM-ddThh:mm
-                g_webSocket.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
-              }
-            }
-            else
-            {
+              done = true;
               escapeCount = 0;
+              //             if (g_debug_prints_enabled)
+              //             {
+              Serial.println("Web Server closed");
+              //             }
+
+              WiFi.softAPdisconnect(true);
             }
           }
+          else if (buf[j] == '!')
+          {
+            lb_message = "!";
+            messageLength = 1;
+            escapeCount = 0;
+          }
+          else if ( messageLength > 0 )
+          {
+            lb_message += buf[j];
+            messageLength++;
+
+            if (buf[j] == ';')
+            {
+              messageLength = 0;
+              handleLBMessage(lb_message);
+            }
+          }
+          else
+          {
+            escapeCount = 0;
+          }
         }
+
+#ifdef FOOBAR
+        else if ((buf[j] == 'H') || (buf[j] == 'h'))
+        {
+          time_t rawtime;
+          struct tm * timeinfo;
+          time ( &rawtime );
+          timeinfo = localtime ( &rawtime );
+
+          for (uint8_t i = 0; i < g_numberOfSocketClients; i++)
+          {
+            String msg = String("MAC," + String(g_webSocketClient[i].macAddr));
+            g_webSocket.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
+
+            msg = String("TIME," + String(asctime (timeinfo)));
+            Serial.println("Time sent =" + msg);
+            g_webSocket.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
+
+
+          }
+        }
+        else if ((buf[j] == 'S') || (buf[j] == 's'))
+        {
+          for (uint8_t i = 0; i < g_numberOfSocketClients; i++)
+          {
+            String msg = String("START," + String("2018-01-02T00:52")); // yyyy-MM-ddThh:mm
+            g_webSocket.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
+          }
+        }
+        else if ((buf[j] == 'F') || (buf[j] == 'f'))
+        {
+          for (uint8_t i = 0; i < g_numberOfSocketClients; i++)
+          {
+            String msg = String("FINISH," + String("2018-01-02T00:52")); // yyyy-MM-ddThh:mm
+            g_webSocket.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
+          }
+        }
+        else
+        {
+          escapeCount = 0;
+        }
+
+#endif // FOOBAR
       }
     }
 
-    if (g_LEDs_enabled)
+    g_relativeTimeSeconds = millis() / g_blinkPeriodMillis;
+    if (holdTime != g_relativeTimeSeconds)
     {
-      g_relativeTimeSeconds = millis() / g_blinkPeriodMillis;
-      if (holdTime != g_relativeTimeSeconds)
+      holdTime = g_relativeTimeSeconds;
+      toggle = !toggle;
+      if (g_LEDs_enabled)
       {
-        holdTime = g_relativeTimeSeconds;
-        toggle = !toggle;
         digitalWrite(BLUE_LED, toggle); /* Blink blue LED */
       }
-    }
-    else
-    {
-      digitalWrite(BLUE_LED, HIGH);   /* Turn off blue LED */
+      else
+      {
+        digitalWrite(BLUE_LED, HIGH);   /* Turn off blue LED */
+      }
+
+      if (g_numberOfSocketClients > 0)
+      {
+        if (toggle) Serial.printf("$TIM?"); // request latest time once per second
+
+        if (!(holdTime % 12))
+        {
+          Serial.printf("$TEM?"); // request temperature reading
+        }
+        else if (!(holdTime % 15))
+        {
+          Serial.printf("$BAT?"); // request battery level reading
+        }
+      }
     }
   }
 }
 
-
 void startSPIFFS()
 { // Start the SPIFFS and list all contents
   SPIFFS.begin();   // Start the SPI Flash File System (SPIFFS)
-  Serial.println("SPIFFS started. Contents:");
-  {
-    Dir dir = SPIFFS.openDir("/");
-    while (dir.next())
-    { // List the file system contents
-      String fileName = dir.fileName();
-      size_t fileSize = dir.fileSize();
-      Serial.printf("\tFS File: %s, size: %s\r\n", fileName.c_str(), formatBytes(fileSize).c_str());
-    }
 
-    Serial.printf("\n");
+  if (g_debug_prints_enabled)
+  {
+    Serial.println("SPIFFS started. Contents:");
+    {
+      Dir dir = SPIFFS.openDir("/");
+      while (dir.next())
+      { // List the file system contents
+        String fileName = dir.fileName();
+        size_t fileSize = dir.fileSize();
+        Serial.printf("\tFS File: %s, size: %s\r\n", fileName.c_str(), formatBytes(fileSize).c_str());
+      }
+
+      Serial.printf("\n");
+    }
   }
 }
 
 void startWebSocket()
 { // Start a WebSocket server
   g_webSocket.begin();      // start the websocket server
-//  g_webSocket.beginSSL(); // start secure wss support?
+  //  g_webSocket.beginSSL(); // start secure wss support?
   g_webSocket.onEvent(webSocketEvent);  // if there's an incoming websocket message, go to function 'webSocketEvent'
-  Serial.println("WebSocket server start tasks complete.");
+
+  if (g_debug_prints_enabled)
+  {
+    Serial.println("WebSocket server start tasks complete.");
+  }
 }
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length)
 {
-  Serial.printf("webSocketEvent(%d, %d, ...)\r\n", num, type);
+  if (g_debug_prints_enabled)
+  {
+    Serial.printf("webSocketEvent(%d, %d, ...)\r\n", num, type);
+  }
+
   switch (type) {
     case WStype_DISCONNECTED:
-      Serial.printf("[%u] Disconnected!\r\n", num);
+      if (g_debug_prints_enabled)
+      {
+        Serial.printf("[%u] Disconnected!\r\n", num);
+      }
 
       if (g_numberOfSocketClients)
       {
@@ -1756,7 +1794,10 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
     case WStype_CONNECTED:
       {
         IPAddress ip = g_webSocket.remoteIP(num);
-        Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\r\n", num, ip[0], ip[1], ip[2], ip[3], payload);
+        if (g_debug_prints_enabled)
+        {
+          Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\r\n", num, ip[0], ip[1], ip[2], ip[3], payload);
+        }
         g_webSocketClient[g_numberOfSocketClients].socketID = num;
 
         if (g_main_page_served)
@@ -1765,15 +1806,25 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           struct tm * timeinfo;
           time ( &rawtime );
           timeinfo = localtime ( &rawtime );
-          Serial.println("Sending MAC address:");
 
-          String msg = String("MAC," + String(g_webSocketClient[g_numberOfSocketClients].macAddr));
-          g_webSocket.sendTXT(g_webSocketClient[g_numberOfSocketClients].socketID, stringObjToConstCharString(&msg), msg.length());
-          Serial.println(msg);
+          if (g_debug_prints_enabled)
+          {
+            Serial.println("Sending MAC address:");
+          }
 
-          msg = String("TIME," + String(asctime (timeinfo)));
+          String msg = String( String(COMMAND_MAC) + "," + String(g_webSocketClient[g_numberOfSocketClients].macAddr) );
           g_webSocket.sendTXT(g_webSocketClient[g_numberOfSocketClients].socketID, stringObjToConstCharString(&msg), msg.length());
-          Serial.println(msg);
+          if (g_debug_prints_enabled)
+          {
+            Serial.println(msg);
+          }
+
+          msg = String( String(COMMAND_SSID) + "," + g_AP_NameString );
+          g_webSocket.sendTXT(g_webSocketClient[g_numberOfSocketClients].socketID, stringObjToConstCharString(&msg), msg.length());
+          if (g_debug_prints_enabled)
+          {
+            Serial.println(msg);
+          }
 
           g_main_page_served = false;
         }
@@ -1783,29 +1834,63 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       break;
 
     case WStype_TEXT:
-      Serial.printf("[%u] get Text: %s\r\n", num, payload);
-      // send data to all connected clients
-      //g_webSocket.broadcastTXT(payload, length);
-      
+      {
+        if (g_debug_prints_enabled)
+        {
+          Serial.printf("[%u] get Text: %s\r\n", num, payload);
+        }
+
+        String p = String((char*)payload);
+        String msgHeader = p.substring(0, p.indexOf(','));
+
+        if (msgHeader == COMMAND_SYNC_TIME)
+        {
+          p = p.substring(p.indexOf(',') + 1);
+
+          if (g_debug_prints_enabled)
+          {
+            Serial.printf(String("Time string: \"" + p + "\"\n").c_str());
+          }
+          String lbMsg = String("$TIM," + String(stringToTimeVal(p)) + ";");
+          Serial.printf(stringObjToConstCharString(&lbMsg)); // Send time to Transmitter for synchronization
+          Serial.println("Sent TIME message!");
+        }
+
+        // send data to all connected clients
+        //g_webSocket.broadcastTXT(payload, length);
+      }
       break;
 
     case WStype_BIN:
-      Serial.printf("[%u] get binary length: %u\r\n", num, length);
-      hexdump(payload, length);
+      {
+        if (g_debug_prints_enabled)
+        {
+          Serial.printf("[%u] get binary length: %u\r\n", num, length);
+        }
 
-      // echo data back to browser
-      g_webSocket.sendBIN(num, payload, length);
+        hexdump(payload, length);
+
+        // echo data back to browser
+        g_webSocket.sendBIN(num, payload, length);
+      }
       break;
 
     default:
-      Serial.printf("Invalid WStype [%d]\r\n", type);
+      if (g_debug_prints_enabled)
+      {
+        Serial.printf("Invalid WStype [%d]\r\n", type);
+      }
       break;
   }
 }
 
 bool handleFileRead(String path)
 { // send the right file to the client (if it exists)
-  Serial.println("\nhandleFileRead: " + path);
+  if (g_debug_prints_enabled)
+  {
+    Serial.println("\nhandleFileRead: " + path);
+  }
+
   if (path.endsWith("/")) path += "index.html";   // If a folder is requested, send the index file
   String contentType = getContentType(path);      // Get the MIME type
   String pathWithGz = path + ".gz";
@@ -1817,15 +1902,20 @@ bool handleFileRead(String path)
     File file = SPIFFS.open(path, "r"); // Open the file
     size_t sent = g_http_server.streamFile(file, contentType);  // Send it to the client
     file.close();                       // Close the file again
-    Serial.println(String("\tSent file: ") + path);
+    if (g_debug_prints_enabled)
+    {
+      Serial.println(String("\tSent file: ") + path);
+    }
     return true;
   }
   else
   {
-    Serial.println(String("File not found in SPIFFS: ") + path);
+    if (g_debug_prints_enabled)
+    {
+      Serial.println(String("File not found in SPIFFS: ") + path);
+    }
   }
 
-  Serial.println(String("\tFile Not Found: ") + path);  // If the file doesn't exist, return false
   return false;
 }
 
@@ -1873,7 +1963,7 @@ bool readEventFile(String eventName)
         }
       }
 
-      g_xmtr.setXmtrData(settingID, value);
+      g_xmtr->setXmtrData(settingID, value);
 
       if (g_debug_prints_enabled)
       {
@@ -1884,11 +1974,20 @@ bool readEventFile(String eventName)
     }
 
     file.close(); // Close the file
-    Serial.println(String("\tRead file: ") + path);
+
+    if (g_debug_prints_enabled)
+    {
+      Serial.println(String("\tRead file: ") + path);
+    }
+
     return true;
   }
 
-  Serial.println(String("\tFile Not Found: ") + path);  // If the file doesn't exist, return false
+  if (g_debug_prints_enabled)
+  {
+    Serial.println(String("\tFile Not Found: ") + path);  // If the file doesn't exist, return false
+  }
+
   return false;
 }
 
@@ -2005,14 +2104,14 @@ bool readDefaultsFile()
       }
       else if (settingID.equalsIgnoreCase("DEBUG_PRINTS_ENABLE_DEFAULT"))
       {
-        if (value.charAt(0) == 'T' || value.charAt(0) == 't' || value.charAt(0) == '1')
-        {
-          g_debug_prints_enabled = 1;
-        }
-        else
-        {
-          g_debug_prints_enabled = 0;
-        }
+        //        if (value.charAt(0) == 'T' || value.charAt(0) == 't' || value.charAt(0) == '1')
+        //        {
+        //          g_debug_prints_enabled = 1;
+        //        }
+        //        else
+        //        {
+        //          g_debug_prints_enabled = 0;
+        //        }
       }
       else
       {
@@ -2031,7 +2130,12 @@ bool readDefaultsFile()
     }
 
     file.close(); // Close the file
-    Serial.println(String("\tRead file: ") + path);
+
+    if (g_debug_prints_enabled)
+    {
+      Serial.println(String("\tRead file: ") + path);
+    }
+
     return true;
   }
 
@@ -2409,4 +2513,88 @@ void showSettings()
   }
 }
 
+void handleLBMessage(String message)
+{
+  //Serial.println(String("Message: " + message));
+
+  bool isReply = message.charAt(0) == '!';
+  String type = message.substring(1, 4);
+  String payload = message.substring(5, message.indexOf(';'));
+
+  //Serial.println(String("Reply? - ") + isReply ? "Yes" : "No");
+  //Serial.println(String("Type: " + type));
+  //Serial.println(String("Arg: " + payload));
+
+  if (type == MESSAGE_TIME)
+  {
+    String timeinfo = timeValToString(payload.toInt());
+    //   Serial.println(String("Time: ") + timeinfo);
+
+    String msg = String(String(COMMAND_SYNC_TIME) + "," + timeinfo);
+
+    for (int i = 0; i < g_numberOfSocketClients; i++)
+    {
+      g_webSocket.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
+      //      if (g_debug_prints_enabled)
+      //      {
+      //  Serial.println(msg);
+      //      }
+    }
+  }
+  else if (type == MESSAGE_TEMP)
+  {
+    int16_t rawtemp = payload.toInt();
+    bool negative =  rawtemp & 0x8000;
+    if (negative) rawtemp &= 0x7FFF;
+    float temp = (rawtemp >> 8) + (0.25 * ((rawtemp & 0x00C0) >> 6)) + 0.05;
+    if (negative) temp = -temp;
+
+    char dataStr[6]; // allow for possible negative sign
+    dtostrf(temp, 4, 1, dataStr);
+    dataStr[5] = '\0';
+
+    String msg = String(String(COMMAND_TEMPERATURE) + "," + dataStr + "C");
+
+    for (int i = 0; i < g_numberOfSocketClients; i++)
+    {
+      g_webSocket.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
+      if (g_debug_prints_enabled)
+      {
+        Serial.println(msg);
+      }
+    }
+  }
+  else if (type == MESSAGE_BATTERY)
+  {
+    float temp = payload.toFloat();
+
+    if (temp > FULLY_CHARGED_BATTERY_mV)
+    {
+      temp = 100.;
+    }
+    else if (temp < FULLY_DEPLETED_BATTERY_mV)
+    {
+      temp = 0;
+    }
+    else
+    {
+      temp = (100. * ((payload.toFloat() - FULLY_DEPLETED_BATTERY_mV) / (FULLY_CHARGED_BATTERY_mV - FULLY_DEPLETED_BATTERY_mV) )) + 0.5;
+    }
+
+    char dataStr[4];
+    dtostrf(temp, 3, 0, dataStr);
+    dataStr[3] = '\0';
+
+    String msg = String(String(COMMAND_BATTERY) + "," + dataStr + "%");
+
+    for (int i = 0; i < g_numberOfSocketClients; i++)
+    {
+      g_webSocket.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
+      if (g_debug_prints_enabled)
+      {
+        Serial.println(msg);
+      }
+    }
+  }
+}
 

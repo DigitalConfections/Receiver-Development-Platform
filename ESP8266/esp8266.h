@@ -30,24 +30,12 @@
 #ifndef ESP8266_H_
 #define ESP8266_H_
 
-#define WIFI_SW_VERSION ("0.1.2")
+#define WIFI_SW_VERSION ("0.1.4")
 #define USE_UDP_FOR_TIME_RETRIEVAL
 #define MULTI_ACCESS_POINT_SUPPORT
-#define SERIAL_BAUD_RATE 115200
+#define SERIAL_BAUD_RATE 9600
 
 #define MAX_NUMBER_OF_WEB_CLIENTS 5
-
-#ifndef SecondsFromHours
-  #define SecondsFromHours(hours) ((hours) * 3600)
-#endif
-
-#ifndef SecondsFromMinutes
-  #define SecondsFromMinutes(min) ((min) * 60)
-#endif
-
-#ifndef min
-  #define min(x, y)  ((x) < (y) ? (x) : (y))
-#endif
 
 #define HOTSPOT_SSID1_DEFAULT ("myRouter1")
 #define HOTSPOT_PW1_DEFAULT ("router1PW")
@@ -64,7 +52,8 @@
 #define BRIDGE_PW_DEFAULT ""
 #define BRIDGE_TCP_PORT_DEFAULT String("73")
 #define LEDS_ENABLE_DEFAULT true
-#define DEBUG_PRINTS_ENABLE_DEFAULT true
+#define DEBUG_PRINTS_ENABLE_DEFAULT false
+#define WIFI_DEBUG_PRINTS_ENABLED false
 
 
 typedef enum
