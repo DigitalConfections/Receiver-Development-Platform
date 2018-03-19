@@ -107,7 +107,10 @@
 
 #define ON              1
 #define OFF             0
-#define UNDETERMINED 3
+#define TOGGLE			2
+#define HIGH			1
+#define LOW				0
+#define UNDETERMINED	3
 
 #define ADC_REF_VOLTAGE_mV 3300UL
 
@@ -147,6 +150,12 @@ typedef enum
 #define LONG_PRESS_TICK_COUNT 1200      /* Press a button for this many ticks in order to access a long-press function */
 
 #define SEND_ID_DELAY 4100
+
+/* Periodic TIMER2 interrupt timing definitions */
+#define TIMER2_57HZ 10
+#define TIMER2_20HZ 49
+#define TIMER2_5_8HZ 100
+#define TIMER2_0_5HZ 1000
 
 /*#define BATTERY_VOLTAGE_COEFFICIENT 332 */
 #define BATTERY_VOLTAGE_COEFFICIENT 223                                                                     /* R1 = 69.8k; R2 = 20k; volts x this = mV measured at ADC pin (minus losses) */

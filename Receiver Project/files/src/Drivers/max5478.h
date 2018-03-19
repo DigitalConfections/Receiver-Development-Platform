@@ -37,9 +37,6 @@
 
 #include "defs.h"
 
-#define MAX5478_SLAVE_ADDR_A0_0 0x50
-#define MAX5478_SLAVE_ADDR_A0_1 0x51
-
 /**
    Set the potentiometer to the value passed in setting.
 */

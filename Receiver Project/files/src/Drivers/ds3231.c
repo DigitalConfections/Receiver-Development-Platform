@@ -32,6 +32,8 @@
    #include <stdio.h>
    #include "i2c.h"
 
+   #define DS3231_I2C_SLAVE_ADDR 0xD0   /* corresponds to slave address = 0b1101000x */
+
    #define RTC_SECONDS                     0x00
    #define RTC_MINUTES                     0x01
    #define RTC_HOURS                       0x02
@@ -65,7 +67,7 @@
 		BOOL am_pm;
 		BOOL twelvehour;
 
-		if(!i2c_device_read(DS3231_BUS_BASE_ADDR, RTC_SECONDS, data, 7))
+		if(!i2c_device_read(DS3231_I2C_SLAVE_ADDR, RTC_SECONDS, data, 7))
 		{
 			second10 = ((data[0] & 0xf0) >> 4);
 			second = (data[0] & 0x0f);
@@ -121,35 +123,43 @@
 			}
 		}
 	}
-
-
-	void ds3231_set_time(int32_t offsetSeconds)
+	
+	
+	BOOL ds3231_get_temp(int16_t * val)
 	{
-		int32_t timeVal;
+		uint8_t data[2] = { 0, 0 };
+		BOOL result = i2c_device_read(DS3231_I2C_SLAVE_ADDR, RTC_TEMP_MSB, data, 2);
+		
+		if(!result)
+		{
+			*val = data[0];
+			*val = *val << 8;
+			*val |= data[1];
+		}
+		
+		return result;
+	}
+
+
+
+	void ds3231_set_time(int32_t secondsSinceMidnight)
+	{
 		uint8_t data[7] = { 0, 0, 0, 0, 0, 0, 0 };
-		int32_t temp;
-		uint8_t hold;
 
-		ds3231_read_time(&timeVal, NULL, Time_Format_Not_Specified);
-		timeVal += offsetSeconds;
+		data[0] = secondsSinceMidnight % 10;     /* seconds */
+		secondsSinceMidnight /= 10;
+		data[0] |= (secondsSinceMidnight % 6) << 4; /* 10s of seconds */
+		secondsSinceMidnight /= 6;
+		data[1] = secondsSinceMidnight % 10;        /* minutes */
+		secondsSinceMidnight /= 10;
+		data[1] |= (secondsSinceMidnight % 6) << 4; /* 10s of minutes */
+		secondsSinceMidnight /= 6;
+		secondsSinceMidnight = secondsSinceMidnight % 24;
+		data[2] = secondsSinceMidnight % 10;        /* hours */
+		secondsSinceMidnight /= 10;
+		data[2] |= secondsSinceMidnight << 4;       /* 10s of hours */
 
-		data[0] = timeVal % 10;     /* seconds */
-		temp = timeVal / 10;
-		data[0] |= (temp % 6) << 4; /* 10s of seconds */
-		temp /= 6;
-		data[1] = temp % 10;        /* minutes */
-		temp /= 10;
-		data[1] |= (temp % 6) << 4; /* 10s of minutes */
-		temp /= 6;
-		hold = temp % 24;
-		data[2] = hold % 10;        /* hours */
-		hold /= 10;
-		data[2] |= hold << 4;       /* 10s of hours */
-
-		i2c_device_write(DS3231_BUS_BASE_ADDR, RTC_SECONDS, data, 3);
-
-/*	temp /= 24; */
-
+		i2c_device_write(DS3231_I2C_SLAVE_ADDR, RTC_SECONDS, data, 3);
 	}
 
 	void ds3231_1s_sqw(BOOL enable)
@@ -157,12 +167,12 @@
 		if(enable)
 		{
 			uint8_t byte = 0x00;
-			i2c_device_write(DS3231_BUS_BASE_ADDR, RTC_CONTROL, &byte, 1);
+			i2c_device_write(DS3231_I2C_SLAVE_ADDR, RTC_CONTROL, &byte, 1);
 		}
 		else
 		{
 			uint8_t byte = 0x04;
-			i2c_device_write(DS3231_BUS_BASE_ADDR, RTC_CONTROL, &byte, 1);
+			i2c_device_write(DS3231_I2C_SLAVE_ADDR, RTC_CONTROL, &byte, 1);
 		}
 	}
 

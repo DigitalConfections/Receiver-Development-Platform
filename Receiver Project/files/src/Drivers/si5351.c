@@ -38,6 +38,8 @@
 #include "i2c.h"
 #include "si5351.h"
 
+#define SI5351_I2C_SLAVE_ADDR                            0xC0    /* I2C slave address */
+
 /*******************************
  * Global Variables
  ********************************/
@@ -218,8 +220,9 @@
  * ref_osc_freq - Crystal/reference oscillator frequency (Hz).
  *
  */
-	void si5351_init(Si5351_Xtal_load_pF xtal_load_c, Frequency_Hz ref_osc_freq)
+	BOOL si5351_init(Si5351_Xtal_load_pF xtal_load_c, Frequency_Hz ref_osc_freq)
 	{
+		BOOL err = FALSE;
 #ifndef DEBUG_WITHOUT_I2C
 			/* Start I2C comms */
 			i2c_init();
@@ -237,18 +240,18 @@
 
 		/* Disable Outputs */
 		/* Set CLKx_DIS high; Reg. 3 = 0xFF */
-		si5351_write(3, 0xff);
+		err = si5351_write(3, 0xff);
 
 		/* Power down clocks */
-		si5351_write(16, 0xCC);
-		si5351_write(17, 0xCC);
-		si5351_write(18, 0xCC);
+		err |= si5351_write(16, 0xCC);
+		err |= si5351_write(17, 0xCC);
+		err |= si5351_write(18, 0xCC);
 
 		/* Set crystal load capacitance */
 		reg_val = 0x12; /* 0b010010 reserved value bits */
 		reg_val |= xtal_load_c;
 
-		si5351_write(SI5351_CRYSTAL_LOAD, reg_val);
+		err |= si5351_write(SI5351_CRYSTAL_LOAD, reg_val);
 
 		if(!ref_osc_freq)
 		{
@@ -260,7 +263,7 @@
 		{
 			if(si5351_read(SI5351_PLL_INPUT_SOURCE, &reg_val))
 			{
-				return;
+				return TRUE;
 			}
 
 			/* Clear the bits first */
@@ -285,8 +288,10 @@
 
 #endif  /* #ifndef DIVIDE_XTAL_FREQ_IF_NEEDED */
 
-			si5351_write(SI5351_PLL_INPUT_SOURCE, reg_val);
+			err |= si5351_write(SI5351_PLL_INPUT_SOURCE, reg_val);
 		}
+		
+		return err;
 	}
 
 #ifdef DEBUGGING_ONLY
@@ -1231,17 +1236,17 @@
 
 	BOOL si5351_write_bulk(uint8_t addr, uint8_t bytes, uint8_t *data)
 	{
-		return(i2c_device_write(SI5351_BUS_BASE_ADDR, addr, data, bytes));
+		return(i2c_device_write(SI5351_I2C_SLAVE_ADDR, addr, data, bytes));
 	}
 
 	BOOL si5351_write(uint8_t addr, uint8_t data)
 	{
-		return(i2c_device_write(SI5351_BUS_BASE_ADDR, addr, &data, 1));
+		return(i2c_device_write(SI5351_I2C_SLAVE_ADDR, addr, &data, 1));
 	}
 
 	BOOL si5351_read(uint8_t addr, uint8_t *data)
 	{
-		return(i2c_device_read(SI5351_BUS_BASE_ADDR, addr, data, 1));
+		return(i2c_device_read(SI5351_I2C_SLAVE_ADDR, addr, data, 1));
 	}
 
 

@@ -27,10 +27,9 @@
 #include "i2c.h"
 #include <util/twi.h>
 
-#define AD5245_SLAVE_ADDR_A0_0 0x58
-#define AD5245_SLAVE_ADDR_A0_1 0x59
+#define AD5245_I2C_SLAVE_ADDR_A0_0 0x58
 
 void ad5245_set_potentiometer(uint8_t setting)
 {
-	i2c_device_write(AD5245_SLAVE_ADDR_A0_0, 0x00, &setting, 1);
+	i2c_device_write(AD5245_I2C_SLAVE_ADDR_A0_0, 0x00, &setting, 1);
 }

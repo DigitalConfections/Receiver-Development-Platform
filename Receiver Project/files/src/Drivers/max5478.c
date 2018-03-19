@@ -19,13 +19,15 @@
  * DEALINGS IN THE SOFTWARE.
  *
  **********************************************************************************************
- * ad5245.c
+ * max5478.c
  *
  */
 
 #include "max5478.h"
 #include "i2c.h"
 #include <util/twi.h>
+
+#define MAX5478_I2C_SLAVE_ADDR_A0_0 0x50
 
 #define MAX_5478_WIPER_A_VREG_COMMAND 0x11
 #define MAX_5478_WIPER_A_NVREG_COMMAND 0x21
@@ -40,7 +42,7 @@
 void max5478_set_dualpotentiometer_wipers(uint16_t setting)
 {
 	uint8_t data = setting & 0xFF;
-	i2c_device_write(MAX5478_SLAVE_ADDR_A0_0, MAX_5478_WIPER_A_VREG_COMMAND, &data, 1); // Fine attenuation
+	i2c_device_write(MAX5478_I2C_SLAVE_ADDR_A0_0, MAX_5478_WIPER_A_VREG_COMMAND, &data, 1); // Fine attenuation
 	data = (setting >> 8);
-	i2c_device_write(MAX5478_SLAVE_ADDR_A0_0, MAX_5478_WIPER_B_VREG_COMMAND, &data, 1); // Coarse attenuation
+	i2c_device_write(MAX5478_I2C_SLAVE_ADDR_A0_0, MAX_5478_WIPER_B_VREG_COMMAND, &data, 1); // Coarse attenuation
 }

@@ -81,7 +81,7 @@ static volatile BOOL g_initialization_complete = FALSE;
 /* Linkbus variables */
 static DeviceID g_LB_attached_device = NO_ID;
 static uint16_t g_LB_broadcasts_enabled = 0;
-static BOOL g_terminal_mode = TRUE;
+static BOOL g_terminal_mode = INKBUS_TERMINAL_MODE_DEFAULT;
 static BOOL g_lb_repeat_rssi = FALSE;
 static uint16_t g_rssi_countdown = 0;
 
@@ -689,7 +689,7 @@ ISR(USART_RX_vect)
 							}
 						}
 
-						charIndex++;
+						charIndex = MIN(charIndex+1, LINKBUS_MAX_MSG_FIELD_LENGTH);
 					}
 				}
 				else
@@ -713,7 +713,7 @@ ISR(USART_RX_vect)
 						}
 
 						receiving_msg = TRUE;
-						charIndex++;
+						charIndex = MIN(charIndex+1, LINKBUS_MAX_MSG_FIELD_LENGTH);
 					}
 				}
 
@@ -898,7 +898,6 @@ int main( void )
 
 		DDRC = 0b00000011;                                          /* PC4 and PC5 are inputs (should be true by default); PC2 and PC3 are used for their ADC function; PC1 and PC0 outputs control main volume */
 		PORTC = (I2C_PINS | (1 << PORTC2));                         /* Set all Port C pins low, except I2C lines and PC2; includes output port PORTC0 and PORTC1 (main volume controls) */
-		linkbus_init();
 
 	/**
 	 * PD5 (OC0B) is PWM output for audio tone generation
@@ -953,6 +952,13 @@ int main( void )
 	/**
 	 * Initialize tone volume setting */
 	ad5245_set_potentiometer(TONE_POT_VAL(g_tone_volume));    /* move to receiver initialization */
+
+
+//	wifi_power(ON); // power on WiFi
+//	wifi_reset(OFF); // bring WiFi out of reset
+	// Uncomment the two lines above and set a breakpoint after this line to permit serial access to ESP8266 serial lines for programming
+	// You can then set a breakpoint on the line below to keep the serial port from being initialized
+	linkbus_init(BAUD);
 
 	wdt_reset();                                    /* HW watchdog */
 

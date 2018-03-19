@@ -28,7 +28,9 @@
 #ifndef I2C_H_
 #define I2C_H_
 
-#define I2C_TIMEOUT_SUPPORT /* limit number of tries for i2c success */
+#ifndef TRANQUILIZE_WATCHDOG
+	#define I2C_TIMEOUT_SUPPORT /* limit number of tries for i2c success */
+#endif // TRANQUILIZE_WATCHDOG
 /* #define SUPPORT_I2C_CLEARBUS_FUNCTION */
 
 #ifndef BOOL

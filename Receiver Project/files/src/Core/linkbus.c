@@ -31,7 +31,8 @@
 #include <avr/wdt.h>
 
 /* Global Variables */
-static volatile BOOL g_lb_terminal_mode = TRUE;
+static volatile BOOL g_bus_disabled = TRUE;
+static volatile BOOL g_lb_terminal_mode = INKBUS_TERMINAL_MODE_DEFAULT;
 static const char crlf[] = "\n";
 static char lineTerm[8] = "\n";
 static const char textPrompt[] = "RDP> ";
@@ -223,17 +224,34 @@ void linkbus_reset_rx(void)
 	}
 }
 
-void linkbus_init(void)
+void linkbus_init(uint32_t baud)
 {
 	memset(rx_buffer, 0, sizeof(rx_buffer));
 	/*Set baud rate */
-	UBRR0H = ((unsigned char)(MYUBRR >> 8));
-	UBRR0L = (unsigned char)MYUBRR;
+	uint16_t myubrr = MYUBRR(baud);
+	UBRR0H = (uint8_t)(myubrr >> 8);
+	UBRR0L = (uint8_t)myubrr;
 	/* Enable receiver and transmitter and related interrupts */
 	UCSR0B = (1 << RXEN0) | (1 << TXEN0) | (1 << RXCIE0);
 /*	UCSR0B = (1<<RXEN0) | (1<<TXEN0); */
 	/* Set frame format: 8data, 2stop bit */
 	UCSR0C = (1 << USBS0) | (3 << UCSZ00);
+	g_bus_disabled = FALSE;
+}
+
+void linkbus_disable(void)
+{
+	uint8_t bufferIndex;
+	
+	g_bus_disabled = TRUE;
+	UCSR0B = 0;
+	linkbus_end_tx();
+	memset(rx_buffer, 0, sizeof(rx_buffer));
+	
+	for(bufferIndex=0; bufferIndex<LINKBUS_NUMBER_OF_TX_MSG_BUFFERS; bufferIndex++)
+	{
+		tx_buffer[bufferIndex][0] = '\0';
+	}
 }
 
 void linkbus_setTerminalMode(BOOL on)
@@ -254,6 +272,8 @@ void linkbus_setTerminalMode(BOOL on)
 BOOL linkbus_send_text(char* text)
 {
 	BOOL err = TRUE;
+	
+	if(g_bus_disabled) return err;
 
 	if(text)
 	{
@@ -290,6 +310,9 @@ void lb_send_WDTError(void)
  ************************************************************************/
 void lb_send_Help(void)
 {
+	if(g_bus_disabled) return;
+	if(!g_lb_terminal_mode) return;
+
 #ifdef DEBUG_FUNCTIONS_ENABLE
 	sprintf(g_tempMsgBuff, "\n*** %s Debug Ver. %s ***", PRODUCT_NAME_LONG, SW_REVISION);
 #else
@@ -305,7 +328,8 @@ void lb_send_Help(void)
 	while(linkbusTxInProgress());
 #endif // TRANQUILIZE_WATCHDOG
 	
-	for(int i=0; i<13; i++)
+	int rows = sizeof(textHelp)/sizeof(textHelp[0]);
+	for(int i=0; i<rows; i++)
 	{
 		while(linkbus_send_text((char*)textHelp[i])); 
 		while(linkbusTxInProgress());
@@ -321,7 +345,14 @@ void lb_send_Help(void)
 
 void lb_send_NewPrompt(void)
 {
-	linkbus_send_text((char*)textPrompt);
+	if(g_lb_terminal_mode)
+	{
+		linkbus_send_text((char*)textPrompt);
+	}
+	else
+	{
+		linkbus_send_text((char*)crlf);
+	}
 }
 
 void lb_send_NewLine(void)
@@ -678,6 +709,7 @@ void lb_broadcast_num(uint16_t data, char* str)
 	char t[6] = "\0";
 
 	sprintf(t, "%u", data);
+	g_tempMsgBuff[0] = '\0';
 
 	if(g_lb_terminal_mode)
 	{
@@ -694,10 +726,10 @@ void lb_broadcast_num(uint16_t data, char* str)
 	{
 		if(str)
 		{
-			sprintf(g_tempMsgBuff, "!%s,%s;", str, t);
+			sprintf(g_tempMsgBuff, "%s,%s;", str, t);
 		}
 	}
 
-	linkbus_send_text(g_tempMsgBuff);
+	if(g_tempMsgBuff[0]) linkbus_send_text(g_tempMsgBuff);
 }
 
