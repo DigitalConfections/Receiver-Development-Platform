@@ -1,4 +1,22 @@
 #include "Helpers.h"
+#include <Arduino.h>
+//#include <GDBStub.h>
+#include <ESP8266WiFi.h>
+#include <WiFiUdp.h>
+#include <WiFiClient.h>
+#include <ESP8266WebServer.h>
+#include <ESP8266WiFiMulti.h>
+//#include <ESP8266mDNS.h>
+#include <user_interface.h>
+#include "esp8266.h"
+//#include <ArduinoOTA.h>
+#include <FS.h>
+//#include <WebSocketsClient.h>
+#include <Hash.h>
+#include <WebSocketsServer.h>
+#include <ESP8266WiFiType.h>
+#include <time.h>
+
 /*
  * Removes extraneous characters that tend to clutter the ends of String object contents. Then
  * returns a const char * to the C string contained in the String.
@@ -199,5 +217,100 @@ int32_t stringToTimeVal(String string)
   return (time_sec);
 }
 
+bool isLeapYear(int year)
+{
+  if(year % 4) /* if not divisible by 4 it is not a leap year (e.g., 2001) */
+  {
+    return false;
+  }
+  
+  if(year % 100) /* if divisible by 4, and not by 100, it is a leap year (e.g., 2004) */
+  {
+    return true;
+  }
 
+  if(year % 400) /* if divisible by 4, and by 100, but not by 400, it is not a leap year (e.g., 1900) */
+  {
+    return false;
+  }
+
+  return true; /* if divisible by 4, by 100, and by 400 it is a leap year (e.g., 2000) */
+}
+
+
+
+/**
+ * Returns parsed time structure from a string of format "yyyy-mm-ddThh:mm:ss"
+ */
+bool mystrptime(String s, Tyme* tm) {
+  const int month_days[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+  String temp;
+  int index, hold;
+  bool isleap;
+
+  index = s.indexOf("-");
+  temp = s.substring(0,index);
+  hold = temp.toInt();
+  isleap = isLeapYear(hold);
+  hold -= 1900;
+  if((hold < 0) || (hold > 200)) return true;
+  tm->tm_year = hold;
+
+  index = s.indexOf("-", index+1);
+  temp = s.substring(index-2, index);
+  hold = temp.toInt() - 1;
+  if((hold > 12) || (hold < 1)) return true;
+  tm->tm_mon = hold;
+
+  index = s.indexOf("T", index);
+  temp = s.substring(index-2, index);
+  hold = temp.toInt();
+  if((hold > 31) || (hold < 1)) return true;
+  tm->tm_mday = hold;
+
+  tm->tm_yday = 0;
+  for(int i=0; i<tm->tm_mon; i++)
+  {
+    tm->tm_yday += month_days[i];
+    if((i==1) && isleap) tm->tm_yday++;
+  }
+
+  tm->tm_yday += (tm->tm_mday - 1);
+
+  index = s.indexOf(":", index);
+  temp = s.substring(index-2, index);
+  hold = temp.toInt();
+  if((hold > 23) || (hold < 0)) return true;
+  tm->tm_hour = hold;
+
+  index = s.indexOf(":", index+1);
+  temp = s.substring(index-2, index);
+  hold = temp.toInt();
+  if(hold > 59) return true;
+  tm->tm_min = hold;
+
+  temp = s.substring(index+1, index+3);
+  hold = temp.toInt();
+  if(hold > 59) return true;
+  tm->tm_sec = hold;
+
+  return false;
+}
+ 
+/**
+ * Converts a string of format "yyyy-mm-ddThh:mm:ss" to seconds since 1900
+ */
+unsigned long convertTimeStringToEpoch(String s)
+{
+  unsigned long result = 0;
+
+  Tyme tm;
+  if (!mystrptime(s, &tm)) {
+    result = tm.tm_sec + tm.tm_min*60 + tm.tm_hour*3600 + tm.tm_yday*86400 +
+    (tm.tm_year-70)*31536000 + ((tm.tm_year-69)/4)*86400 -
+    ((tm.tm_year-1)/100)*86400 + ((tm.tm_year+299)/400)*86400;
+  }
+  
+  return result;
+}
 
