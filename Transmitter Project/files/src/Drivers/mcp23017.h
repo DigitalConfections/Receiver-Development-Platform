@@ -34,8 +34,8 @@
 
 typedef enum {
 	MCP23017_PORTA,
-	MCP23017_PORTB,
-} ExpanderPort;
+	MCP23017_PORTB
+	}ExpanderPort;
 
 	/* PortB
 	*	PB0 - FTDI Present Input (low)
@@ -73,7 +73,6 @@ BOOL mcp23017_readPort(uint8_t *databyte, ExpanderPort port);
 
 /**
  */
-void mcp23017_set( DIbit bit, BOOL value);
-
+void mcp23017_set( ExpanderPort port, DIbit bit, BOOL value );
 
 #endif  /* MCP23017_H_ */

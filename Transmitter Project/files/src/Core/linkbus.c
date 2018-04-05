@@ -32,27 +32,31 @@
 
 /* Global Variables */
 static volatile BOOL g_bus_disabled = TRUE;
-static volatile BOOL g_lb_terminal_mode = INKBUS_TERMINAL_MODE_DEFAULT;
+static volatile BOOL g_lb_terminal_mode = LINKBUS_TERMINAL_MODE_DEFAULT;
 static const char crlf[] = "\n";
 static char lineTerm[8] = "\n";
-static const char textPrompt[] = "RDP> ";
+static const char textPrompt[] = "TX> ";
 static const char textWDT[] = "*** WDT Reset! ***\n";
 
-static const char textHelp[][40] = { "\nCommands:\n",
-"  BAT               - Battery\n",
-"  BND [2|80]        - Rx Band\n",
-"  FRE [M<1:5>] [Hz] - Rx Freq\n",
-"  PRE [0-255]       - Preamp\n",
-"  O [Hz]            - CW Offset\n",
-"  A [0-100]         - Attenuation\n",
-"  S[S]              - RSSI\n",
-"  TIM [hh:mm:ss]    - RTC Time\n",
-"  TON [-1|0|1]      - Tone RSSI\n",
-"  P                 - Perm\n",
-"  RST               - Reset\n",
-"  ?                 - Info\n"
+
+static const char textHelp[][34] = { "\nCommands:\n",
+" BAT   - Battery\n",
+" TIM [hh:mm:ss]- RTC Time\n",
+" BND [2|80] - Rx Band\n",
+" FRE [M<1:5>] [Hz] - Rx Freq\n",
+" DRI [0-255] - 2m Drive\n",
+" POW [0-255] - Tx PA Power\n",
+" ID [text]   - Station ID\n",
+" PA [text]   - Tx Pattern\n",
+" SPD [ID|PA] s - Code speed\n",
+" T [0|1|D] s - On/Off/Dly times\n",
+" SF [S|F] [hh:mm:ss] - Start/Fin\n",
+" P             - Perm\n",
+" RST           - Reset\n",
+" WI [1|2]      - WiFi \n",
+" ?             - Info\n"
 };
-	
+
 static char g_tempMsgBuff[LINKBUS_MAX_MSG_LENGTH];
 
 /* Local function prototypes */
@@ -327,7 +331,8 @@ void lb_send_Help(void)
 	while(linkbusTxInProgress());
 #endif // TRANQUILIZE_WATCHDOG
 	
-	for(int i=0; i<13; i++)
+	int rows = sizeof(textHelp)/sizeof(textHelp[0]);
+	for(int i=0; i<rows; i++)
 	{
 		while(linkbus_send_text((char*)textHelp[i])); 
 		while(linkbusTxInProgress());
@@ -374,7 +379,7 @@ BOOL lb_send_string(char* str)
 {
 	if(str == NULL) return TRUE;
 	if(strlen(str) > LINKBUS_MAX_MSG_LENGTH) return TRUE;
-	strcpy(g_tempMsgBuff, str);
+	strncpy(g_tempMsgBuff, str, LINKBUS_MAX_MSG_LENGTH);
 	linkbus_send_text(g_tempMsgBuff);
 	return FALSE;
 }
@@ -450,24 +455,10 @@ void lb_send_FRE(LBMessageType msgType, Frequency_Hz freq, BOOL isMemoryValue)
 }
 
 
-void lb_send_TIM(LBMessageType msgType, int32_t time)
+void lb_send_msg(LBMessageType msgType, char* msgLabel, char* msgStr)
 {
-	BOOL valid = TRUE;
-	char t[10] = "\0";
 	char prefix = '$';
 	char terminus = ';';
-
-	if(time != NO_TIME_SPECIFIED)
-	{
-		if(g_lb_terminal_mode)
-		{
-			timeValToString(t, time, HourMinuteSecondFormat);
-		}
-		else
-		{
-			sprintf(t, "%ld", time);
-		}
-	}
 
 	if(msgType == LINKBUS_MSG_REPLY)
 	{
@@ -477,24 +468,17 @@ void lb_send_TIM(LBMessageType msgType, int32_t time)
 	{
 		terminus = '?';
 	}
-	else if(msgType != LINKBUS_MSG_COMMAND)
+
+	if(g_lb_terminal_mode)
 	{
-		valid = FALSE;
+		sprintf(g_tempMsgBuff, "> %s=%s%s", msgLabel, msgStr, lineTerm);
+	}
+	else
+	{
+		sprintf(g_tempMsgBuff, "%c%s,%s%c", prefix, msgLabel, msgStr, terminus);
 	}
 
-	if(valid)
-	{
-		if(g_lb_terminal_mode)
-		{
-			sprintf(g_tempMsgBuff, "> TIME=%s%s", t, lineTerm);
-		}
-		else
-		{
-			sprintf(g_tempMsgBuff, "%cTIM,%s%c", prefix, t, terminus);
-		}
-
-		linkbus_send_text(g_tempMsgBuff);
-	}
+	linkbus_send_text(g_tempMsgBuff);
 }
 
 

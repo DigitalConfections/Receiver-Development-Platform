@@ -22,7 +22,7 @@
     <ProgFlashFromRam>true</ProgFlashFromRam>
     <RamSnippetAddress>0x20000000</RamSnippetAddress>
     <UncachedRange />
-    <preserveEEPROM>false</preserveEEPROM>
+    <preserveEEPROM>true</preserveEEPROM>
     <OverrideVtorValue>exception_table</OverrideVtorValue>
     <BootSegment>2</BootSegment>
     <eraseonlaunchrule>1</eraseonlaunchrule>
@@ -188,7 +188,7 @@
             <Value>../src/Core</Value>
           </ListValues>
         </avrgcc.compiler.directories.IncludePaths>
-        <avrgcc.compiler.optimization.level>Optimize (-O1)</avrgcc.compiler.optimization.level>
+        <avrgcc.compiler.optimization.level>Optimize debugging experience (-Og)</avrgcc.compiler.optimization.level>
         <avrgcc.compiler.optimization.PrepareFunctionsForGarbageCollection>False</avrgcc.compiler.optimization.PrepareFunctionsForGarbageCollection>
         <avrgcc.compiler.optimization.PrepareDataForGarbageCollection>False</avrgcc.compiler.optimization.PrepareDataForGarbageCollection>
         <avrgcc.compiler.optimization.AllocateBytesNeededForEnum>True</avrgcc.compiler.optimization.AllocateBytesNeededForEnum>
@@ -232,6 +232,12 @@
     <Compile Include="src\Core\main.c">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="src\Core\morse.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Core\morse.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="src\Core\transmitter.c">
       <SubType>compile</SubType>
     </Compile>
@@ -262,16 +268,16 @@
     <Compile Include="src\Drivers\ds3231.h">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="src\Drivers\huzzah.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\Drivers\huzzah.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="src\Drivers\i2c.c">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\Drivers\i2c.h">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\Drivers\max5478.c">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\Drivers\max5478.h">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="src\Drivers\mcp23017.c">

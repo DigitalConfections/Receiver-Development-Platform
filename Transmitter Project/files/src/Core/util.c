@@ -28,6 +28,7 @@
 #include <avr/eeprom.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /***********************************************************************************************
  *  EEPROM Utility Functions
@@ -55,106 +56,24 @@ void storeEEdwordIfChanged(uint32_t* ee_var, uint32_t val)
  *  Print Formatting Utility Functions
  ************************************************************************************************/
 
-void timeValToString(char *str, int32_t timeVal, TimeFormat tf)
-{
-	int32_t temp;
-	uint8_t hold;
-	uint8_t index = 7;
-	BOOL done = FALSE;
-
-	if(tf == Minutes_Seconds_Elapsed)
-	{
-		if(timeVal < 0)
-		{
-			timeVal += 86400L;  /* account for midnight rollover */
-
-		}
-		if(timeVal < 6000)
-		{
-			str[5] = '\0';
-			index = 4;
-		}
-		else
-		{
-			if(timeVal < 60000)
-			{
-				sprintf(str, ">%ldm", timeVal / 60);
-			}
-			else
-			{
-				sprintf(str, "%ld.%1ldh", timeVal / 3600, (10 * (timeVal % 3600) / 3600));
-			}
-
-			done = TRUE;
-		}
-	}
-	else
-	{
-		if(timeVal < 0)
-		{
-			timeVal = -timeVal;
-			str[9] = '\0';
-			str[0] = '-';
-			index = 8;
-		}
-		else
-		{
-			str[8] = '\0';
-		}
-	}
-
-	if(!done)
-	{
-		str[index--] = '0' + (timeVal % 10);    /* seconds */
-		temp = timeVal / 10;
-		str[index--] = '0' + (temp % 6);        /* 10s of seconds */
-		temp /= 6;
-
-		str[index--] = ':';
-
-		str[index--] = '0' + (temp % 10);   /* minutes */
-		temp /= 10;
-
-		if(tf == Minutes_Seconds_Elapsed)
-		{
-			str[index--] = '0' + (temp % 10);   /* 10s of minutes */
-		}
-		else
-		{
-			str[index--] = '0' + (temp % 6);    /* 10s of minutes */
-			temp /= 6;
-
-			str[index--] = ':';
-
-			hold = temp % 24;
-			str[index--] = '0' + (hold % 10);   /* hours */
-			hold /= 10;
-			str[index--] = '0' + hold;          /* 10s of hours */
-		}
-	}
-}
-
-int32_t stringToTimeVal(char *str)
+BOOL stringToSecondsSinceMidnight(char *str, int32_t *timeVal)
 {
 	int32_t time_sec = 0;
-	BOOL missingTens = FALSE;
 	uint8_t index = 0;
 	char field[3];
+	char* loc1;
 
 	field[2] = '\0';
 	field[1] = '\0';
 
-	if(str[1] == ':')
-	{
-		missingTens = TRUE;
-	}
+	loc1 = strchr(str, ':');
+	if(loc1 == NULL) return 1; // format error
+	
+	str = loc1 - 2; /* point str to beginning of time string */
 
-	/* hh:mm:ss or h:mm:ss */
-	field[0] = str[index++];        /* tens of hours or hours */
-	if(!missingTens)
-	{
-		field[1] = str[index++];    /* hours */
-	}
+	/* hh:mm:ss */
+	field[0] = str[index++];    /* tens of hours or hours */
+	field[1] = str[index++];    /* hours */
 	
 	time_sec = SecondsFromHours(atol(field));
 	index++;
@@ -168,5 +87,6 @@ int32_t stringToTimeVal(char *str)
 	field[1] = str[index++];    /* seconds */
 	time_sec += atoi(field);
 
-	return(time_sec);
+	*timeVal = time_sec;
+	return FALSE; 
 }

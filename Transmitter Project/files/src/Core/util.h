@@ -57,16 +57,11 @@ void storeEEdwordIfChanged(uint32_t* ee_var, uint32_t val);
  ************************************************************************************************/
 
 /**
- *  str = pointer to char[] of size 10 or greater
- *  timerVal = time (in seconds) to be converted to a string
- *  tf = format to be applied in creating the string
- */
-void timeValToString(char *str, int32_t timeVal, TimeFormat tf);
-
-/**
  *  str = pointer to char[] of size 10 or greater containing time string in format hh:mm:ss
- *  returns time in seconds since midnight
+ *  sets *timeVal to time in seconds since midnight
+ *  returns non-zero if error occurs
  */
-int32_t stringToTimeVal(char *str);
+BOOL stringToSecondsSinceMidnight(char *str, int32_t *timeVal);
+
 
 #endif  /* UTIL_H_ */

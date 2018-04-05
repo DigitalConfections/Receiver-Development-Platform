@@ -6,6 +6,8 @@ src\Core\linkbus.c
 
 src\Core\main.c
 
+src\Core\morse.c
+
 src\Core\transmitter.c
 
 src\Core\util.c
@@ -16,9 +18,9 @@ src\Drivers\dac081c085.c
 
 src\Drivers\ds3231.c
 
-src\Drivers\i2c.c
+src\Drivers\huzzah.c
 
-src\Drivers\max5478.c
+src\Drivers\i2c.c
 
 src\Drivers\mcp23017.c
 

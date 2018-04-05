@@ -20,15 +20,15 @@ void wifi_reset(BOOL reset)
 {
 	if(reset) // assert reset low
 	{
-		mcp23017_set(WIFI_RESET, LOW);
+		mcp23017_set( MCP23017_PORTB, WIFI_RESET, LOW);
 	}
 	else // de-assert reset high
 	{
-		mcp23017_set(WIFI_RESET, HIGH);
+		mcp23017_set(MCP23017_PORTB, WIFI_RESET, HIGH);
 	}
 }
 
 void wifi_power(BOOL on)
 {
-	mcp23017_set(WIFI_POWER_ENABLE, on);
+	mcp23017_set(MCP23017_PORTB, WIFI_POWER_ENABLE, on);
 }

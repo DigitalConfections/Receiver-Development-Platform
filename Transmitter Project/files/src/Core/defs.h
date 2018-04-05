@@ -47,7 +47,7 @@
    #define INCLUDE_SI5351_SUPPORT // Silicon Labs Programmable Clock
    #define INCLUDE_DS3231_SUPPORT // Maxim RTC
    #define INCLUDE_MCP23017_SUPPORT // Port expander
-   #define INCLUDE_RECEIVER_SUPPORT
+   #define INCLUDE_TRANSMITTER_SUPPORT
 //   #define INCLUDE_PCF8574_SUPPORT
 	/* TODO: Add DAC081C085 support
 	 * TODO: Add MAX5478EUD+ support
@@ -57,7 +57,10 @@
 /******************************************************
  * Include only the necessary software support */
 #define ENABLE_1_SEC_INTERRUPTS
-//#define ENABLE_POWERUP_POLLING
+
+/*******************************************************
+* ADC Scale Factors */
+#define PA_VOLTAGE_SCALE_FACTOR (3.85)
 
 /*******************************************************/
 
@@ -67,7 +70,20 @@
 
 /******************************************************
  * EEPROM definitions */
-#define EEPROM_INITIALIZED_FLAG 0xA8
+#define EEPROM_INITIALIZED_FLAG 0xA9
+#define EEPROM_UNINITIALIZED 0x00
+
+#define EEPROM_STATION_ID_DEFAULT "FOXBOX"
+#define EEPROM_PATTERN_TEXT_DEFAULT "PARIS|"
+
+#define EEPROM_START_TIME_DEFAULT -1
+#define EEPROM_FINISH_TIME_DEFAULT -1
+#define EEPROM_ID_CODE_SPEED_DEFAULT 20
+#define EEPROM_PATTERN_CODE_SPEED_DEFAULT 8
+#define EEPROM_ON_AIR_TIME_DEFAULT 60
+#define EEPROM_OFF_AIR_TIME_DEFAULT 240
+#define EEPROM_INTRA_CYCLE_DELAY_TIME_DEFAULT 0
+
 #define EEPROM_TONE_VOLUME_DEFAULT 5
 #define EEPROM_MAIN_VOLUME_DEFAULT 11
 #define EEPROM_AUDIO_RSSI_DEFAULT 0
@@ -108,9 +124,10 @@
 
 #define ON              1
 #define OFF             0
+#define TOGGLE			2
 #define HIGH			1
 #define LOW				0
-#define UNDETERMINED 3
+#define UNDETERMINED	3
 
 #define ADC_REF_VOLTAGE_mV 3300UL
 

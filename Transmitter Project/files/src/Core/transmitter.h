@@ -30,6 +30,7 @@
 
 #include "defs.h"
 #include "si5351.h"
+#include "mcp23017.h"
 
 typedef uint16_t SignalStrength;
 typedef int16_t Attenuation;
@@ -39,10 +40,11 @@ typedef int16_t Attenuation;
 #define RADIO_MINIMUM_RECEIVE_FREQ ((Frequency_Hz)3500000)
 
 /*
- * Configure VFO and LO clock pins
+ * Define clock pins
  */
-#define RX_CLOCK_BFO SI5351_CLK2
-#define RX_CLOCK_VFO SI5351_CLK0
+#define TX_CLOCK_HF_1 SI5351_CLK2
+#define TX_CLOCK_HF_0 SI5351_CLK1
+#define TX_CLOCK_VHF SI5351_CLK0
 
 typedef enum
 {
@@ -50,6 +52,13 @@ typedef enum
 	BAND_80M = 1,
 	BAND_INVALID
 } RadioBand;
+
+typedef enum
+{
+	MODE_CW = 0,
+	MODE_AM = 1,
+	MODE_INVALID
+} Modulation;
 
 /*
  *       There are two VFO frequencies that will mix with the received signal to produce the
@@ -74,32 +83,21 @@ typedef enum
 	ILLEGAL_MEMORY
 } MemoryStore;
 
-#define EEPROM_2M_MEM1_DEFAULT 144250000
-#define EEPROM_2M_MEM2_DEFAULT 144300000
-#define EEPROM_2M_MEM3_DEFAULT 144350000
-#define EEPROM_2M_MEM4_DEFAULT 144400000
-#define EEPROM_2M_MEM5_DEFAULT 144450000
-#define EEPROM_80M_MEM1_DEFAULT 3579500
-#define EEPROM_80M_MEM2_DEFAULT 3560000
-#define EEPROM_80M_MEM3_DEFAULT 3565000
-#define EEPROM_80M_MEM4_DEFAULT 3570000
-#define EEPROM_80M_MEM5_DEFAULT 3575000
+#define DEFAULT_TX_2M_FREQUENCY 145566000
+#define DEFAULT_TX_2M_POWER 50
+#define DEFAULT_TX_80M_FREQUENCY 3550000
+#define DEFAULT_TX_80M_POWER 50
+#define DEFAULT_RTTY_OFFSET_FREQUENCY 170
+#define DEFAULT_TX_ACTIVE_BAND BAND_2M
+#define DEFAULT_TX_2M_MODULATION MODE_AM
 
+#define TX_MINIMUM_2M_FREQUENCY 144000000
+#define TX_MAXIMUM_2M_FREQUENCY 148000000
+#define TX_MINIMUM_80M_FREQUENCY 3500000
+#define TX_MAXIMUM_80M_FREQUENCY 8000000
 
-#define DEFAULT_RX_2M_FREQUENCY 145566000
-#define DEFAULT_RX_80M_FREQUENCY 3550000
-#define DEFAULT_RX_CW_OFFSET_FREQUENCY 500
-#define MAX_CW_OFFSET 2000
-#define DEFAULT_RX_ACTIVE_BAND BAND_2M
-#define RX_MINIMUM_2M_FREQUENCY 144000000
-#define RX_MAXIMUM_2M_FREQUENCY 148000000
-#define RX_MINIMUM_80M_FREQUENCY 3500000
-#define RX_MAXIMUM_80M_FREQUENCY 4000000
-
-#define DEFAULT_PREAMP_80M 255;
-#define DEFAULT_PREAMP_2M 1;
-#define DEFAULT_ATTENUATION 0;
-
+#define DEFAULT_AM_DRIVE_LEVEL 180
+#define DEFAULT_CW_DRIVE_LEVEL 180
 
 typedef struct
 {
@@ -131,44 +129,60 @@ typedef enum
 	MEM5_80M_SETTING
 } FrequencySource;
 
-#ifdef INCLUDE_RECEIVER_SUPPORT
+typedef enum {
+	ANT_80M_DET0,
+	ANT_80M_DET1,
+	ANT_2M_DET,
+	VHF_ENABLE,
+	HF_ENABLE,
+	NOT_USED_TXBIT,
+	T_ENABLE,
+	R_ENABLE
+} TxBit;	
+
+#ifdef INCLUDE_TRANSMITTER_SUPPORT
 /**
  */
 	BOOL init_transmitter(void);
 
 /**
  */
-	void store_receiver_values(void);
+	void storeTtransmitterValues(void);
 	
 /**
  */
-	BOOL rxSetCWOffset(Frequency_Hz offset);
+	void txSetBand(RadioBand band);
+
+/**
+ */
+	RadioBand txGetBand(void);
+	
+/** 
+ */
+	void txSetModulation(Modulation mode);
+	
+/** 
+ */
+	void txSetPowerLevel(uint8_t power);
+	
+/** 
+ */
+	uint8_t txGetPowerLevel(void);
+
+
+/**
+ */
+	BOOL txSetFrequency(Frequency_Hz *freq);
 	
 /**
  */
-	Frequency_Hz rxGetCWOffset(void);
+	void txSetDrive(uint8_t drive);
 
 /**
  */
-	void rxSetBand(RadioBand band);
+	Frequency_Hz txGetFrequency(void);
 
-/**
- */
-	RadioBand rxGetBand(void);
-
-/**
- */
-	BOOL rxSetFrequency(Frequency_Hz *freq);
-
-/**
- */
-	Frequency_Hz rxGetFrequency(void);
-
-/**
- */
-	void rxSetVFOConfiguration(RadioVFOConfig config);
-
-#endif  /* #ifdef INCLUDE_RECEIVER_SUPPORT */
+#endif  /* #ifdef INCLUDE_TRANSMITTER_SUPPORT */
 
 /**
  */
@@ -176,19 +190,10 @@ RadioBand bandForFrequency(Frequency_Hz freq);
 
 /**
  */
-uint8_t rxSetPreamp(uint8_t setting);
+void keyTransmitter(BOOL on);
 
 /**
  */
-uint8_t rxGetPreamp(void);
-
-/**
- */
-uint8_t rxSetAttenuation(uint8_t att);
-
-/**
- */
-uint8_t rxGetAttenuation(void);
-
+void powerToTransmitter(BOOL on);
 
 #endif  /* TRANSMITTER_H_ */

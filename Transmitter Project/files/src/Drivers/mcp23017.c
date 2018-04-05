@@ -117,10 +117,11 @@ static uint8_t g_data[2] = {0, 0};
 	}
 }
 
-void mcp23017_set( DIbit bit, BOOL value)
+void mcp23017_set( ExpanderPort port, DIbit bit, BOOL value )
 {
 	uint8_t mask = (1 << bit);	
-	mcp23017_readPort(g_data, MCP23017_PORTB);
+
+	mcp23017_readPort(g_data, port);
 	
 	if(value)
 	{
@@ -131,7 +132,7 @@ void mcp23017_set( DIbit bit, BOOL value)
 		g_data[0] &= ~mask;
 	}
 	
-	mcp23017_writePort(g_data[0], ADDR_GPIOB);
+	mcp23017_writePort(g_data[0], port);
 }
 
 void mcp23017_writePort( uint8_t databyte, ExpanderPort port)

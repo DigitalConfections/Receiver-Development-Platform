@@ -28,9 +28,10 @@ src/Core/main.d src/Core/main.o: ../src/Core/main.c \
  c:\program\ files\ (x86)\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\include\math.h \
  ../src/Drivers/si5351.h ../src/Core/defs.h \
  c:\program\ files\ (x86)\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\include\avr\eeprom.h \
- ../src/Drivers/ad5245.h ../src/Drivers/ds3231.h \
+ ../src/Drivers/dac081c085.h ../src/Drivers/ds3231.h \
  ../src/Drivers/mcp23017.h ../src/Drivers/i2c.h ../src/Core/linkbus.h \
- ../src/Core/transmitter.h ../src/Core/util.h \
+ ../src/Core/transmitter.h ../src/Drivers/huzzah.h ../src/Core/util.h \
+ ../src/Core/morse.h \
  c:\program\ files\ (x86)\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\include\stdio.h \
  c:\program\ files\ (x86)\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\lib\gcc\avr\5.4.0\include\stdarg.h \
  c:\program\ files\ (x86)\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\include\string.h \
@@ -104,7 +105,7 @@ c:\program\ files\ (x86)\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\
 
 c:\program\ files\ (x86)\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\include\avr\eeprom.h:
 
-../src/Drivers/ad5245.h:
+../src/Drivers/dac081c085.h:
 
 ../src/Drivers/ds3231.h:
 
@@ -116,7 +117,11 @@ c:\program\ files\ (x86)\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\
 
 ../src/Core/transmitter.h:
 
+../src/Drivers/huzzah.h:
+
 ../src/Core/util.h:
+
+../src/Core/morse.h:
 
 c:\program\ files\ (x86)\atmel\studio\7.0\toolchain\avr8\avr8-gnu-toolchain\avr\include\stdio.h:
 

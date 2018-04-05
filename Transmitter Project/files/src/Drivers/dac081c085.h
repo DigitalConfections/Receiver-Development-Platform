@@ -47,4 +47,4 @@ void dac081c_set_dac(uint8_t setting);
 uint8_t dac081c_read_dac(void);
 
 
-#endif /* AD5245_H_ */
+#endif /* DAC081C085_H_ */
