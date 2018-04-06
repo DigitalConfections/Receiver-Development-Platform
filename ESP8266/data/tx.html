@@ -135,7 +135,7 @@
     cursor: pointer;
 }
 
-#text{
+#overlayText{
     position: absolute;
     top: 50%;
     left: 50%;
@@ -167,7 +167,7 @@
     var freq3HeaderText = "Spectator Frequency";
     var freq4HeaderText = "Finish Frequency";
 
-    var stillConnected = false;
+    var stillConnected = 0;
     var lastPacketTime = 0;
     var webSocketTxTimer = 0;
     var lastSocketTxMessage;
@@ -217,7 +217,17 @@
     var websock;
 
     timeUpdateTimer = setInterval(function() {
-      if(!stillConnected) updateDisplayedLocalTime();
+      if(stillConnected) 
+      {
+        updateDisplayedLocalTime();
+        if(stillConnected) {
+          stillConnected--;
+          if(stillConnected == 0) {
+            document.getElementById("overlayText").innerHTML = "Disconnected";
+            document.getElementById("overlay").style.display = "block";
+          }
+        }
+      }
     }, 1000);
 
     function start() {
@@ -233,13 +243,13 @@
           document.getElementById("xmtrTime").innerHTML = "Disconnected";
           console.log("Unable to create web socket");
           websocketcreated = false;
-          eventClick();
+          eventClick("Disconnected");
         }
       } else {
         document.getElementById("xmtrTime").innerHTML = "Disconnected";
         console.log("No websocket host available.");
         websocketcreated = false;
-        eventClick();
+        eventClick("Disconnected");
       }
 
       if(websocketcreated == true) {
@@ -248,17 +258,17 @@
         websock.onopen = function(evt) {
           console.log("websock open");
           websocketcreated = true;
-          stillConnected = true;
-          eventClick();
+          stillConnected = 3;
+          eventClick("Connecting...");
         };
 
         websock.onclose = function(evt) {
           console.log("websock close");
           if(websocketcreated == true) { // handle test case where server refuses websocket
-            eventClick();
+            eventClick("Disconnected");
           }
           websocketcreated = false;
-          stillConnected = false;
+          stillConnected = 0;
         };
 
         websock.onerror = function(evt) {
@@ -270,15 +280,18 @@
           var str = evt.data;
           var arr = str.split(",");
 
-          stillConnected = true;
+          stillConnected = 3;
 
           switch(arr[0]) {
 
             case "EVENT_NAME":
               {
-    document.getElementById("overlay").style.display = "none";
+                document.getElementById("overlay").style.display = "none";
                 var event = arr[1];
                 eventSet(event);
+                typeTxName = [];
+                typeFrequency = [];
+                txDesignation = {typeIndex:0, subIndex:0, pattern:"MO"};
                 updateTextFormatting();
               }
               break;
@@ -336,6 +349,14 @@
 
             case "FINISH_TIME":
               newFinishTime(arr[1]);
+              break;
+
+            case "TYPE_NAME":
+              typeTxName.push(arr[1]);
+              break;
+
+            case "FREQ":
+              typeFrequency.push(arr[1]);
               break;
 
      //////////////////
@@ -678,11 +699,13 @@
       etext.value = event;
     }
 
-    function eventClick() {
-//      var etext = document.getElementById("eventText");
+    function eventClick(msgTxt) {
       sendEvent();
-document.getElementById("overlay").style.display = "block";
-//      updateTextFormatting();
+      if(msgTxt != null) 
+      {
+        document.getElementById("overlayText").innerHTML = msgTxt;
+        document.getElementById("overlay").style.display = "block";
+      }
     }
 
     function forceValueToLocalTime(val) {
@@ -776,11 +799,14 @@ document.getElementById("overlay").style.display = "block";
       var callsignText = document.getElementById("callText");
       var callString = String(callsignText.value);
 
-      if(stillConnected == false) {
+      if(stillConnected == 0) {
         var fTime = document.getElementById("xmtrTime");
 
         fTime.innerHTML = "Disconnected";
         fTime.style.color = "red";
+
+        document.getElementById("overlayText").innerHTML = "Disconnected";
+        document.getElementById("overlay").style.display = "block";
       }
 
       if(hasNumber(callString) && hasAlpha(callString) && (callString.length > 2)) {
@@ -1527,7 +1553,7 @@ document.getElementById("overlay").style.display = "block";
 
 
 <div id="overlay">
-  <div id="text">Loading Event...</div>
+  <div id="overlayText">Connecting(3)...</div>
 </div>
 
 
@@ -1719,7 +1745,7 @@ document.getElementById("overlay").style.display = "block";
             <input type="text" list="events" id="eventText" name="eventText" style="font-family:verdana; font-size:20px; font-weight:bold; color:Blue;" value="Waiting..." readonly="readonly" />
           </td>
           <td style="width:14.4px; text-align: left">
-            <button id="EventButton" class="button" style="background-color:#EEE; width:100px; height:25px; font-size:20px color:Black; font-weight:bold; vertical-align:center;" onclick="eventClick();">Event</button>
+            <button id="EventButton" class="button" style="background-color:#EEE; width:100px; height:25px; font-size:20px color:Black; font-weight:bold; vertical-align:center;" onclick="eventClick('Event Loading...');">Event</button>
           </td>
         </tr>
 
