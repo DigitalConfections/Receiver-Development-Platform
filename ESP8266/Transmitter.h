@@ -62,17 +62,24 @@
 #define MASTER_OR_CLONE_SETTING "MASTER_SETTING"
 
 // Websocket Command Messages
-#define SOCK_COMMAND_EVENT_NAME "EVENT_NAME"
+#define SOCK_COMMAND_EVENT_NAME "EVENT_NAME" /* read only */
 #define SOCK_COMMAND_SYNC_TIME "SYNC"
-#define SOCK_COMMAND_TEMPERATURE "TEMP"
-#define SOCK_COMMAND_SSID "SSID"
-#define SOCK_COMMAND_BATTERY "BAT"
+#define SOCK_COMMAND_TEMPERATURE "TEMP" /* read only */
+#define SOCK_COMMAND_SSID "SSID" /* read only */
+#define SOCK_COMMAND_BATTERY "BAT" /* read only */
 #define SOCK_COMMAND_CLONE "CLONE"
-#define SOCK_COMMAND_VERSION "VERS"
-#define SOCK_COMMAND_MAC "MAC"
+#define SOCK_COMMAND_VERSION "VERS" /* read only */
+#define SOCK_COMMAND_MAC "MAC" /* read only */
 #define SOCK_COMMAND_CALLSIGN "CALLSIGN"
+#define SOCK_COMMAND_BAND "BAND" /* read only */
 #define SOCK_COMMAND_START_TIME "START_TIME"
 #define SOCK_COMMAND_FINISH_TIME "FINISH_TIME"
+#define SOCK_COMMAND_TYPE_NAME "TYPE_NAME" /* read only */
+#define SOCK_COMMAND_TYPE_TX_COUNT "TX_COUNT"  /* read only */
+#define SOCK_COMMANT_TYPE_PWR "POWER" /* read only */
+#define SOCK_COMMAND_TYPE_FREQ "FREQ"
+#define SOCK_COMMAND_TYPE_WPM "CODE_SPEED" /* read only */
+#define SOCK_COMMAND_TYPE_ID_INTERVAL "ID_INT" /* read only */
 #define SOCK_COMMAND_FOX_ID "TX_ROLE_ASSIGNMENT"
 
 // LinkBus Messages

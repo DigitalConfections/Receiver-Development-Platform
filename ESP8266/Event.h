@@ -3,11 +3,11 @@
 
 #include <Arduino.h>
 
-#define EVENT_DEBUG_PRINTS_OVERRIDE false
+#define EVENT_DEBUG_PRINTS_OVERRIDE true
 
 #define MAXIMUM_NUMBER_OF_EVENTS 20
 #define MAXIMUM_NUMBER_OF_EVENT_FILE_LINES 200
-#define MAXIMUM_NUMBER_OF_EVENT_TX_TYPES 5
+#define MAXIMUM_NUMBER_OF_EVENT_TX_TYPES 4
 #define MAXIMUM_NUMBER_OF_TXs_OF_A_TYPE 10
 
 #define EVENT_NAME "EVENT_NAME" /* Human readable event name. Should contain band that is used: 80M or 2M */
@@ -19,12 +19,12 @@
 #define EVENT_FINISH_DATE_TIME "EVENT_FINISH_DATE_TIME" /* Finish date and time in yyyy-mm-ddThh:mm:ssZ format */
 #define EVENT_MODULATION "EVENT_MODULATION" /* AM or CW for 2m events, only CW for 80m events */
 #define EVENT_NUMBER_OF_TX_TYPES "EVENT_NUMBER_OF_TX_TYPES" /* Quantity of different "roles": Home, Foxes, Fast Foxes, Slow Foxes, etc. */
-#define TYPE_TX_NAME "ROLE_NAME" /* Human readable "role" name: "Home", "Fox", "Fast Fox", "Slow Fox", "Spectator", etc. */
+#define TYPE_NAME "_ROLE_NAME" /* Human readable "role" name: "Home", "Fox", "Fast Fox", "Slow Fox", "Spectator", etc. */
 #define TYPE_TX_COUNT "_TX_COUNT" /* Number of transmitters in a particular "role" */
 #define TYPE_FREQ "_FREQ" /* Frequency used by transmitters in that "role" */
 #define TYPE_POWER_LEVEL "_POWER_LEVEL" /* Power level used by transmitters in that "role" */
 #define TYPE_CODE_SPEED "_CODE_SPEED" /* Code speed used by transmitters in that "role" */
-#define TYPE_ID_INTERVAL "ROLE_ID_INTERVAL" /* How frequently (seconds) should transmitters in that "role" send the station ID: 0 = never; */
+#define TYPE_ID_INTERVAL "_ID_INTERVAL" /* How frequently (seconds) should transmitters in that "role" send the station ID: 0 = never; */
 #define TYPE_TX_PATTERN "_PATTERN" /* What pattern of characters should a particular transmitter send */ 
 #define TYPE_TX_ON_TIME  "_ON_TIME" /* For what period of time (seconds) should a particular transmitter remain on the air sending its pattern */
 #define TYPE_TX_OFF_TIME "_OFF_TIME" /* For what period of time (seconds) should a particular transmitter remain off the air before tranmitting again */
@@ -41,40 +41,48 @@ typedef struct {
   String value;
 } EventLineData;
 
-typedef struct {
+typedef struct TxDataStruct{
   String pattern;
   int onTime;
   int offTime;
   int delayTime;
-} Tx;
+} TxDataType;
 
-typedef struct {
+typedef struct RoleDataStruct {
+  String rolename;
   int  numberOfTxs;
   int  frequency;
   int  powerLevel_mW;
   int  code_speed;
-  Tx   tx[MAXIMUM_NUMBER_OF_TXs_OF_A_TYPE];
-} TransmitterType;
+  int  id_interval;
+  TxDataStruct *tx[MAXIMUM_NUMBER_OF_TXs_OF_A_TYPE];
+} RoleDataType;
+
+typedef struct EventDataStruct{
+  String event_name; // "Classic 2m"      <- Human-readable event name
+  String event_band; // 2         <- Band information to be used for restricting frequency settings
+  String event_callsign; // "DE NZ0I"     <- Callsign used by all transmitters (blank if none)
+  String event_callsign_speed; // 20      <- Code speed at which all transmitters should send their callsign ID
+  String event_start_date_time; // 2018-03-23T18:00:00Z <- Date and time of event start (transmitters on)
+  String event_finish_date_time; // 2018-03-23T20:00:00Z  <- Date and time of event finish (transmitters off)
+  String event_modulation; // AM        <- Modulation format to be used by all transmitters
+  int event_number_of_tx_types; // 2     <- How many different transmitter roles there are (e.g., foxes and home)
+  RoleDataStruct *role[MAXIMUM_NUMBER_OF_EVENT_TX_TYPES];
+} EventType;
 
 class Event {
   public:
-    String event_name; // "Classic 2m"      <- Human-readable event name
-    String event_band; // 2         <- Band information to be used for restricting frequency settings
-    String event_callsign; // "DE NZ0I"     <- Callsign used by all transmitters (blank if none)
-    String event_callsign_speed; // 20      <- Code speed at which all transmitters should send their callsign ID
-    String event_start_date_time; // 2018-03-23T18:00:00Z <- Date and time of event start (transmitters on)
-    String event_finish_date_time; // 2018-03-23T20:00:00Z  <- Date and time of event finish (transmitters off)
-    String event_modulation; // AM        <- Modulation format to be used by all transmitters
-    int event_number_of_tx_types; // 2     <- How many different transmitter roles there are (e.g., foxes and home)
-    TransmitterType txType[MAXIMUM_NUMBER_OF_EVENT_TX_TYPES]; // number of txs, frequency, power level
     bool debug_prints_enabled;
 
-  public:
     Event(bool);
+    ~Event();
     bool setEventData(String id, String value);
     bool parseStringData(String txt);
     static bool extractLineData(String s, EventLineData* result);
     static bool isSoonerEvent(EventFileRef a, EventFileRef b, unsigned long currentEpoch);
+    void dumpData(void);
+
+    EventType* eventData;
 };
 
 

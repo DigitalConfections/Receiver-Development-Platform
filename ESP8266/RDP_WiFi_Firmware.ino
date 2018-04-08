@@ -120,12 +120,12 @@ unsigned int g_localPort = 2390;    /* local port to listen for UDP  packets */
 
 /* HTTP web server */
 ESP8266WebServer g_http_server(80); /* HTTP server on port 80 */
-WebSocketsServer g_webSocket = WebSocketsServer(81);  // create a websocket server on port 81
+WebSocketsServer g_webSocketServer = WebSocketsServer(81);  // create a websocket server on port 81
 String g_AP_NameString;
 
 typedef struct webSocketClient {
-  uint8_t webID;
-  uint8_t socketID;
+  int8_t webID;
+  int8_t socketID;
   String macAddr;
 } WebSocketClient;
 
@@ -207,9 +207,9 @@ void setup()
   g_xmtr = new Transmitter(g_debug_prints_enabled);
 }
 
-/********************************************************
-  /*  Handle WiFi events                                  *
-  /********************************************************/
+/*******************************************************
+*  Handle WiFi events                                  *
+********************************************************/
 void eventWiFi(WiFiEvent_t event) {
   String e = String(event);
 
@@ -245,13 +245,26 @@ void eventWiFi(WiFiEvent_t event) {
     case WIFI_EVENT_SOFTAPMODE_PROBEREQRECVED:
       Serial.println(String("[AP] " + e + ", Probe Request Recieved"));
       break;
+
+    case WIFI_EVENT_ANY:
+      Serial.println(String("[AP] " + e + ", WIFI_EVENT_ANY Recieved"));
+      break;
+      
+    case WIFI_EVENT_MODE_CHANGE:
+      Serial.println(String("[AP] " + e + ", WIFI_EVENT_MODE_CHANGE Recieved"));
+      break;
+
+    default:
+//    case WIFI_EVENT_MAX:
+      Serial.println(String("[AP] " + e + ", WIFI_EVENT_MAX Recieved"));
+      break;
   }
 }
 
 
-/********************************************************
-  /*  WiFi Connection Status                              *
-  /********************************************************/
+/*******************************************************
+*  WiFi Connection Status                              *
+********************************************************/
 String connectionStatus ( int which )
 {
   switch ( which )
@@ -428,7 +441,7 @@ bool setupHTTP_AP()
     g_http_server.onNotFound(handleNotFound);        // When a client requests an unknown URI (i.e. something other than "/"), call function "handleNotFound"
     g_http_server.begin();
 
-    //    startWebSocket(); // Start a WebSocket server
+    //    startWebSocketServer(); // Start a WebSocket server
 
     if (g_debug_prints_enabled)
     {
@@ -443,89 +456,89 @@ bool setupHTTP_AP()
 
 // Manage incoming device connection on ESP access point
 void onNewStation(WiFiEventSoftAPModeStationConnected sta_info) {
-#if WIFI_DEBUG_PRINTS_ENABLED
-  Serial.println("New Station :");
-  Serial.println("Station List");
-#endif
+  char newMac[20];
+  sprintf(newMac, MACSTR, MAC2STR(sta_info.mac));
+  String newMacStr = String(newMac);
+  newMacStr.toUpperCase();
+  bool found = false;
 
-  if (g_numberOfWebClients > MAX_NUMBER_OF_WEB_CLIENTS)
+  for (int i = 0; i < MAX_NUMBER_OF_WEB_CLIENTS; i++)
   {
-    if (g_debug_prints_enabled)
+    if (newMacStr.equals(g_webSocketClient[i].macAddr))
     {
-      Serial.printf("ERROR: Number of web clients (%d) exceeds MAX_NUMBER_OF_WEB_CLIENTS.", g_numberOfWebClients);
-      // TODO: attempt to recover gracefully
+      found = true;
+      if (g_debug_prints_enabled) Serial.println("Station found in existing list.");
+      g_webSocketClient[i].webID = sta_info.aid;
+      g_webSocketClient[i].socketID = WEBSOCKETS_SERVER_CLIENT_MAX;
+      break;
     }
   }
-  else
+
+  g_numberOfWebClients = WiFi.softAPgetStationNum();
+  g_numberOfSocketClients = min(g_numberOfWebClients, g_webSocketServer.clientConnections());
+
+  if (!found)
   {
-    char newMac[20];
-    sprintf(newMac, MACSTR, MAC2STR(sta_info.mac));
-    String newMacStr = String(newMac);
-    newMacStr.toUpperCase();
-    bool found = false;
-
-    for (int i = 0; i < g_numberOfWebClients; i++)
-    {
-      if (newMacStr.equals(g_webSocketClient[i].macAddr))
-      {
-        found = true;
-        g_webSocketClient[i].webID = sta_info.aid;
-        break;
-      }
-    }
-
-    if (!found)
-    {
-      g_webSocketClient[g_numberOfWebClients - 1].macAddr = newMacStr;
-      g_webSocketClient[g_numberOfWebClients - 1].webID = sta_info.aid;
-    }
-
-    if (g_debug_prints_enabled)
-    {
-      for (int i = 0; i < g_numberOfSocketClients; i++)
-      {
-        Serial.printf("%d. WebSocketClient: WebID# %d. MAC address : %s\n", i, g_webSocketClient[i].webID, (g_webSocketClient[i].macAddr).c_str());
-      }
-    }
-
-    g_numberOfWebClients++;
-    startWebSocket(); // Start a WebSocket server
+    int top = max(0, g_numberOfWebClients - 1);
+    g_webSocketClient[top].macAddr = newMacStr;
+    g_webSocketClient[top].webID = sta_info.aid;
+    g_webSocketClient[top].socketID = WEBSOCKETS_SERVER_CLIENT_MAX;
   }
+
+  if (g_debug_prints_enabled)
+  {
+    Serial.println("New Station: " + newMacStr);
+    Serial.println("  Total stations: " + String(g_numberOfWebClients) + "; Socket clients: " + String(g_numberOfSocketClients));
+  }
+
+  if (g_debug_prints_enabled)
+  {
+    for (int i = 0; i < g_numberOfSocketClients; i++)
+    {
+      Serial.printf("%d. WebSocketClient: WebID# %d. MAC address : %s\n", i, g_webSocketClient[i].webID, (g_webSocketClient[i].macAddr).c_str());
+    }
+  }
+
+  startWebSocketServer(); // Start a WebSocket server
 }
 
 void onStationDisconnect(WiFiEventSoftAPModeStationDisconnected sta_info) {
+  char newMac[20];
+  sprintf(newMac, MACSTR, MAC2STR(sta_info.mac));
+  String oldMacStr = String(newMac);
+  oldMacStr.toUpperCase();
+
+  g_webSocketServer.disconnect(); /* disconnect all web sockets to prevent serious problems if the wrong socket were to be left connected */
+
+  for (int i = 0; i < MAX_NUMBER_OF_WEB_CLIENTS; i++)
+  {
+    if (oldMacStr.equals(g_webSocketClient[i].macAddr))
+    {
+      g_webSocketClient[i].webID = 0;
+      g_webSocketClient[i].macAddr = "";
+      g_webSocketClient[i].socketID = WEBSOCKETS_SERVER_CLIENT_MAX;
+      if (g_debug_prints_enabled) Serial.println("Station removed from list.");
+      break;
+    }
+  }
+
   g_numberOfWebClients = WiFi.softAPgetStationNum();
+  g_numberOfSocketClients = min(g_numberOfWebClients, g_webSocketServer.clientConnections());
+
   if (g_debug_prints_enabled)
   {
     Serial.println("Station Exit:");
     Serial.printf("  Remaining stations: %d\n", g_numberOfWebClients);
   }
 
-  if (g_numberOfWebClients > MAX_NUMBER_OF_WEB_CLIENTS)
-  {
-    if (g_debug_prints_enabled)
-    {
-      Serial.printf("ERROR: Number of web clients (%d) exceeds MAX_NUMBER_OF_WEB_CLIENTS\n", g_numberOfWebClients);
-    }
 
-    // Attempt to recover gracefully
-    g_numberOfWebClients = WiFi.softAPgetStationNum();
-
-    if (g_debug_prints_enabled)
-    {
-      Serial.printf("Recovery: Setting number of web clients to %d\n", g_numberOfWebClients);
-    }
-  }
-  else
+  if (g_debug_prints_enabled)
   {
-    if (g_debug_prints_enabled)
+    for (int i = 0; i < MAX_NUMBER_OF_WEB_CLIENTS; i++)
     {
-      for (int i = 0; i < g_numberOfSocketClients; i++)
+      if ((g_webSocketClient[i].macAddr).length())
       {
-        if (g_webSocketClient[i].webID == sta_info.aid)
-        {
-          Serial.printf("WebID# %d. sockID# %d. MAC address : %s\n", g_webSocketClient[i].webID, g_webSocketClient[i].socketID, (g_webSocketClient[i].macAddr).c_str());
-        }
+        Serial.printf("WebID# %d. sockID# %d. MAC address : %s\n", g_webSocketClient[i].webID, g_webSocketClient[i].socketID, (g_webSocketClient[i].macAddr).c_str());
       }
     }
   }
@@ -835,42 +848,6 @@ void loop()
 
   switch (value)
   {
-    /* Time: Sync to NIST */
-    case 'T':
-    case 't':
-      {
-        if (g_debug_prints_enabled)
-        {
-          Serial.println("Processing T command...");
-        }
-        if (g_LEDs_enabled)
-        {
-          digitalWrite(RED_LED, LOW); /* Turn on red LED */
-        }
-
-        if (setupWiFiAPConnection())
-        {
-          if (g_debug_prints_enabled)
-          {
-            Serial.println("Error connecting to router!");
-          }
-        }
-        else
-        {
-          getNistTime();
-        }
-
-        if (g_timeWasSet)
-        {
-          digitalWrite(RED_LED, HIGH);    /* Turn off red LED */
-        }
-
-        WiFi.disconnect();
-        digitalWrite(BLUE_LED, HIGH);       /* Turn off blue LED */
-        done = false;
-      }
-      break;
-
     /* HTTP Server */
     case 'w':
     case 'W':
@@ -1118,478 +1095,17 @@ void loop()
   }
 }
 
-#ifdef USE_UDP_FOR_TIME_RETRIEVAL
-
-void getNistTime(void)
-{
-  bool success = false;
-  int bytesRead = 0;
-  int tries = 10;
-  int32_t timeVal = 0;
-  byte packetBuffer[NTP_PACKET_SIZE]; /*buffer to hold incoming and outgoing packets */
-
-  success = g_UDP.begin(g_localPort);
-
-  if (success)
-  {
-    if (g_debug_prints_enabled)
-    {
-      Serial.println("Successfully started WiFi UDP socket...");
-    }
-  }
-  else
-  {
-    if (g_debug_prints_enabled)
-    {
-      Serial.println("Failed to start WiFi UDP socket. Aborting...");
-    }
-    return;
-  }
-
-  success = false;
-  while (!success && tries--)
-  {
-    if (g_debug_prints_enabled)
-    {
-      Serial.println("Sending NTP packet to " + g_timeHost + "...");
-    }
-    success = sendNTPpacket(g_timeHost, packetBuffer);  /* send an NTP packet to a time server */
-
-    if (success)
-    {
-      int timeout = 0;
-
-      /* wait to see if a reply is available */
-      delay(1000);
-
-      while ((bytesRead < 48) && (timeout < 40))
-      {
-        bytesRead = g_UDP.parsePacket();
-        delay(250);
-        timeout++;
-        if (g_debug_prints_enabled)
-        {
-          Serial.print(".");
-        }
-      }
-
-      success = (bytesRead >= 48);
-
-      if (!success)
-      {
-        if (g_debug_prints_enabled)
-        {
-          Serial.println("Timeout waiting for reply.");
-        }
-      }
-    }
-    else
-    {
-      if (g_debug_prints_enabled)
-      {
-        Serial.println("Failed to send NTP packet.");
-      }
-    }
-
-    if (g_debug_prints_enabled)
-    {
-      if (!success)
-      {
-        if (tries)
-        {
-          Serial.println("Retrying...");
-        }
-        else
-        {
-          Serial.println("Failed!");
-        }
-      }
-    }
-  }
-
-  if (success)
-  {
-    String utcTimeSinceMidnight = "";
-    String tempStr;
-
-    if (g_debug_prints_enabled)
-    {
-      Serial.println(String("Time packet received (") + String(bytesRead) + String(") bytes..."));
-    }
-
-    /* We've received a packet, read the data from it */
-    bytesRead = g_UDP.read(packetBuffer, NTP_PACKET_SIZE);  /* read the packet into the buffer */
-
-    if (g_debug_prints_enabled)
-    {
-      Serial.println(String("Bytes retrieved: ") + String(bytesRead));
-
-      /*the timestamp starts at byte 40 of the received packet and is four bytes,
-         or two words, long. First, esxtract the two words: */
-      Serial.print("Here's what was received: ");
-
-      int i;
-      for (i = 0; i < NTP_PACKET_SIZE; i++)
-      {
-        Serial.print(String(packetBuffer[i]) + " ");
-      }
-
-      Serial.println();
-    }
-
-    unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
-    unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);
-    /* combine the four bytes (two words) into a long integer NTP time (seconds since Jan 1 1900): */
-    unsigned long secsSince1900 = highWord << 16 | lowWord;
-    if (g_debug_prints_enabled)
-    {
-      Serial.println("Seconds since 1 Jan 1900 = " + String(secsSince1900));
-    }
-
-    /* Convert NTP time into common time formats: */
-    const unsigned long seventyYears = 2208988800UL;
-    unsigned long epoch = secsSince1900 - seventyYears; /* subtract seventy years: */
-
-    if (g_debug_prints_enabled)
-    {
-      Serial.println("Unix time: " + String(epoch));  /* print Unix time: */
-
-    }
-
-    /* Calculate UTC in hh:mm:ss */
-    utcTimeSinceMidnight += String((epoch % 86400L) / 3600) + ":";
-
-    if (((epoch % 3600) / 60) < 10)
-    {
-      /* In the first 10 minutes of each hour, we'll want a leading '0' */
-      utcTimeSinceMidnight += "0";
-    }
-
-    utcTimeSinceMidnight += String((epoch % 3600) / 60) + ":";
-
-    if ((epoch % 60) < 10)
-    {
-      /* In the first 10 seconds of each minute, we'll want a leading '0' */
-      utcTimeSinceMidnight += "0";
-    }
-
-    utcTimeSinceMidnight += String(epoch % 60);
-
-    if (g_debug_prints_enabled)
-    {
-      Serial.println("UTC: " + utcTimeSinceMidnight);
-    }
-
-    timeVal = stringToTimeVal(utcTimeSinceMidnight);
-
-    //    tempStr = String("$TIM," + String(timeVal) + ";");
-    //   Serial.println(tempStr);        /* Send command to set time */
-
-    g_timeWasSet = true;
-    digitalWrite(RED_LED, HIGH);    /* Turn off red LED */
-  }
-  else
-  {
-    if (g_debug_prints_enabled)
-    {
-      Serial.println("Failed to receive response. Bytes read = " + String(bytesRead));
-    }
-  }
-}
-
-/* Send an NTP request to the time server at the given address
-   The NIST servers listen for a NTP request on port 123,and respond by sending a udp/ip
-   data packet in the NTP format. The data packet includes a 64-bit timestamp containing
-   the time in UTC seconds since January 1, 1900 with a resolution of 200 ps. */
-bool sendNTPpacket(String address, byte *packetBuffer)
-{
-  bool success = false;
-
-  /* set all bytes in the buffer to 0 */
-  memset(packetBuffer, 0, NTP_PACKET_SIZE);
-
-  /* Initialize values needed to form NTP request
-     (see URL above for details on the packets)
-    Serial.println("2"); */
-  packetBuffer[0] = 0b11100011;   /* LI, Version, Mode */
-  packetBuffer[1] = 0;            /* Stratum, or type of clock */
-  packetBuffer[2] = 6;            /* Polling Interval */
-  packetBuffer[3] = 0xEC;         /* Peer Clock Precision */
-  /* 8 bytes of zero for Root Delay & Root Dispersion */
-  packetBuffer[12]     = 49;
-  packetBuffer[13]     = 0x4E;
-  packetBuffer[14]     = 49;
-  packetBuffer[15]     = 52;
-
-  if (g_debug_prints_enabled)
-  {
-    Serial.println(address.c_str());
-  }
-
-  /* Prevent accessing NIST servers more often the once every 10 seconds */
-  g_relativeTimeSeconds = millis() / 1000;
-  while ((g_relativeTimeSeconds - g_lastAccessToNISTServers) < 10) /* prevent servers being accessed more than once every 10 seconds */
-  {
-    if (g_debug_prints_enabled)
-    {
-      Serial.println(String("Waiting..." + String(10 - (g_relativeTimeSeconds - g_lastAccessToNISTServers))));
-    }
-    delay(1000);
-    g_relativeTimeSeconds = millis() / 1000;
-  }
-
-  g_lastAccessToNISTServers = millis() / 1000;
-
-  /* all NTP fields have been given values, now
-     you can send a packet requesting a timestamp: */
-
-  //could mDNS be messing with the address?
-  IPAddress timeServer(129, 6, 15, 28);
-  //if (g_UDP.beginPacket(address.c_str(), 123)) /*NTP requests are to port 123 */
-  if (g_UDP.beginPacket(timeServer, 123)) /*NTP requests are to port 123 */
-  {
-    int bytesWritten;
-
-    bytesWritten = g_UDP.write(packetBuffer, NTP_PACKET_SIZE);
-    success = g_UDP.endPacket();
-
-    if (g_debug_prints_enabled)
-    {
-      Serial.println("g_UDP.beginPacket: UDP remote connection successful!");
-    }
-
-    if (g_debug_prints_enabled)
-    {
-      Serial.println(String("Bytes written: ") + String(bytesWritten));
-    }
-
-    if (success)
-    {
-      if (g_debug_prints_enabled)
-      {
-        Serial.println("Packet was sent successfully!");
-      }
-    }
-    else
-    {
-      if (g_debug_prints_enabled)
-      {
-        Serial.println("Packet failed to send!");
-      }
-    }
-  }
-  else
-  {
-    if (g_debug_prints_enabled)
-    {
-      Serial.println("g_UDP.beginPacket: UDP remote connection failed!");
-    }
-  }
-
-  return (success);
-}
-
-#else   /* USE_UDP_FOR_TIME_RETRIEVAL */
-
-void getNistTime(void)
-{
-  String tempStr;
-
-  g_relativeTimeSeconds = millis() / 1000;
-  while ((g_relativeTimeSeconds - g_lastAccessToNISTServers) < 10) /* prevent servers being accessed more than once every 10 seconds */
-  {
-    if (g_debug_prints_enabled)
-    {
-      Serial.println(String("Waiting..." + String(10 - (g_relativeTimeSeconds - g_lastAccessToNISTServers))));
-    }
-
-    delay(1000);
-    g_relativeTimeSeconds = millis() / 1000;
-  }
-
-  tempStr = String("Connecting to " + g_timeHost + "...");
-
-  if (g_debug_prints_enabled)
-  {
-    Serial.println(tempStr);
-  }
-
-  /* Use WiFiClient class to create TCP connections */
-  WiFiClient client;
-  while (!client.connect((const char*)g_timeHost.c_str(), g_timeHTTPport.toInt()))
-  {
-    if (g_debug_prints_enabled)
-    {
-      Serial.println("Initial connection failed! Retrying...");
-    }
-
-    client.stop();
-    delay(5000);
-  }
-
-  do
-  {
-    delay(500); /* This delay seems to be required to ensure reliable return of the time string */
-
-    if (g_debug_prints_enabled)
-    {
-      Serial.println("Requesting time...");
-    }
-
-    /* Read all the lines of the reply from server and print them to Serial
-       Example: 57912 17-06-08 18:28:35 50 0 0 206.3 UTC(NIST)
-                JJJJJ YR-MO-DA HH:MM:SS TT L H msADV UTC(NIST) OTM
-          where:
-             JJJJJ is the Modified Julian Date (MJD). The MJD has a starting point of midnight on November 17, 1858.
-             You can obtain the MJD by subtracting exactly 2 400 000.5 days from the Julian Date, which is an integer
-             day number obtained by counting days from the starting point of noon on 1 January 4713 B.C. (Julian Day zero).
-
-             YR-MO-DA is the date. It shows the last two digits of the year, the month, and the current day of month.
-
-             HH:MM:SS is the time in hours, minutes, and seconds. The time is always sent as Coordinated Universal Time (UTC).
-             An offset needs to be applied to UTC to obtain local time. For example, Mountain Time in the U. S. is 7 hours behind
-             UTC during Standard Time, and 6 hours behind UTC during Daylight Saving Time.
-
-             TT is a two digit code (00 to 99) that indicates whether the United States is on Standard Time (ST) or Daylight
-             Saving Time (DST). It also indicates when ST or DST is approaching. This code is set to 00 when ST is in effect,
-             or to 50 when DST is in effect. During the month in which the time change actually occurs, this number will decrement
-             every day until the change occurs. For example, during the month of November, the U.S. changes from DST to ST.
-             On November 1, the number will change from 50 to the actual number of days until the time change. It will decrement
-             by 1 every day until the change occurs at 2 a.m. local time when the value is 1. Likewise, the spring change is at
-             2 a.m. local time when the value reaches 51.
-
-             L is a one-digit code that indicates whether a leap second will be added or subtracted at midnight on the last day of the
-             current month. If the code is 0, no leap second will occur this month. If the code is 1, a positive leap second will be added
-             at the end of the month. This means that the last minute of the month will contain 61 seconds instead of 60. If the code is
-             2, a second will be deleted on the last day of the month. Leap seconds occur at a rate of about one per year. They are used
-             to correct for irregularity in the earth's rotation. The correction is made just before midnight UTC (not local time).
-
-             H is a health digit that indicates the health of the server. If H = 0, the server is healthy. If H = 1, then the server is
-             operating properly but its time may be in error by up to 5 seconds. This state should change to fully healthy within 10 minutes.
-             If H = 2, then the server is operating properly but its time is known to be wrong by more than 5 seconds. If H = 3, then a hardware
-             or software failure has occurred and the amount of the time error is unknown. If H = 4 the system is operating in a special maintenance
-             mode and both its accuracy and its response time may be degraded. This value is not used for production servers except in special
-             circumstances. The transmitted time will still be correct to within  Ãƒâ€šÃ‚Â±1 second in this mode.
-
-             msADV displays the number of milliseconds that NIST advances the time code to partially compensate for network delays. The advance
-             is currently set to 50.0 milliseconds.
-
-             The label UTC(NIST) is contained in every time code. It indicates that you are receiving Coordinated Universal Time (UTC) from the
-             National Institute of Standards and Technology (NIST).
-
-             OTM (on-time marker) is an asterisk (*). The time values sent by the time code refer to the arrival time of the OTM. In other words,
-             if the time code says it is 12:45:45, this means it is 12:45:45 when the OTM arrives. */
-
-    done = 0;
-    int count = 0;
-
-    while (!done)
-    {
-      String tempStr;
-      String line = "";
-
-      while (client.available())
-      {
-        line = client.readStringUntil('\r');
-      }
-
-      if (line == "") /* no response from time server */
-      {
-        count++;
-        if (g_debug_prints_enabled)
-        {
-          Serial.println("Request Timedout! Retrying...");
-        }
-
-        if (count > 2)  /* If sending CR didn't help, try reconnecting */
-        {
-          if (g_debug_prints_enabled)
-          {
-            Serial.println("Reconnecting...");
-          }
-
-          client.stop();
-          delay(2000);
-
-          while (!client.connect((const char*)g_timeHost.c_str(), g_timeHTTPport.toInt())) /* reconnect to the same host */
-          {
-            if (g_debug_prints_enabled)
-            {
-              Serial.println("Connection failed! Retrying...");
-            }
-
-            client.stop();
-            delay(5000);
-          }
-
-          count = 0;
-        }
-        else    /* Not sure if this helps, but try sending a CR to server */
-        {
-          if (g_debug_prints_enabled)
-          {
-            Serial.println("Sending CR...");
-          }
-
-          client.write('\r');
-          delay(1000);
-        }
-      }
-      else
-      {
-        if (g_debug_prints_enabled)
-        {
-          Serial.print("Received:");
-        }
-
-        if (g_debug_prints_enabled)
-        {
-          Serial.print(line);
-        }
-
-        timeVal = stringToTimeVal(line);
-        //       tempStr = String("$TIM," + String(timeVal) + ";");
-        //
-        //       if (g_debug_prints_enabled)
-        //       {
-        //         Serial.println(tempStr);
-        //       }
-
-        done = 1;
-        g_timeWasSet = TRUE;
-        digitalWrite(RED_LED, HIGH);    /* Turn off red LED */
-      }
-    }
-
-    if (g_debug_prints_enabled)
-    {
-      Serial.println("Closing connection");
-    }
-
-    if (g_debug_prints_enabled)
-    {
-      Serial.println();
-    }
-
-    client.stop();
-    g_lastAccessToNISTServers = millis() / 1000;
-  }
-  while (0);
-}
-
-#endif  /* USE_UDP_FOR_TIME_RETRIEVAL */
-
 
 void httpWebServerLoop()
 {
   uint8_t i, j;
   char buf[1024];
-  int bytesAvail, bytesIn;
+  size_t bytesAvail, bytesIn;
   bool done = false;
   bool toggle = false;
-  unsigned long holdTime;
+  unsigned long holdTime = 0;
   int escapeCount = 0;
-  int hold;
+  int hold = 0;
   String lb_message = "";
   int messageLength = 0;
 
@@ -1626,10 +1142,10 @@ void httpWebServerLoop()
   {
     /*check if there are any new clients */
     g_http_server.handleClient();
-    g_webSocket.loop();
+    g_webSocketServer.loop();
 
     g_numberOfWebClients = WiFi.softAPgetStationNum();
-    g_numberOfSocketClients = min(g_numberOfWebClients, g_webSocket.clientConnections());
+    g_numberOfSocketClients = min(g_numberOfWebClients, g_webSocketServer.clientConnections());
 
     if (g_numberOfWebClients != hold)
     {
@@ -1641,9 +1157,9 @@ void httpWebServerLoop()
         Serial.println("Socket Clients: " + String(g_numberOfSocketClients));
       }
 
-      if(g_numberOfWebClients == 0)
+      if (g_numberOfWebClients == 0)
       {
-        g_webSocket.disconnect(); // ensure all web socket clients are disconnected - this might not happen if WiFi connection was broken
+        g_webSocketServer.disconnect(); // ensure all web socket clients are disconnected - this might not happen if WiFi connection was broken
       }
     }
 
@@ -1666,11 +1182,7 @@ void httpWebServerLoop()
             {
               done = true;
               escapeCount = 0;
-              //             if (g_debug_prints_enabled)
-              //             {
               Serial.println("Web Server closed");
-              //             }
-
               WiFi.softAPdisconnect(true);
             }
           }
@@ -1712,15 +1224,17 @@ void httpWebServerLoop()
       }
       else
       {
-        if (g_numberOfSocketClients > 0)
+        if (g_numberOfSocketClients)
         {
           digitalWrite(BLUE_LED, toggle); /* Blink blue LED */
           digitalWrite(RED_LED, !toggle); /* Blink red LED */
+          Serial.println("web sockets: " + String(g_numberOfSocketClients));
         }
         else if (g_numberOfWebClients)
         {
           digitalWrite(BLUE_LED, toggle); /* Blink blue LED */
           digitalWrite(RED_LED, HIGH); /* Turn off red LED */
+          Serial.println("web clients: " + String(g_numberOfWebClients));
         }
         else
         {
@@ -1748,8 +1262,7 @@ void httpWebServerLoop()
         case TX_WAKE_UP:
           {
             /* Inform the ATMEGA that WiFi power up is complete */
-            String lbMsg = String("$ESP,0;");
-            Serial.printf(stringObjToConstCharString(&lbMsg)); // Send ESP message to ATMEGA
+            Serial.printf("$ESP,0;"); // Send ESP message to ATMEGA
           }
           break;
 
@@ -1765,14 +1278,13 @@ void httpWebServerLoop()
               if (g_activeEvent) delete g_activeEvent;
               g_activeEvent = readEventFile(g_eventList[0].path);
               g_activeEventIndex = 0;
-              String lbMsg = String(String("$ESP,1,") + g_activeEvent->event_start_date_time  + ";");
+              String lbMsg = String(String("$ESP,1,") + g_activeEvent->eventData->event_start_date_time  + ";");
               Serial.printf(stringObjToConstCharString(&lbMsg)); // Send ESP message to ATMEGA
             }
             else
             {
               /* Inform the ATMEGA that no events are scheduled */
-              String lbMsg = String("$ESP,Z;");
-              Serial.printf(stringObjToConstCharString(&lbMsg)); // Send ESP message to ATMEGA
+              Serial.printf("$ESP,Z;"); // Send ESP message to ATMEGA
             }
 
             g_ESP_ATMEGA_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
@@ -1781,118 +1293,187 @@ void httpWebServerLoop()
 
         case TX_HTML_PAGE_SERVED:
           {
-            String msg;
+            if (g_numberOfSocketClients) {
+              String msg;
 
-            if (g_debug_prints_enabled)
-            {
-              Serial.println("Sending MAC address:" + g_webSocketClient[g_numberOfSocketClients - 1].macAddr);
+              if (g_debug_prints_enabled)
+              {
+                Serial.println("Sending MAC addresses:");
+              }
+
+              for (int i = 0; i < MAX_NUMBER_OF_WEB_CLIENTS; i++)
+              {
+                if ((g_webSocketClient[i].macAddr).length() && (g_webSocketClient[i].socketID < WEBSOCKETS_SERVER_CLIENT_MAX))
+                {
+                  msg = String( String(SOCK_COMMAND_MAC) + "," + g_webSocketClient[i].macAddr );
+                  g_webSocketServer.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
+                  if (g_debug_prints_enabled)
+                  {
+                    Serial.println(msg);
+                  }
+                }
+              }
+
+              if (g_debug_prints_enabled)
+              {
+                Serial.println("Sending SSID:");
+              }
+
+              msg = String( String(SOCK_COMMAND_SSID) + "," + g_AP_NameString );
+              g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+              if (g_debug_prints_enabled)
+              {
+                Serial.println(msg);
+              }
+
+              g_ESP_ATMEGA_Comm_State = TX_HTML_NEXT_EVENT;
             }
-
-            if ((g_webSocketClient[g_numberOfSocketClients - 1].macAddr).length() >= 17)
-            {
-              msg = String( String(SOCK_COMMAND_MAC) + "," + g_webSocketClient[g_numberOfSocketClients - 1].macAddr );
-              g_webSocket.sendTXT(g_webSocketClient[g_numberOfSocketClients - 1].socketID, stringObjToConstCharString(&msg), msg.length());
+            else {
+              g_ESP_ATMEGA_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
             }
-
-            if (g_debug_prints_enabled)
-            {
-              Serial.println(msg);
-              Serial.println("Sending SSID:");
-            }
-
-            msg = String( String(SOCK_COMMAND_SSID) + "," + g_AP_NameString );
-            g_webSocket.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-            if (g_debug_prints_enabled)
-            {
-              Serial.println(msg);
-            }
-
-            if (g_activeEvent)
-            {
-              delete g_activeEvent;
-              g_activeEvent = NULL;
-            }
-
-            g_ESP_ATMEGA_Comm_State = TX_HTML_NEXT_EVENT;
           }
           break;
 
 
         case TX_HTML_NEXT_EVENT:
           {
-            if (g_debug_prints_enabled)
-            {
-              Serial.println("Sending MAC address:");
-            }
-
-            String msg;
-
-            for (int i = 0; i < g_numberOfSocketClients; i++)
-            {
-              msg = String( String(SOCK_COMMAND_MAC) + "," + g_webSocketClient[g_numberOfSocketClients - 1].macAddr );
-              g_webSocket.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
+            if (g_numberOfSocketClients) {
+              String msg;
               if (g_debug_prints_enabled)
               {
-                Serial.println(msg);
+                Serial.println("Sending MAC addresses:");
               }
-            }
 
-            if (g_debug_prints_enabled)
-            {
-              Serial.println("Sending SSID:");
-            }
-
-            msg = String( String(SOCK_COMMAND_SSID) + "," + g_AP_NameString );
-            g_webSocket.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-            if (g_debug_prints_enabled)
-            {
-              Serial.println(msg);
-            }
-
-            if (g_eventsRead)
-            {
-              if (g_activeEvent == NULL)
+              for (int i = 0; i < MAX_NUMBER_OF_WEB_CLIENTS; i++)
               {
-                g_activeEventIndex = 0;
-                g_activeEvent = readEventFile(g_eventList[0].path);
-              }
-              else
-              {
-                g_activeEventIndex = (g_activeEventIndex + 1) % g_eventsRead;
-                delete g_activeEvent;
-                g_activeEvent = readEventFile(g_eventList[g_activeEventIndex].path);
+                if ((g_webSocketClient[i].macAddr).length() && (g_webSocketClient[i].socketID < WEBSOCKETS_SERVER_CLIENT_MAX))
+                {
+                  msg = String( String(SOCK_COMMAND_MAC) + "," + g_webSocketClient[i].macAddr );
+                  g_webSocketServer.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
+                  if (g_debug_prints_enabled)
+                  {
+                    Serial.println(msg);
+                  }
+                }
               }
 
-              String msg = String(String(SOCK_COMMAND_EVENT_NAME) + "," + g_activeEvent->event_name );
-              g_webSocket.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+              if (g_debug_prints_enabled)
+              {
+                Serial.println("Sending SSID:");
+              }
+
+              msg = String( String(SOCK_COMMAND_SSID) + "," + g_AP_NameString );
+              g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
               if (g_debug_prints_enabled)
               {
                 Serial.println(msg);
               }
 
-              msg = String(String(SOCK_COMMAND_CALLSIGN) + "," + g_activeEvent->event_callsign);
-              g_webSocket.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-              if (g_debug_prints_enabled)
+              if (g_eventsRead)
               {
-                Serial.println(msg);
-              }
+                if (g_activeEvent == NULL)
+                {
+                  g_activeEventIndex = 0;
+                  g_activeEvent = readEventFile(g_eventList[0].path);
+                }
+                else
+                {
+                  g_activeEventIndex = (g_activeEventIndex + 1) % g_eventsRead;
+                  delete g_activeEvent;
+                  g_activeEvent = readEventFile(g_eventList[g_activeEventIndex].path);
+                }
 
-              msg = String(String(SOCK_COMMAND_START_TIME) + "," + g_activeEvent->event_start_date_time);
-              g_webSocket.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-              if (g_debug_prints_enabled)
-              {
-                Serial.println(msg);
-              }
+ //               g_activeEvent->dumpData();
 
-              msg = String(String(SOCK_COMMAND_FINISH_TIME) + "," + g_activeEvent->event_finish_date_time);
-              g_webSocket.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-              if (g_debug_prints_enabled)
-              {
-                Serial.println(msg);
-              }
+                String msg = String(String(SOCK_COMMAND_EVENT_NAME) + "," + g_activeEvent->eventData->event_name );
+                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+                if (g_debug_prints_enabled)
+                {
+                  Serial.println(msg);
+                }
 
+                msg = String(String(SOCK_COMMAND_CALLSIGN) + "," + g_activeEvent->eventData->event_callsign);
+                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+                if (g_debug_prints_enabled)
+                {
+                  Serial.println(msg);
+                }
+
+                msg = String(String(SOCK_COMMAND_START_TIME) + "," + g_activeEvent->eventData->event_start_date_time);
+                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+                if (g_debug_prints_enabled)
+                {
+                  Serial.println(msg);
+                }
+
+                msg = String(String(SOCK_COMMAND_FINISH_TIME) + "," + g_activeEvent->eventData->event_finish_date_time);
+                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+                if (g_debug_prints_enabled)
+                {
+                  Serial.println(msg);
+                }
+
+                for (int i = 0; i < g_activeEvent->eventData->event_number_of_tx_types; i++)
+                {
+                  msg = String(String(SOCK_COMMAND_TYPE_NAME) + "," + g_activeEvent->eventData->role[i]->rolename);
+                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+                  if (g_debug_prints_enabled)
+                  {
+                    Serial.println(msg);
+                  }
+                }
+
+                for (int i = 0; i < g_activeEvent->eventData->event_number_of_tx_types; i++)
+                {
+                  msg = String(String(SOCK_COMMAND_TYPE_TX_COUNT) + "," + String(g_activeEvent->eventData->role[i]->numberOfTxs));
+                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+                  if (g_debug_prints_enabled)
+                  {
+                    Serial.println(msg);
+                  }
+                }
+
+                for (int i = 0; i < g_activeEvent->eventData->event_number_of_tx_types; i++)
+                {
+                  msg = String(String(SOCK_COMMAND_TYPE_FREQ) + "," + String(g_activeEvent->eventData->role[i]->frequency));
+                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+                  if (g_debug_prints_enabled)
+                  {
+                    Serial.println(msg);
+                  }
+                }
+
+                for (int i = 0; i < g_activeEvent->eventData->event_number_of_tx_types; i++)
+                {
+                  msg = String(String(SOCK_COMMANT_TYPE_PWR) + "," + String(g_activeEvent->eventData->role[i]->powerLevel_mW));
+                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+                  if (g_debug_prints_enabled)
+                  {
+                    Serial.println(msg);
+                  }
+                }
+
+                for (int i = 0; i < g_activeEvent->eventData->event_number_of_tx_types; i++)
+                {
+                  msg = String(String(SOCK_COMMAND_TYPE_WPM) + "," + String(g_activeEvent->eventData->role[i]->code_speed));
+                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+                  if (g_debug_prints_enabled)
+                  {
+                    Serial.println(msg);
+                  }
+                }
+
+                for (int i = 0; i < g_activeEvent->eventData->event_number_of_tx_types; i++)
+                {
+                  msg = String(String(SOCK_COMMAND_TYPE_ID_INTERVAL) + "," + String(g_activeEvent->eventData->role[i]->id_interval));
+                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+                  if (g_debug_prints_enabled)
+                  {
+                    Serial.println(msg);
+                  }
+                }
+              }
             }
-
             g_ESP_ATMEGA_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
           }
           break;
@@ -1957,11 +1538,13 @@ void startSPIFFS()
   }
 }
 
-void startWebSocket()
+void startWebSocketServer()
 { // Start a WebSocket server
-  g_webSocket.begin();      // start the websocket server
-  //  g_webSocket.beginSSL(); // start secure wss support?
-  g_webSocket.onEvent(webSocketEvent);  // if there's an incoming websocket message, go to function 'webSocketEvent'
+  if (g_webSocketServer.isReady()) return; /* Don't attempt to start a webSocket server that has already begun */
+
+  g_webSocketServer.begin();      // start the websocket server
+  //  g_webSocketServer.beginSSL(); // start secure wss support?
+  g_webSocketServer.onEvent(webSocketEvent);  // if there's an incoming websocket message, go to function 'webSocketEvent'
 
   if (g_debug_prints_enabled)
   {
@@ -1980,42 +1563,51 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
     case WStype_DISCONNECTED:
       if (g_debug_prints_enabled)
       {
-        Serial.printf("[%u] Disconnected!\r\n", num);
+        Serial.printf("[%u] Web Socket disconnected!\r\n", num);
       }
 
       if (g_numberOfSocketClients)
       {
-        g_numberOfSocketClients = min(g_numberOfWebClients, g_webSocket.clientConnections());
-
+        /* Invalidate the socket ID of the disconnected client */
         if (g_numberOfSocketClients)
         {
-          for (uint8_t i = 0; i < g_numberOfSocketClients; i++)
+          for (uint8_t i = 0; i < MAX_NUMBER_OF_WEB_CLIENTS; i++)
           {
             if (g_webSocketClient[i].socketID == num)
             {
-              g_webSocketClient[i].socketID = g_webSocketClient[i + 1].socketID;
-              g_webSocketClient[i].webID = g_webSocketClient[i + 1].webID;
-              g_webSocketClient[i].macAddr = g_webSocketClient[i + 1].macAddr;
-              g_webSocketClient[i + 1].socketID = num;
+              g_webSocketClient[i].socketID = WEBSOCKETS_SERVER_CLIENT_MAX;
+              break;
             }
           }
         }
+
+        g_numberOfSocketClients = min(g_numberOfWebClients, g_webSocketServer.clientConnections());
       }
       break;
 
     case WStype_CONNECTED:
       {
-        IPAddress ip = g_webSocket.remoteIP(num);
+        IPAddress ip = g_webSocketServer.remoteIP(num);
         if (g_debug_prints_enabled)
         {
           Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\r\n", num, ip[0], ip[1], ip[2], ip[3], payload);
         }
 
+        /* Assign the socket ID to the web client that does not yet have a socket ID assigned */
+        if (g_numberOfWebClients)
+        {
+          for (uint8_t i = 0; i < MAX_NUMBER_OF_WEB_CLIENTS; i++)
+          {
+            if ((g_webSocketClient[i].socketID >= WEBSOCKETS_SERVER_CLIENT_MAX) && ((g_webSocketClient[i].macAddr).length() > 0))
+            {
+              g_webSocketClient[i].socketID = num;
+              break;
+            }
+          }
+        }
 
-        g_webSocketClient[g_numberOfSocketClients].socketID = num;
+        g_numberOfSocketClients = min(g_numberOfWebClients, g_webSocketServer.clientConnections());
         g_ESP_ATMEGA_Comm_State = TX_HTML_PAGE_SERVED;
-
-        g_numberOfSocketClients = min(g_numberOfWebClients, g_webSocket.clientConnections());
       }
       break;
 
@@ -2047,7 +1639,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 
           if (g_debug_prints_enabled)
           {
-            Serial.printf(String("Time string: \"" + p + "\"\n").c_str());
+            Serial.printf(String("Fox string: \"" + p + "\"\n").c_str());
           }
         }
         else if (msgHeader == SOCK_COMMAND_EVENT_NAME)
@@ -2069,7 +1661,9 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 
           String msg = String(String(SOCK_COMMAND_CALLSIGN) + "," + p);
 
-          g_webSocket.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+          g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+
+          g_activeEvent->eventData->event_callsign = p;
         }
         else if (msgHeader.startsWith(SOCK_COMMAND_START_TIME))
         {
@@ -2081,6 +1675,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           }
           String lbMsg = String("$SF,S," + p + ";");
           Serial.printf(stringObjToConstCharString(&lbMsg)); // Send to Transmitter
+
+          g_activeEvent->eventData->event_start_date_time = p;
         }
         else if (msgHeader.startsWith(SOCK_COMMAND_FINISH_TIME))
         {
@@ -2092,6 +1688,23 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           }
           String lbMsg = String("$SF,F," + p + ";");
           Serial.printf(stringObjToConstCharString(&lbMsg)); // Send to Transmitter
+
+          g_activeEvent->eventData->event_finish_date_time = p;
+        }
+        else if (msgHeader == SOCK_COMMAND_TYPE_FREQ)
+        {
+          int typeIndex;
+          long freq;
+          int firstComma = p.indexOf(',');
+          int secondComma = p.indexOf(',', firstComma+1);
+          typeIndex = (p.substring(firstComma+1, secondComma)).toInt();
+          freq = (p.substring(secondComma)).toInt();
+          (g_activeEvent->eventData->role[typeIndex])->frequency = freq;
+          
+          if (g_debug_prints_enabled)
+          {
+            Serial.println("Freq" + String(typeIndex) + ": " + String(freq));
+          }
         }
       }
       break;
@@ -2106,7 +1719,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         hexdump(payload, length);
 
         // echo data back to browser
-        g_webSocket.sendBIN(num, payload, length);
+        g_webSocketServer.sendBIN(num, payload, length);
       }
       break;
 
@@ -2139,7 +1752,7 @@ bool handleFileRead(String path)
     file.close();                       // Close the file again
     if (g_debug_prints_enabled)
     {
-      Serial.println(String("\tSent file: ") + path);
+      Serial.println(String("\tSent " + String(sent) + "bytes to file: ") + path);
     }
     return true;
   }
@@ -2179,7 +1792,7 @@ int numberOfEventsScheduled(unsigned long epoch)
     }
   }
 
-  for (int i; i < g_eventsRead; i++)
+  for (int i=0; i < g_eventsRead; i++)
   {
     if (g_eventList[i].startDateTimeEpoch > epoch) /* scheduled to start in the future */
     {
@@ -2208,7 +1821,6 @@ bool readEventTimes(String path, EventFileRef* fileRef)
     File file = SPIFFS.open(path, "r"); // Open the file for reading
     String s = file.readStringUntil('\n');
     int count = 0;
-    Event* event;
 
     while (s.length() && (count++ < MAXIMUM_NUMBER_OF_EVENT_FILE_LINES) && (!startRead || !finishRead))
     {
@@ -2678,7 +2290,7 @@ void saveDefaultsFile()
     }
 
     file.close(); // Close the file
-    Serial.println(String("\Wrote file: ") + path);
+    Serial.println(String("\tWrote file: ") + path);
   }
 
   Serial.println(String("\tFile Not Found: ") + path);  // If the file doesn't exist, return false
@@ -2854,15 +2466,9 @@ void showSettings()
 
 void handleLBMessage(String message)
 {
-  //Serial.println(String("Message: " + message));
-
-  bool isReply = message.charAt(0) == '!';
+//  bool isReply = message.charAt(0) == '!';
   String type = message.substring(1, 4);
   String payload = message.substring(5, message.indexOf(';'));
-
-  //Serial.println(String("Reply? - ") + isReply ? "Yes" : "No");
-  //Serial.println(String("Type: " + type));
-  //Serial.println(String("Arg: " + payload));
 
   if (type == MESSAGE_ESP)
   {
@@ -2884,12 +2490,14 @@ void handleLBMessage(String message)
     {
       if (g_ESP_ATMEGA_Comm_State == TX_WAKE_UP) g_ESP_ATMEGA_Comm_State = TX_TIME_RECEIVED;
 
-      String msg = String(String(SOCK_COMMAND_SYNC_TIME) + "," + timeinfo);
-      g_webSocket.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+      if (g_numberOfSocketClients) {
+        String msg = String(String(SOCK_COMMAND_SYNC_TIME) + "," + timeinfo);
+        g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
 
-      if (g_debug_prints_enabled)
-      {
-        Serial.println("Broadcast to sockets: " + msg);
+        if (g_debug_prints_enabled)
+        {
+          Serial.println("Broadcast to sockets: " + msg);
+        }
       }
     }
   }
@@ -2905,12 +2513,14 @@ void handleLBMessage(String message)
     dtostrf(temp, 4, 1, dataStr);
     dataStr[5] = '\0';
 
-    String msg = String(String(SOCK_COMMAND_TEMPERATURE) + "," + dataStr + "C");
+    if (g_numberOfSocketClients) {
+      String msg = String(String(SOCK_COMMAND_TEMPERATURE) + "," + dataStr + "C");
 
-    g_webSocket.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-    if (g_debug_prints_enabled)
-    {
-      Serial.println(msg);
+      g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+      if (g_debug_prints_enabled)
+      {
+        Serial.println(msg);
+      }
     }
   }
   else if (type == MESSAGE_BATTERY)
@@ -2934,12 +2544,14 @@ void handleLBMessage(String message)
     dtostrf(temp, 3, 0, dataStr);
     dataStr[3] = '\0';
 
-    String msg = String(String(SOCK_COMMAND_BATTERY) + "," + dataStr + "%");
+    if (g_numberOfSocketClients) {
+      String msg = String(String(SOCK_COMMAND_BATTERY) + "," + dataStr + "%");
 
-    g_webSocket.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-    if (g_debug_prints_enabled)
-    {
-      Serial.println(msg);
+      g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+      if (g_debug_prints_enabled)
+      {
+        Serial.println(msg);
+      }
     }
   }
 }

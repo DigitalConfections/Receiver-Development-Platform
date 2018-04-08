@@ -27,7 +27,7 @@ const char * stringObjToConstCharString(String *val)
 
   strcpy(str, (*val).c_str());
 
-  for (int i = 0; i < strlen(str); i++)
+  for (uint16_t i = 0; i < strlen(str); i++)
   {
     char c = str[i];
     if ((!(isalnum(c) || isprint(c))) || (c == 13))
@@ -105,10 +105,8 @@ String formatBytes(size_t bytes)
   {
     return String(bytes / 1024.0) + "KB";
   }
-  else if (bytes < (1024 * 1024 * 1024))
-  {
-    return String(bytes / 1024.0 / 1024.0) + "MB";
-  }
+//  else if (bytes < (1024 * 1024 * 1024))
+   return String(bytes / 1024.0 / 1024.0) + "MB";
 }
 
 String getContentType(String filename)
