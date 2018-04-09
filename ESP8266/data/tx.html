@@ -155,12 +155,13 @@
     var timer = 0;
     var timeUpdateTimer = 0;
     var homeTimer = 0;
-    var eventRadioBand = "2m";
+    var eventRadioBand = "";
+    var timedOut = false;
 
-    var freq1FrequencyHz = "144520000";
-    var freq2FrequencyHz = "144530000";
-    var freq3FrequencyHz = "144540000";
-    var freq4FrequencyHz = "144550000";
+    var freq1FrequencyHz = "";
+    var freq2FrequencyHz = "";
+    var freq3FrequencyHz = "";
+    var freq4FrequencyHz = "";
 
     var freq1HeaderText = "Fox Frequency";
     var freq2HeaderText = "Finish Frequency";
@@ -174,6 +175,7 @@
 
     ///////////////////////////////
     // Settings
+    var masterCloneSetting;
     var eventName = "Classic 80m"; 	/* Human readable event name. Should contain band that is used: 80M or 2M */
     var eventCallsign = "Callsign"; 	/* For station ID */ 
     var eventStartDateTime = "2018-01-01T00:00:00"; 	/* Start date and time in yyyy-mm-ddThh:mm:ssZ format */
@@ -182,36 +184,11 @@
     var typeTxName = ["Home", "Fox"];		/* Human readable "role" name: "Home", "Fox", "Fast Fox", "Slow Fox", "Spectator", etc. */
     var typeTxCount = [1, 5]; 			/* Number of transmitters in a particular "role" */
     var typeFrequency = [3510000, 3600000]; 	/* Frequency used by transmitters in that "role" */
+    var typePower = [1000, 1000];               /* Transmit power in mW for transmitters in that "role" */
+    var typeWPM = [8, 8];                       /* Morse code speed for transmitters in that "role" */
+    var typeIDinterval = [60, 60];              /* Period for sending station ID for transmitters in that "role" */
     var txDesignation = {typeIndex:0, subIndex:0, pattern:"MO"};	/* What role is assigned to this transmitter for this event */
 
-    var masterCloneSetting;
-    var callsignSetting = "Callsign";
-    var classic2mIDSetting = "Finish - MO";
-    var classic80mIDSetting = "Finish - MO";
-    var sprint80mIDSetting = "Finish - MO";
-    var foxO_80mIDSetting = "Finish - MO";
-    var classic2MstartDateTimeSetting = "2018-01-01T00:00:00";
-    var classic2MfinishDateTimeSetting = "2018-01-01T00:00:00";
-    var classic80MstartDateTimeSetting = "2018-01-01T00:00:00";
-    var classic80MfinishDateTimeSetting = "2018-01-01T00:00:00";
-    var sprintStartDateTimeSetting = "2018-01-01T00:00:00";
-    var sprintFinishDateTimeSetting = "2018-01-01T00:00:00";
-    var foxOstartDateTimeSetting = "2018-01-01T00:00:00";
-    var foxOfinishDateTimeSetting = "2018-01-01T00:00:00";
-    var classic2mFoxFrequencySetting = "144500000"; // Classic event only (e.g., 144.500 MHz)
-    var classic2mFinishFrequencySetting = "144900000"; // Classic event only (e.g., 144.900 MHz)
-    var classic80mFoxFrequencySetting = "3510000"; // Classic event only (e.g., 3.510 MHz)
-    var classic80mFinishFrequencySetting = "3600000"; // Classic, Fox-O events only (e.g., 3.600 MHz)
-    var fox_O_80mFoxFrequency1Setting = "3510000"; // Fox-O event only (e.g., 3.510 MHz)
-    var fox_O_80mFoxFrequency2Setting = "3540000"; // Fox-O event only (e.g., 3.540 MHz)
-    var fox_O_80mFoxFrequency3Setting = "3570000"; // Fox-O event only (e.g., 3.570 MHz)
-    var fox_O_80mFinishFrequencySetting = "3600000"; // Fox-O event only (e.g., 3.570 MHz)
-    var sprintSpectator80mFrequencySetting = "3550000"; // Sprint event only (e.g., 3.550 MHz)
-    var sprintSlow80mFrequencySetting = "3530000"; // Sprint event only (e.g., 3.530 MHz)
-    var sprintFast80mFrequencySetting = "3570000"; // Sprint event only (e.g., 3.570 MHz)
-    var sprintFinish80mFrequencySetting = "3600000"; // Sprint event only (e.g., 3.600 MHz)
-
-    var macSetting;
     ///////////////////////////////
 
     var websock;
@@ -225,6 +202,7 @@
           if(stillConnected == 0) {
             document.getElementById("overlayText").innerHTML = "Disconnected";
             document.getElementById("overlay").style.display = "block";
+            timedOut = true;
           }
         }
       }
@@ -258,7 +236,7 @@
         websock.onopen = function(evt) {
           console.log("websock open");
           websocketcreated = true;
-          stillConnected = 3;
+          stillConnected = 5;
           eventClick("Connecting...");
         };
 
@@ -280,7 +258,11 @@
           var str = evt.data;
           var arr = str.split(",");
 
-          stillConnected = 3;
+          stillConnected = 5;
+          if(timedOut) {
+            timedOut = false;
+            document.getElementById("overlay").style.display = "none";
+          }
 
           switch(arr[0]) {
 
@@ -292,6 +274,11 @@
                 typeTxName = [];
                 typeFrequency = [];
                 txDesignation = {typeIndex:0, subIndex:0, pattern:"MO"};
+                eventNumberOfTxTypes = 0;
+                hideFreqSet1();
+                hideFreqSet2();
+                hideFreqSet3();
+                hideFreqSet4();
                 updateTextFormatting();
               }
               break;
@@ -339,8 +326,16 @@
               document.getElementById("callText").value = arr[1];
               break;
 
-            case "TX_ROLE_ASSIGNMENT":
-              classic2mIDSetting = arr[1];
+            case "BAND":
+              var eventBand = arr[1];
+              if(eventBand.indexOf("80") > 0)
+              {
+                 eventRadioBand = "80m";
+              }
+              else
+              {
+                eventRadioBand = "2m";
+              }
               break;
 
             case "START_TIME":
@@ -353,88 +348,75 @@
 
             case "TYPE_NAME":
               typeTxName.push(arr[1]);
+              eventNumberOfTxTypes++;
               break;
 
+            case "TX_COUNT":
+              typeTxCount.push(arr[1]);
+              break;
+
+            case "POWER":
+              typePower.push(arr[1]);
+              break;
+              
             case "FREQ":
-              typeFrequency.push(arr[1]);
+              var freqStr = arr[1];
+              typeFrequency.push(freqStr);
+              var size = typeFrequency.length;
+              var freq = Number(freqStr);
+
+              if((freq < Number("4000000")) && (freq > Number("3500000")))
+              {
+                eventRadioBand = "80m";
+              }
+              else if((freq < Number("148000000")) && (freq > Number("144000000")))
+              {
+                eventRadioBand = "2m";
+              }
+
+              switch(size)
+              {
+                 case 1:
+                   showFreqSet1();
+                   freq1String(freqStr);
+                   document.getElementById("freqSet1Heading").innerHTML = typeTxName[0] + " Frequency";
+                 break;
+
+                 case 2:
+                   showFreqSet2();
+                   freq2String(freqStr);
+                   document.getElementById("freqSet2Heading").innerHTML = typeTxName[1] + " Frequency";
+                 break;
+
+                 case 3:
+                   showFreqSet3();
+                   freq3String(freqStr);
+                   document.getElementById("freqSet3Heading").innerHTML = typeTxName[2] + " Frequency";
+                 break;
+
+                 case 4:
+                   showFreqSet4();
+                   freq4String(freqStr);
+                   document.getElementById("freqSet4Heading").innerHTML = typeTxName[3] + " Frequency";
+                 break;
+
+                 default:
+                 break;
+              }
+
               break;
 
-     //////////////////
-
-            case "CLASSIC_80M_START_DATE_TIME":
-              classic80MstartDateTimeSetting = arr[1];
+            case "CODE_SPEED":
+              typeWPM.push(arr[1]);
               break;
 
-            case "CLASSIC_80M_FINISH_DATE_TIME":
-              classic80MfinishDateTimeSetting = arr[1];
+            case "ID_INT":
+              typeIDinterval.push(arr[1]);
               break;
 
-            case "SPRINT_START_DATE_TIME":
-              sprintStartDateTimeSetting = arr[1];
-              break;
-
-            case "SPRINT_FINISH_DATE_TIME":
-              sprintFinishDateTimeSetting = arr[1];
-              break;
-
-            case "FOX_O_START_DATE_TIME":
-              foxOstartDateTimeSetting = arr[1];
-              break;
-
-            case "FOX_O_FINISH_DATE_TIME":
-              foxOfinishDateTimeSetting = arr[1];
-              break;
-
-            case "CLASSIC_2M_FOX_FREQ":
-              classic2mFoxFrequencySetting = arr[1];
-              freq1FrequencyHz = classic2mFoxFrequencySetting;
-              freq1String(freq1FrequencyHz);
-              break;
-
-            case "CLASSIC_2M_FINISH_FREQ":
-              classic2mFinishFrequencySetting = arr[1];
-              freq2FrequencyHz = classic2mFinishFrequencySetting;
-              freq2String(freq2FrequencyHz);
-              break;
-
-            case "CLASSIC_80M_FOX_FREQ":
-              classic80mFoxFrequencySetting = arr[1];
-              break;
-
-            case "CLASSIC_80M_FINISH_FREQ":
-              classic80mFinishFrequencySetting = arr[1];
-              break;
-
-            case "FOX_O_80M_FOX1_FREQ":
-              fox_O_80mFoxFrequency1Setting = arr[1];
-              break;
-
-            case "FOX_O_80M_FOX2_FREQ":
-              fox_O_80mFoxFrequency2Setting = arr[1];
-              break;
-
-            case "FOX_O_80M_FOX3_FREQ":
-              fox_O_80mFoxFrequency3Setting = arr[1];
-              break;
-
-            case "FOX_O_80M_FINISH_FREQ":
-              fox_O_80mFinishFrequencySetting = arr[1];
-              break;
-
-            case "SPRINT_80M_SPCECTATOR_FREQ":
-              sprintSpectator80mFrequencySetting = arr[1];
-              break;
-
-            case "SPRINT_80M_SLOW_FREQ":
-              sprintSlow80mFrequencySetting = arr[1];
-              break;
-
-            case "SPRINT_80M_FAST_FREQ":
-              sprintFast80mFrequencySetting = arr[1];
-              break;
-
-            case "SPRINT_80M_FINISH_FREQ":
-              sprintFinish80mFrequencySetting = arr[1];
+            case "TX_ROLE":
+              var foxtext = document.getElementById("txIDText");
+              foxtext.value = arr[1];
               break;
 
             default:
@@ -515,108 +497,36 @@
     }
 
     function sendFreq(freq, row) {
-      var etext = document.getElementById("eventText");
       var msgText = "";
 
-      if(etext.value.indexOf("Classic") >= 0) {
-        if(etext.value.indexOf("2m") >= 0) {
-          switch(row) {
-            case 1:
-              {
-                msgText = "FREQ_C2M_FOX," + freq;
-              }
-              break;
-
-            case 2:
-              {
-                msgText = "FREQ_C2M_FIN," + freq;
-              }
-              break;
-
-            default:
-              {}
-              break;
+      switch(row) {
+        case 1:
+          {
+            msgText = "FREQ,0," + freq;
           }
-        } else {
-          switch(row) {
-            case 1:
-              {
-                msgText = "FREQ_C80M_FOX," + freq;
-              }
-              break;
+          break;
 
-            case 2:
-              {
-                msgText = "FREQ_C80M_FIN," + freq;
-              }
-              break;
-
-            default:
-              {}
-              break;
+        case 2:
+          {
+            msgText = "FREQ,1," + freq;
           }
-        }
+          break;
 
-      } else if(etext.value.indexOf("Sprint") >= 0) {
-        switch(row) {
-          case 1:
-            {
-              msgText = "FREQ_S80M_FFOX," + freq;
-            }
-            break;
+        case 3:
+          {
+            msgText = "FREQ,2," + freq;
+          }
+          break;
 
-          case 2:
-            {
-              msgText = "FREQ_S80M_SFOX," + freq;
-            }
-            break;
+        case 4:
+          {
+            msgText = "FREQ,3," + freq;
+          }
+          break;
 
-          case 3:
-            {
-              msgText = "FREQ_S80M_SPEC," + freq;
-            }
-            break;
-
-          case 4:
-            {
-              msgText = "FREQ_S80M_FIN," + freq;
-            }
-            break;
-
-          default:
-            {}
-            break;
-        }
-      } else {
-        switch(row) {
-          case 1:
-            {
-              msgText = "FREQ_F80M_FOX1," + freq;
-            }
-            break;
-
-          case 2:
-            {
-              msgText = "FREQ_F80M_FOX2," + freq;
-            }
-            break;
-
-          case 3:
-            {
-              msgText = "FREQ_F80M_FOX3," + freq;
-            }
-            break;
-
-          case 4:
-            {
-              msgText = "FREQ_F80M_FIN," + freq;
-            }
-            break;
-
-          default:
-            {}
-            break;
-        }
+        default:
+          {}
+          break;
       }
 
       console.log(msgText);
@@ -655,7 +565,6 @@
     }
 
     function foxClick() {
-      var foxtext = document.getElementById("txIDText");
       var x;
       var msgText = "";
 
@@ -676,20 +585,11 @@
       console.log("typeIndex = " + txDesignation.typeIndex);
       console.log("subIndex = " + txDesignation.subIndex);
 
-      var foxname = typeTxName[newTypeIndex];
-
-      if(typeTxCount[newTypeIndex] > 1) {
-         foxname = foxname + " " + (newSubIndex + 1);
-      }
-
-      foxname = foxname + " - " + txDesignation.pattern;
-
-      foxtext.value = foxname;
-      msgText = "TX_ROLE_ASSIGNMENT," + newTypeIndex + ":" + newSubIndex;
+      msgText = "TX_ROLE," + newTypeIndex + ":" + newSubIndex;
 
       console.log(msgText);
 
-      if(msgText.length != 0) {
+      if(msgText.length > 0) {
         sendToSocket(msgText);
       }
     }
@@ -881,9 +781,12 @@
 
         var freq3 = document.getElementById("freq3Text");
         var freq4 = document.getElementById("freq4Text");
-        var etext = document.getElementById("eventText");
 
-        if(etext.value.indexOf("Classic") >= 0) {
+        console.log(freq1, freq2, freq3, freq4);
+        console.log(freq1FrequencyHz, freq2FrequencyHz, freq3FrequencyHz, freq4FrequencyHz);
+
+
+        if(eventNumberOfTxTypes < 3) {
           dif13 = 999999;
           dif14 = 999999;
           dif23 = 999999;
@@ -1389,16 +1292,18 @@
     ////////////////////////////////////////////////////////////
 
     function freq1String(myString) {
-      var fox = document.getElementById("freq1Text");
+      var f = document.getElementById("freq1Text");
       var val = Number(myString);
       var newString = String(Math.floor(val / 1000000)) + "." + pad(Math.floor(((val % 1000000) / 1000)), 3) + "." + pad((val % 1000), 3);
-      if(fox) fox.value = newString;
+      freq1FrequencyHz = myString;
+      if(f) f.value = newString;
     }
 
     function freq2String(myString) {
       var f = document.getElementById("freq2Text");
       var val = Number(myString);
       var newString = String(Math.floor(val / 1000000)) + "." + pad(Math.floor(((val % 1000000) / 1000)), 3) + "." + pad((val % 1000), 3);
+      freq2FrequencyHz = myString;
       if(f) f.value = newString;
     }
 
@@ -1406,6 +1311,7 @@
       var f = document.getElementById("freq3Text");
       var val = Number(myString);
       var newString = String(Math.floor(val / 1000000)) + "." + pad(Math.floor(((val % 1000000) / 1000)), 3) + "." + pad((val % 1000), 3);
+      freq3FrequencyHz = myString;
       if(f) f.value = newString;
     }
 
@@ -1413,6 +1319,7 @@
       var f = document.getElementById("freq4Text");
       var val = Number(myString);
       var newString = String(Math.floor(val / 1000000)) + "." + pad(Math.floor(((val % 1000000) / 1000)), 3) + "." + pad((val % 1000), 3);
+      freq4FrequencyHz = myString;
       if(f) f.value = newString;
     }
 
@@ -1553,7 +1460,7 @@
 
 
 <div id="overlay">
-  <div id="overlayText">Connecting(3)...</div>
+  <div id="overlayText">Connecting...</div>
 </div>
 
 
@@ -1681,7 +1588,7 @@
       </span>
 
     <h1 style="font-family:verdana; font-size:30px; color:Black; text-align:center;">Transmitter Settings</h1>
-    <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">Ver 0.1.4 - 26 Mar 2018</p>
+    <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">Ver 0.1.6 - 8 Apr 2018</p>
 
     <div>
       <table>
@@ -1807,7 +1714,7 @@
           </td>
 
           <td>
-            <input type="text" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center" id="freq1Text" name="freq1Text" value="144600000" readonly="readonly" />
+            <input type="text" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center" id="freq1Text" name="freq1Text" value="" readonly="readonly" />
           </td>
 
           <td style="width:14.4px; text-align: left">
@@ -1841,7 +1748,7 @@
           </td>
 
           <td style="text-align:center color:black font-weight:bold;">
-            <input type="text" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center" id="freq2Text" name="freq2Text" value="144900000" readonly="readonly" />
+            <input type="text" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center" id="freq2Text" name="freq2Text" value="" readonly="readonly" />
           </td>
 
           <td style="width:14.4px; text-align:left">
@@ -1875,7 +1782,7 @@
           </td>
 
           <td>
-            <input type="text" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center" id="freq3Text" name="freq3Text" value="144600000" readonly="readonly" />
+            <input type="text" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center" id="freq3Text" name="freq3Text" value="" readonly="readonly" />
           </td>
 
           <td style="width:14.4px; text-align: left">
@@ -1909,7 +1816,7 @@
           </td>
 
           <td>
-            <input type="text" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center" id="freq4Text" name="freq4Text" value="144600000" readonly="readonly" />
+            <input type="text" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center" id="freq4Text" name="freq4Text" value="" readonly="readonly" />
           </td>
 
           <td style="width:14.4px; text-align: left">

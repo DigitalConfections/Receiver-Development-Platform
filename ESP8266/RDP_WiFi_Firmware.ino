@@ -161,7 +161,6 @@ EventFileRef g_eventList[20];
 int g_eventsRead = 0;
 TxCommState g_ESP_ATMEGA_Comm_State = TX_WAKE_UP;
 
-Event* readEventFile(String path);
 bool populateEventFileList(void);
 bool readDefaultsFile(void);
 void saveDefaultsFile(void);
@@ -1275,8 +1274,8 @@ void httpWebServerLoop()
             if (numScheduledEvents)
             {
               /* Send messages to ATMEGA informing it of the time of the next scheduled event */
-              if (g_activeEvent) delete g_activeEvent;
-              g_activeEvent = readEventFile(g_eventList[0].path);
+              if (g_activeEvent == NULL) g_activeEvent = new Event(g_debug_prints_enabled);
+              g_activeEvent->readEventFile(g_eventList[0].path);
               g_activeEventIndex = 0;
               String lbMsg = String(String("$ESP,1,") + g_activeEvent->eventData->event_start_date_time  + ";");
               Serial.printf(stringObjToConstCharString(&lbMsg)); // Send ESP message to ATMEGA
@@ -1374,13 +1373,13 @@ void httpWebServerLoop()
                 if (g_activeEvent == NULL)
                 {
                   g_activeEventIndex = 0;
-                  g_activeEvent = readEventFile(g_eventList[0].path);
+                  g_activeEvent = new Event(g_debug_prints_enabled);
+                  g_activeEvent->readEventFile(g_eventList[0].path);
                 }
                 else
                 {
                   g_activeEventIndex = (g_activeEventIndex + 1) % g_eventsRead;
-                  delete g_activeEvent;
-                  g_activeEvent = readEventFile(g_eventList[g_activeEventIndex].path);
+                  g_activeEvent->readEventFile(g_eventList[g_activeEventIndex].path);
                 }
 
  //               g_activeEvent->dumpData();
@@ -1637,9 +1636,12 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           int c = p.indexOf(':');
           p = p.substring(c - 1, c + 2);
 
+          String msg = String(String(SOCK_COMMAND_FOX_ID) + "," + g_activeEvent->getTxDescriptiveName(p));
+          g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+
           if (g_debug_prints_enabled)
           {
-            Serial.printf(String("Fox string: \"" + p + "\"\n").c_str());
+            Serial.println(msg);
           }
         }
         else if (msgHeader == SOCK_COMMAND_EVENT_NAME)
@@ -1861,43 +1863,6 @@ bool readEventTimes(String path, EventFileRef* fileRef)
   }
 
   return (!startRead || !finishRead);
-}
-
-Event* readEventFile(String path)
-{
-  Event* event = NULL;
-
-  if (SPIFFS.exists(path))
-  {
-    // Create an object to hold the file data
-    event = new Event(g_debug_prints_enabled);
-
-    if ( event == NULL)
-    {
-      Serial.println("Error: Out of Memory!");
-    }
-    else
-    {
-      File file = SPIFFS.open(path, "r"); // Open the file for reading
-      String s = file.readStringUntil('\n');
-      int count = 0;
-
-      while (s.length() && count++ < MAXIMUM_NUMBER_OF_EVENT_FILE_LINES)
-      {
-        event->parseStringData(s);
-        s = file.readStringUntil('\n');
-      }
-
-      file.close(); // Close the file
-    }
-
-    if (g_debug_prints_enabled)
-    {
-      Serial.println(String("\tRead file: ") + path);
-    }
-  }
-
-  return event;
 }
 
 bool populateEventFileList(void)

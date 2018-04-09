@@ -80,7 +80,7 @@
 #define SOCK_COMMAND_TYPE_FREQ "FREQ"
 #define SOCK_COMMAND_TYPE_WPM "CODE_SPEED" /* read only */
 #define SOCK_COMMAND_TYPE_ID_INTERVAL "ID_INT" /* read only */
-#define SOCK_COMMAND_FOX_ID "TX_ROLE_ASSIGNMENT"
+#define SOCK_COMMAND_FOX_ID "TX_ROLE"
 
 // LinkBus Messages
 #define MESSAGE_ESP "ESP"
