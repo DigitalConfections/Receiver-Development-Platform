@@ -1182,6 +1182,15 @@ int main( void )
 						/* ESP8266 is ready with event data */
 						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ESP_LABEL, "1");
 					}
+					else if(f1 == '2') /* ESP module needs continuous power to save data */
+					{
+						g_WiFi_shutdown_seconds = 0; // disable shutdown
+						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ESP_LABEL, "2"); /* Save data now */
+					}
+					else if(f1 == '3')
+					{
+						g_WiFi_shutdown_seconds = 3; /* Shut down WiFi in 3 seconds */
+					}
 					else if(f1 == 'Z') /* No scheduled events - keep alive */
 					{
 						/* shut down WiFi after 2 minutes of inactivity */
