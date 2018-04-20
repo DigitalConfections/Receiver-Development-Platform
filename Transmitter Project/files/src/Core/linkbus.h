@@ -101,11 +101,12 @@ typedef enum
 	MESSAGE_TEMP = 'T' * 100 + 'E' * 10 + 'M',      /* Temperature  data */
 	MESSAGE_PERM = 'P',								/* Saves most settings to EEPROM "perm" */
 	MESSAGE_TX_POWER = 'P' * 100 + 'O' * 10 + 'W',	/* Sets transmit power level */
+	MESSAGE_TX_MOD = 'M' * 100 + 'O' * 10 + 'D',    /* Sets 2m modulation format to AM or CW */
 	MESSAGE_DRIVE_LEVEL = 'D' * 100 + 'R' * 10 + 'I', /*  Adjust 2m drive level */
 	MESSAGE_SET_STATION_ID = 'I' * 10 + 'D',        /* Sets amateur radio callsign text */
 	MESSAGE_SET_PATTERN = 'P' * 10 + 'A',           /* Sets unique transmit pattern */
 	MESSAGE_CODE_SPEED = 'S' * 100 + 'P' * 10 + 'D', /* Sets id and pattern code speeds */
-	MESSAGE_TIME_INTERVAL = 'T',					/* Sets on-air and off-air time intervals */
+	MESSAGE_TIME_INTERVAL = 'T',					/* Sets on-air, off-air, delay, and ID time intervals */
 	MESSAGE_ESP_COMM = 'E' * 100 + 'S' * 10 + 'P',  /* Communications with ESP8266 controller */
 
 	/* TTY USER MESSAGES */

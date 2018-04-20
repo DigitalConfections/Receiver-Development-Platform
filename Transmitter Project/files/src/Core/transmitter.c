@@ -99,11 +99,11 @@
 		{
 			if(bandSet == BAND_2M)
 			{
-				si5351_set_freq(*freq, TX_CLOCK_VHF);
+				si5351_set_freq(*freq, TX_CLOCK_VHF, TRUE);
 			}
 			else
 			{
-				si5351_set_freq(*freq, TX_CLOCK_HF_0);
+				si5351_set_freq(*freq, TX_CLOCK_HF_0, TRUE);
 			}
 
 			activeBandSet = TRUE;
@@ -275,7 +275,12 @@
 			}
 		}
 	}
-
+	
+	Modulation txGetModulation(void)
+	{
+		return g_2m_modulationFormat;
+	}
+	
 	BOOL init_transmitter(void)
 	{
 		if(si5351_init(SI5351_CRYSTAL_LOAD_6PF, 0)) return TRUE;

@@ -26,6 +26,7 @@
 
 #include <ctype.h>
 #include <asf.h>
+#include <time.h>
 #include "defs.h"
 #include "si5351.h"		/* Programmable clock generator */
 #include "dac081c085.h"	/* Transmit power level DAC */
@@ -49,8 +50,6 @@
 /***********************************************************************
  * Local Typedefs
 ************************************************************************/
-
-#define EVENT_TIME_PASSED -1
 
 typedef enum
 {
@@ -100,21 +99,23 @@ static char EEMEM ee_stationID_text[MAX_STATION_ID_LENGTH];
 static char EEMEM ee_pattern_text[MAX_PATTERN_TEXT_LENGTH];
 static uint8_t EEMEM ee_pattern_codespeed;
 static uint8_t EEMEM ee_id_codespeed;
-static uint8_t EEMEM ee_on_air_time;
-static uint8_t EEMEM ee_off_air_time;
-static uint8_t EEMEM ee_intra_cycle_delay_time;
-static int32_t EEMEM ee_start_time;
-static int32_t EEMEM ee_finish_time;
+static uint16_t EEMEM ee_on_air_time;
+static uint16_t EEMEM ee_off_air_time;
+static uint16_t EEMEM ee_intra_cycle_delay_time;
+static uint16_t EEMEM ee_ID_time;
+static time_t EEMEM ee_start_time;
+static time_t EEMEM ee_finish_time;
 
 static char g_station_ID[MAX_STATION_ID_LENGTH] = "Foxcall";
 static char g_pattern_text[MAX_PATTERN_TEXT_LENGTH] = "\0";
 static uint8_t g_id_codespeed = EEPROM_ID_CODE_SPEED_DEFAULT;
 static uint8_t g_pattern_codespeed = EEPROM_PATTERN_CODE_SPEED_DEFAULT;
-static uint8_t g_on_air_time = EEPROM_ON_AIR_TIME_DEFAULT; /* amount of time to spend on the air */
-static uint8_t g_off_air_time = EEPROM_OFF_AIR_TIME_DEFAULT; /* amount of time to wait before returning to the air */
-static uint8_t g_intra_cycle_delay_time = EEPROM_INTRA_CYCLE_DELAY_TIME_DEFAULT; /* offset time into a repeating transmit cycle */
-static int32_t g_event_start_time = EEPROM_START_TIME_DEFAULT;
-static int32_t g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
+static uint16_t g_on_air_time = EEPROM_ON_AIR_TIME_DEFAULT; /* amount of time to spend on the air */
+static uint16_t g_off_air_time = EEPROM_OFF_AIR_TIME_DEFAULT; /* amount of time to wait before returning to the air */
+static uint16_t g_intra_cycle_delay_time = EEPROM_INTRA_CYCLE_DELAY_TIME_DEFAULT; /* offset time into a repeating transmit cycle */
+static uint16_t g_ID_time = EEPROM_ID_TIME_INTERVAL_DEFAULT; /* amount of time between ID/callsign transmissions */
+static time_t g_event_start_time = EEPROM_START_TIME_DEFAULT;
+static time_t g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
 
 static int16_t g_on_the_air = 0;
 static uint16_t g_time_to_send_ID = 0;
@@ -122,10 +123,6 @@ static uint16_t g_code_throttle = 50;
 static uint8_t g_WiFi_shutdown_seconds = 120;
 
 static volatile Frequency_Hz g_transmitter_freq = 0;
-
-#ifdef ENABLE_1_SEC_INTERRUPTS
-	static int32_t g_seconds_count = 0;
-#endif  /* #ifdef ENABLE_1_SEC_INTERRUPTS */
 
 /* ADC Defines */
 
@@ -201,18 +198,16 @@ void __attribute__((optimize("O1"))) wdt_init(WDReset resetType)
 ISR( INT0_vect )
 {
 #ifdef ENABLE_1_SEC_INTERRUPTS
-	g_seconds_count++;
+	system_tick();
 
 	if(g_on_the_air)
 	{
 		if(g_event_finish_time > 0)
 		{
-			ds3231_read_date_time(&g_seconds_count, NULL, Time_Format_Not_Specified);
-		
-			if(g_seconds_count >= g_event_finish_time)
+			if(time(NULL) >= g_event_finish_time)
 			{
 				g_on_the_air = 0;
-				g_event_finish_time = EVENT_TIME_PASSED;
+				g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
 				keyTransmitter(OFF);
 			}
 		}
@@ -255,9 +250,7 @@ ISR( INT0_vect )
 	}
 	else if(g_event_start_time > 0) /* off the air - waiting for the start time to arrive */
 	{
-		ds3231_read_date_time(&g_seconds_count, NULL, Time_Format_Not_Specified); 
-		
-		if(g_seconds_count >= g_event_start_time)
+		if(time(NULL) >= g_event_start_time)
 		{
 			if(g_intra_cycle_delay_time)
 			{
@@ -269,8 +262,6 @@ ISR( INT0_vect )
 				g_code_throttle = throttleValue(g_pattern_codespeed);
 				makeMorse(g_pattern_text, TRUE);
 			}
-			
-			g_event_start_time = EVENT_TIME_PASSED;
 		}
 	}
 	
@@ -325,7 +316,7 @@ ISR( TIMER2_COMPB_vect )
 
 	static BOOL key = FALSE;
 	
-	if(g_on_the_air)
+	if(g_on_the_air >= 0)
 	{
 		if(codeInc)
 		{
@@ -1022,7 +1013,9 @@ int main( void )
 	wdt_reset();
 		
 	#ifdef INCLUDE_DS3231_SUPPORT
-		ds3231_read_date_time(&g_startup_time, NULL, Time_Format_Not_Specified);
+		g_startup_time = ds3231_get_epoch();
+//		ds3231_read_date_time(&g_startup_time, g_tempStr, Time_Format_Not_Specified);
+		set_system_time(g_startup_time);
 	   #ifdef ENABLE_1_SEC_INTERRUPTS
 			ds3231_1s_sqw(ON);
 	   #endif    /* #ifdef ENABLE_1_SEC_INTERRUPTS */
@@ -1172,10 +1165,8 @@ int main( void )
 					if(f1 == '0') /* I'm awake message */
 					{
 						/* WiFi is awake. Send it the current time */
-						#ifdef INCLUDE_DS3231_SUPPORT
-						ds3231_read_date_time(NULL, g_tempStr, Time_Format_Not_Specified);
+						sprintf(g_tempStr, "%lu", time(NULL));
 						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
-						#endif
 					}
 					else if(f1 == '1')
 					{
@@ -1199,15 +1190,53 @@ int main( void )
 				}
 				break;
 				
+				case MESSAGE_TX_MOD:
+				{
+					if(lb_buff->fields[FIELD1][0] == 'A') // AM
+					{
+						txSetModulation(MODE_AM);
+						saveAllEEPROM();
+					}
+					else if(lb_buff->fields[FIELD1][0] == 'C') // CW
+					{
+						txSetModulation(MODE_CW);
+						saveAllEEPROM();
+					}
+					
+					Modulation m = txGetModulation();
+					lb_send_value(m, "MOD");
+				}
+				break;
+				
 				case MESSAGE_TX_POWER:
 				{
 					uint8_t pwr;
 					
 					if(lb_buff->fields[FIELD1][0])
 					{
-						pwr = atol(lb_buff->fields[FIELD1]); 
+						if((lb_buff->fields[FIELD1][0] == 'M') && (lb_buff->fields[FIELD2][0]))
+						{
+							int16_t mW = atoi(lb_buff->fields[FIELD2]);
+							/* TODO: convert milliwatts to power setting */
+							pwr = (uint8_t)mW;
+						}
+						else
+						{
+							pwr = atoi(lb_buff->fields[FIELD1]);
+						}
+						
+						// Prevent possible damage to transmitter
+						if(txGetBand() == BAND_2M)
+						{
+							pwr = MIN(pwr, 10);
+						}
+						else
+						{
+							pwr = MIN(pwr, 10);;
+						}
+
 						txSetPowerLevel(pwr);
-						saveAllEEPROM(); 
+						saveAllEEPROM();
 					}
 					
 					pwr = txGetPowerLevel();
@@ -1224,32 +1253,88 @@ int main( void )
 				
 				case MESSAGE_TIME:
 				{
-					BOOL error = TRUE;
-					int32_t time;
+					time_t mtime = 0;
 					
 					if(lb_buff->fields[FIELD1][0] == 'S')
 					{
 						if(lb_buff->fields[FIELD2][0])
 						{
-							error = stringToSecondsSinceMidnight(lb_buff->fields[FIELD2], &time);
+							mtime = atol(lb_buff->fields[FIELD2]);
 						}
 		
-						if(!error) g_event_start_time = time;
+						if(mtime) 
+						{
+							g_event_start_time = mtime;
+							
+							int32_t dif = difftime(time(NULL), g_event_start_time); // returns arg1 - arg2
+		
+							if(dif >= 0) // start time is in the past
+							{
+								BOOL turnOnTransmitter = FALSE;
+								int cyclePeriod = g_on_air_time + g_off_air_time;
+								int secondsIntoCycle = dif % cyclePeriod;
+								int timeTillTransmit = g_intra_cycle_delay_time - secondsIntoCycle;
+								
+								if(timeTillTransmit <= 0) // we should have started transmitting already
+								{
+									if(g_on_air_time <= -timeTillTransmit) // we should have finished transmitting in this cycle
+									{
+										g_on_the_air = -(cyclePeriod + timeTillTransmit);
+									}
+									else // we should be transmitting right now
+									{
+										g_on_the_air = g_on_air_time + timeTillTransmit;
+										turnOnTransmitter = TRUE;
+									}
+								}
+								else // not yet time time to transmit in this cycle
+								{
+									g_on_the_air = -timeTillTransmit;
+								}
+								
+								if(turnOnTransmitter)
+								{
+									g_code_throttle = throttleValue(g_pattern_codespeed);
+//									makeMorse(g_pattern_text, TRUE);
+//									keyTransmitter(ON);
+								}
+								else
+								{
+//									makeMorse(NULL, FALSE);
+									keyTransmitter(OFF);
+								}
+							}
+							else // start time is in the future
+							{
+								g_on_the_air = 0;
+//								makeMorse(NULL, FALSE);
+								keyTransmitter(OFF);
+							}
+						}
 					}
 					else if(lb_buff->fields[FIELD1][0] == 'F')
 					{
 						if(lb_buff->fields[FIELD2][0])
 						{
-							error = stringToSecondsSinceMidnight(lb_buff->fields[FIELD2], &time);
+							mtime = atol(lb_buff->fields[FIELD2]);
 						}
 						
-						if(!error) g_event_finish_time = time;
+						if(mtime) g_event_finish_time = mtime;
+						
+						cli();
+//						makeMorse(NULL, FALSE);
+						g_on_the_air = 0; // turn off all transmissions
+						g_event_start_time = 0;
+						keyTransmitter(OFF);
+						sei();
 					}
 						
-					if(!error)
+					if(mtime)
 					{
 						saveAllEEPROM(); 
-						if(g_terminal_mode) lb_send_value((int16_t)time, "sec=");
+//						if(g_terminal_mode)  {
+						  lb_send_value((int16_t)g_on_the_air, "sec=>");
+						  // }
 					}
 					else if(g_terminal_mode)
 					{
@@ -1273,7 +1358,7 @@ int main( void )
 							}
 						}
 						
-						ds3231_read_date_time(NULL, g_tempStr, Time_Format_Not_Specified);
+						sprintf(g_tempStr, "%lu", time(NULL));
 						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
 					}
 					else if(lb_buff->type == LINKBUS_MSG_COMMAND) // ignore replies since, as the time source, we should never be sending queries anyway
@@ -1283,12 +1368,13 @@ int main( void )
 							strncpy(g_tempStr, lb_buff->fields[FIELD1], 20);
 							#ifdef INCLUDE_DS3231_SUPPORT
 								ds3231_set_date_time(g_tempStr, RTC_CLOCK);
+								set_system_time(ds3231_get_epoch()); // update system clock
 							#endif
 						}
 						else
 						{
 							#ifdef INCLUDE_DS3231_SUPPORT
-							ds3231_read_date_time(NULL, g_tempStr, Time_Format_Not_Specified);
+							sprintf(g_tempStr, "%lu", time(NULL));
 							lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
 							#endif
 						}
@@ -1298,11 +1384,11 @@ int main( void )
 						static int32_t lastTime = 0;
 						
 						#ifdef INCLUDE_DS3231_SUPPORT							
-						if(g_seconds_count != lastTime)
+						if(time(NULL) != lastTime)
 						{
-							ds3231_read_date_time(NULL, g_tempStr, Time_Format_Not_Specified);
+							sprintf(g_tempStr, "%lu", time(NULL));
 							lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
-							lastTime = g_seconds_count;
+							lastTime = time(NULL);
 						}
 						#endif
 					}
@@ -1318,10 +1404,12 @@ int main( void )
 						g_time_to_send_ID = (stringTimeRequiredToSend(g_station_ID, g_id_codespeed) + 999) / 1000;
 					}
 					
+//						if(g_terminal_mode)  {
 					lb_send_string(g_station_ID);
 					lb_send_value(stringTimeRequiredToSend(g_station_ID, g_id_codespeed), "ms");
 					lb_send_value(g_time_to_send_ID, "s");
 					lb_send_NewLine();
+//                                           }
 				}
 				break;
 				
@@ -1333,19 +1421,21 @@ int main( void )
 					{
 						speed = g_id_codespeed;
 						if(lb_buff->fields[FIELD2][0]) speed = atol(lb_buff->fields[FIELD2]);
-						if((speed > 4) && (speed < 21)) g_id_codespeed = speed;
+						g_id_codespeed = CLAMP(5, speed, 20);
 						saveAllEEPROM(); 
 					}
 					else if(lb_buff->fields[FIELD1][0] == 'P')
 					{
 						if(lb_buff->fields[FIELD2][0]) speed = atol(lb_buff->fields[FIELD2]);
-						if((speed > 4) && (speed < 21)) g_pattern_codespeed = speed;
+						g_pattern_codespeed = CLAMP(5, speed, 20);
 						saveAllEEPROM();
 						g_code_throttle = (7042 / g_pattern_codespeed) / 10;
 					}
 					
+//						if(g_terminal_mode)  {
 					lb_send_value(speed, "spd");
 					lb_send_NewLine();
+//                                            }
 				}
 				break;
 				
@@ -1366,6 +1456,15 @@ int main( void )
 						g_on_air_time = time;
 						saveAllEEPROM();
 					}
+					else if(lb_buff->fields[FIELD1][0] == 'I')
+					{
+						if(lb_buff->fields[FIELD2][0]) 
+						{
+							time = atol(lb_buff->fields[FIELD2]);
+							g_ID_time = time;
+							saveAllEEPROM();
+						}
+					}
 					else if(lb_buff->fields[FIELD1][0] == 'D')
 					{
 						if(lb_buff->fields[FIELD2][0]) time = atol(lb_buff->fields[FIELD2]);
@@ -1373,8 +1472,10 @@ int main( void )
 						saveAllEEPROM();
 					}
 					
+//						if(g_terminal_mode) {
 					lb_send_value(time, "t");
 					lb_send_NewLine();
+					// }
 				}
 				break;
 				
@@ -1384,8 +1485,8 @@ int main( void )
 					{
 						strncpy(g_pattern_text, lb_buff->fields[FIELD1], MAX_PATTERN_TEXT_LENGTH);
 						saveAllEEPROM(); 
-						g_code_throttle = throttleValue(g_pattern_codespeed);
-						makeMorse(g_pattern_text, TRUE);
+//						g_code_throttle = throttleValue(g_pattern_codespeed);
+//						makeMorse(g_pattern_text, TRUE);
 					}
 					
 					lb_send_string(g_pattern_text);
@@ -1490,7 +1591,7 @@ int main( void )
 					linkbus_setLineTerm("\n\n");
 					cli(); wdt_reset(); /* HW watchdog */ sei();
 					#ifdef INCLUDE_DS3231_SUPPORT
-						ds3231_read_date_time(NULL, g_tempStr, Time_Format_Not_Specified);
+						sprintf(g_tempStr, "%lu", time(NULL));
 						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
 						cli(); wdt_reset(); /* HW watchdog */ sei();
 					#endif
@@ -1558,9 +1659,10 @@ void initializeEEPROMVars(void)
 		
 		g_pattern_codespeed = eeprom_read_byte(&ee_pattern_codespeed);
 		g_id_codespeed = eeprom_read_byte(&ee_id_codespeed);
-		g_on_air_time = eeprom_read_byte(&ee_on_air_time);
-		g_off_air_time = eeprom_read_byte(&ee_off_air_time);
-		g_intra_cycle_delay_time = eeprom_read_byte(&ee_intra_cycle_delay_time);
+		g_on_air_time = eeprom_read_word(&ee_on_air_time);
+		g_off_air_time = eeprom_read_word(&ee_off_air_time);
+		g_intra_cycle_delay_time = eeprom_read_word(&ee_intra_cycle_delay_time);
+		g_ID_time = eeprom_read_word(&ee_ID_time);
 		
 		for(i=0; i<20; i++)
 		{
@@ -1584,6 +1686,7 @@ void initializeEEPROMVars(void)
 		g_on_air_time = EEPROM_ON_AIR_TIME_DEFAULT;
 		g_off_air_time = EEPROM_OFF_AIR_TIME_DEFAULT;
 		g_intra_cycle_delay_time = EEPROM_INTRA_CYCLE_DELAY_TIME_DEFAULT;
+		g_ID_time = EEPROM_ID_TIME_INTERVAL_DEFAULT;
 		
 		strncpy(g_station_ID, EEPROM_STATION_ID_DEFAULT, MAX_STATION_ID_LENGTH);
 		strncpy(g_pattern_text, EEPROM_PATTERN_TEXT_DEFAULT, MAX_PATTERN_TEXT_LENGTH);
@@ -1604,9 +1707,10 @@ void saveAllEEPROM()
 	
 	storeEEbyteIfChanged(&ee_id_codespeed, g_id_codespeed);
 	storeEEbyteIfChanged(&ee_pattern_codespeed, g_pattern_codespeed);
-	storeEEbyteIfChanged(&ee_on_air_time, g_on_air_time);
-	storeEEbyteIfChanged(&ee_off_air_time, g_off_air_time);
-	storeEEbyteIfChanged(&ee_intra_cycle_delay_time, g_intra_cycle_delay_time);
+	storeEEwordIfChanged(&ee_on_air_time, g_on_air_time);
+	storeEEwordIfChanged(&ee_off_air_time, g_off_air_time);
+	storeEEwordIfChanged(&ee_intra_cycle_delay_time, g_intra_cycle_delay_time);
+	storeEEwordIfChanged(&ee_ID_time, g_ID_time);
 
 	for(i=0; i<strlen(g_station_ID); i++)
 	{

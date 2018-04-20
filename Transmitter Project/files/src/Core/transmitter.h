@@ -160,6 +160,11 @@ typedef enum {
 /** 
  */
 	void txSetModulation(Modulation mode);
+
+/** 
+ */
+	Modulation txGetModulation(void);
+
 	
 /** 
  */

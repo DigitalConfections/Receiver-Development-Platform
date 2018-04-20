@@ -33,6 +33,7 @@
  */
 
 #include "defs.h"
+#include <time.h>
 
 #ifndef DS3231_H_
 #define DS3231_H_
@@ -54,7 +55,14 @@ typedef enum {
  *  format - specifies the string format to be used for the string time representation
  */
 //	void ds3231_read_time(int32_t* val, char* buffer, TimeFormat format);
+#ifdef DATE_STRING_SUPPORT_ENABLED
 void ds3231_read_date_time(int32_t* val, char* buffer, TimeFormat format);
+#endif // DATE_STRING_SUPPORT_ENABLED
+
+/**
+ *  Reads time from the DS3231 and returns the epoch
+ */
+time_t ds3231_get_epoch(void);
 	
 
 /**

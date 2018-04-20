@@ -31,6 +31,7 @@
    #include <util/twi.h>
    #include <stdio.h>
    #include "i2c.h"
+   #include "util.h"
 
    #define DS3231_I2C_SLAVE_ADDR 0xD0   /* corresponds to slave address = 0b1101000x */
 
@@ -70,6 +71,92 @@ const uint8_t wd(int year, int month, int day)
 }
 #endif
 
+time_t ds3231_get_epoch(void)
+{
+	time_t epoch = 0;
+	uint8_t data[7] = { 0, 0, 0, 0, 0, 0, 0 };
+	
+	if(!i2c_device_read(DS3231_I2C_SLAVE_ADDR, RTC_SECONDS, data, 7))
+	{
+		struct tm ltm = {0};
+		int16_t year = 100; // start at 100 years past 1900
+		uint8_t month;
+		uint8_t date;
+		uint8_t hours;
+		uint8_t minutes;
+		uint8_t seconds;
+		BOOL am_pm;
+		BOOL twelvehour;
+		
+		year += data[6] & 0x0f;
+		year += 10*((data[6] & 0xf0) >> 4);
+		ltm.tm_year = year; // year since 1900
+		
+		year += 1900; // adjust year to calendar year
+						
+		month = data[5] & 0x0f;
+		month += 10*((data[5] & 0xf0) >> 4);
+		ltm.tm_mon = month - 1; // mon 0 to 11
+
+		date = data[4] & 0x0f;
+		date += 10*((data[4] & 0xf0) >> 4);
+
+		ltm.tm_mday = date; // month day 1 to 31
+
+		ltm.tm_yday = 0;
+		for(uint8_t mon=1; mon<month; mon++) // months from 1 to 11 (excludes partial month)
+		{
+		  ltm.tm_yday += month_length(year, mon);;
+		}
+
+		ltm.tm_yday += (ltm.tm_mday - 1);
+
+		seconds = 10 * ((data[0] & 0xf0) >> 4);
+		seconds += (data[0] & 0x0f);
+
+		minutes = 10 * ((data[1] & 0xf0) >> 4);
+		minutes += (data[1] & 0x0f);
+
+		am_pm = ((data[2] >> 5) & 0x01);
+		
+		hours = 10 * ((data[2] >> 4) & 0x01);
+		hours += (data[2] & 0x0f);
+
+		twelvehour = ((data[2] >> 6) & 0x01);
+
+		if(!twelvehour && am_pm)
+		{
+			hours += 10;
+		}
+
+		ltm.tm_hour = hours;
+		ltm.tm_min = minutes;
+		ltm.tm_sec = seconds;
+	  
+		epoch = ltm.tm_sec + ltm.tm_min*60 + ltm.tm_hour*3600L + ltm.tm_yday*86400L +
+		(ltm.tm_year-70)*31536000L + ((ltm.tm_year-69)/4)*86400L -
+		((ltm.tm_year-1)/100)*86400L + ((ltm.tm_year+299)/400)*86400L;
+	}
+	  
+	return epoch;
+}
+	
+	BOOL ds3231_get_temp(int16_t * val)
+	{
+		uint8_t data[2] = { 0, 0 };
+		BOOL result = i2c_device_read(DS3231_I2C_SLAVE_ADDR, RTC_TEMP_MSB, data, 2);
+		
+		if(!result)
+		{
+			*val = data[0];
+			*val = *val << 8;
+			*val |= data[1];
+		}
+		
+		return result;
+	}
+
+#ifdef DATE_STRING_SUPPORT_ENABLED
 	void ds3231_read_date_time(int32_t* val, char* buffer, TimeFormat format)
 	{
 		uint8_t data[7] = { 0, 0, 0, 0, 0, 0, 0 };
@@ -137,6 +224,11 @@ const uint8_t wd(int year, int month, int day)
 						year += 10*((data[6] & 0xf0) >> 4);
 				
 						sprintf(buffer, "%4d-%02d-%02dT%1d%1d:%1d%1d:%1d%1d", year, month, date, hour10, hour, minute10, minute, second10, second);
+						
+						if(val)
+						{
+							*val = convertTimeStringToEpoch(buffer);
+						}
 					}
 					break;
 				}
@@ -148,23 +240,7 @@ const uint8_t wd(int year, int month, int day)
 			}
 		}
 	}
-	
-	
-	BOOL ds3231_get_temp(int16_t * val)
-	{
-		uint8_t data[2] = { 0, 0 };
-		BOOL result = i2c_device_read(DS3231_I2C_SLAVE_ADDR, RTC_TEMP_MSB, data, 2);
-		
-		if(!result)
-		{
-			*val = data[0];
-			*val = *val << 8;
-			*val |= data[1];
-		}
-		
-		return result;
-	}
-
+#endif // DATE_STRING_SUPPORT_ENABLED
 
 void ds3231_set_date_time(char * dateString, ClockSetting setting) /* "2018-03-23T18:00:00Z" */
 {

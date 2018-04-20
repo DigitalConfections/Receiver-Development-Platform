@@ -81,14 +81,43 @@
 #define SOCK_COMMAND_TYPE_FREQ "FREQ"
 #define SOCK_COMMAND_TYPE_WPM "CODE_SPEED" /* read only */
 #define SOCK_COMMAND_TYPE_ID_INTERVAL "ID_INT" /* read only */
-#define SOCK_COMMAND_FOX_ID "TX_ROLE"
+#define SOCK_COMMAND_TX_ROLE "TX_ROLE"
+#define SOCK_COMMAND_TEST "TEST"
 
 // LinkBus Messages
-#define MESSAGE_ESP "ESP"
-#define MESSAGE_TIME "TIM"
-#define MESSAGE_TEMP "TEM"
-#define MESSAGE_BATTERY "BAT"
-#define MESSAGE_CALLSIGN "ID"
+#define LB_MESSAGE_ESP "ESP"
+#define LB_MESSAGE_ESP_WAKEUP "$ESP,0;" /* Wake up from reset */
+#define LB_MESSAGE_ESP_ACTIVE "$ESP,1;" /* Ready with active event data */
+#define LB_MESSAGE_ESP_SAVE "$ESP,2;" /* Save settings changes to file (keeps power up) */
+#define LB_MESSAGE_ESP_SHUTDOWN "$ESP,3;" /* Shut down in 3 seconds */
+#define LB_MESSAGE_ESP_KEEPALIVE "$ESP,Z;" /* Keep alive for 2 minutes */
+#define LB_MESSAGE_TIME "TIM"
+#define LB_MESSAGE_TIME_SET "$TIM," /* Prefix for sending RTC time setting to ATMEGA */
+#define LB_MESSAGE_TIME_REQUEST "$TIM?" /* Request the current time */
+#define LB_MESSAGE_TEMP "TEM"
+#define LB_MESSAGE_TEMP_REQUEST "$TEM?" /* Request the current temperature */
+#define LB_MESSAGE_BATTERY "BAT"
+#define LB_MESSAGE_BATTERY_REQUEST "$BAT?" /* Request the current battery level */
+#define LB_MESSAGE_CALLSIGN "ID"
+#define LB_MESSAGE_CALLSIGN_SET "$ID," /* Prefix for sending the callsign/ID to ATMEGA */
+#define LB_MESSAGE_STARTFINISH_TIME "SF"
+#define LB_MESSAGE_STARTFINISH_SET_START "$SF,S," /* Prefix for sending start time to ATMEGA */
+#define LB_MESSAGE_STARTFINISH_SET_FINISH "$SF,F," /* Prefix for sending finish time to ATMEGA */
+#define LB_MESSAGE_TX_POWER "POW"
+#define LB_MESSAGE_TX_POWER_SET "$POW,M," /* Prefix for sending tx power level (mW) to ATMEGA */
+#define LB_MESSAGE_TX_MOD "MOD"
+#define LB_MESSAGE_TX_MOD_SET "$MOD," /* Prefix for sending 2m tx modulation format (AM or CW) to ATMEGA */
+#define LB_MESSAGE_TX_FREQ "FRE"
+#define LB_MESSAGE_TX_FREQ_SET "$FRE," /* Prefix for sending frequency setting (Hz) to ATMEGA */
+#define LB_MESSAGE_PATTERN "PA"
+#define LB_MESSAGE_PATTERN_SET "$PA," /* Prefix for sending Morse code pattern (text) to ATMEGA */
+#define LB_MESSAGE_CODE_SPEED "SPD"
+#define LB_MESSAGE_CODE_SPEED_SETID "$SPD,I," /* Prefix for sending callsign/ID code speed (WPM) to ATMEGA */
+#define LB_MESSAGE_CODE_SPEED_SETPAT "$SPD,P," /* Prefix for sending pattern code speed (WPM) to ATMEGA */
+#define LB_MESSAGE_TIME_INTERVAL "T"
+#define LB_MESSAGE_TIME_INTERVAL_SET0 "$T,0," /* Prefix for sending time interval (sec) for off-air time to ATMEGA */
+#define LB_MESSAGE_TIME_INTERVAL_SET1 "$T,1," /* Prefix for sending time interval (sec) for on-air time to ATMEGA */
+#define LB_MESSAGE_TIME_INTERVAL_SETD "$T,D," /* Prefix for sending time interval (sec) for time-slot delay to ATMEGA */
 
 typedef enum {
   TX_WAKE_UP,
@@ -96,6 +125,7 @@ typedef enum {
   TX_HTML_PAGE_SERVED,
   TX_HTML_NEXT_EVENT,
   TX_RECD_EVENTS_QUERY,
+  TX_READ_ALL_EVENTS_FILES,
   TX_RECD_START_EVENT_REQUEST,
   TX_WAITING_FOR_INSTRUCTIONS
 } TxCommState;

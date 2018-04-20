@@ -425,6 +425,30 @@ String Event::getTxAssignment(void)
   return this->eventData->tx_assignment;
 }
 
+int Event::getTxRoleIndex(void)
+{
+  int result = -1;
+  String assign = this->getTxAssignment();
+  int colon = assign.indexOf(":");
+  if (colon < 1) return result;
+  result = (assign.substring(0, colon)).toInt(); // r
+  return result;
+}
+
+int Event::getTxSlotIndex(void)
+{
+  int result = -1;
+  String assign = this->getTxAssignment();
+  int colon = assign.indexOf(":");
+  if (colon < 1) return result;
+  result = (assign.substring(colon + 1)).toInt(); // t
+  return result;
+}
+
+TxDataType* Event::getTxData(int roleIndex, int txIndex)
+{
+  return eventData->role[roleIndex]->tx[txIndex];
+}
 
 void Event::setEventName(String str)
 {
@@ -541,10 +565,27 @@ void Event::setEventStartDateTime(String str)
   if (this->eventData == NULL) return;
   str.trim();
 
-  if (this->eventData->event_start_date_time != str)
+  // Lop off milliseconds if they exist
+  if ((str.length() > 20) && (str.lastIndexOf('.') > 0))
+  {
+    int index = str.lastIndexOf('.');
+    str = str.substring(0, index);
+    str = str + "Z";
+  }
+
+  // Add seconds if they are missing
+  if (str.lastIndexOf(':') == str.indexOf(':')) // if time contains only one ':'
+  {
+    int index = str.lastIndexOf(':') + 2;
+    str = str.substring(0, index);
+    str = str + ":00Z";
+  }
+
+  if(!(this->eventData->event_start_date_time.equals(str)))
   {
     this->setEventData(EVENT_START_DATE_TIME, str);
     this->values_did_change = true;
+    Serial.println("setEventStartDateTime: str = " + str);
   }
 }
 
@@ -560,7 +601,23 @@ void Event::setEventFinishDateTime(String str)
   if (this->eventData == NULL) return;
   str.trim();
 
-  if (this->eventData->event_finish_date_time != str)
+  // Lop off milliseconds if they exist
+  if ((str.length() > 20) && (str.lastIndexOf('.') > 0))
+  {
+    int index = str.lastIndexOf('.');
+    str = str.substring(0, index);
+    str = str + "Z";
+  }
+
+  // Add seconds if they are missing
+  if (str.lastIndexOf(':') == str.indexOf(':')) // if time contains only one ':'
+  {
+    int index = str.lastIndexOf(':') + 2;
+    str = str.substring(0, index);
+    str = str + ":00Z";
+  }
+
+  if (!(this->eventData->event_finish_date_time.equals(str)))
   {
     this->setEventData(EVENT_FINISH_DATE_TIME, str);
     this->values_did_change = true;
@@ -800,12 +857,12 @@ bool Event::setEventData(String id, String value) {
   }
   else if (id.equalsIgnoreCase(EVENT_START_DATE_TIME))
   {
-    if (debug_prints_enabled) Serial.println("Event date/time: " + value);
+    if (debug_prints_enabled) Serial.println("Event start: " + value);
     this->eventData->event_start_date_time = value;
   }
   else if (id.equalsIgnoreCase(EVENT_FINISH_DATE_TIME))
   {
-    if (debug_prints_enabled) Serial.println("Event name: " + value);
+    if (debug_prints_enabled) Serial.println("Event finish: " + value);
     this->eventData->event_finish_date_time = value;
   }
   else if (id.equalsIgnoreCase(EVENT_MODULATION))

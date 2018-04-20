@@ -135,6 +135,9 @@ class Event {
     bool writeEventFile(void);
 
     String getTxDescriptiveName(String role_tx);
+    int getTxRoleIndex(void);
+    int getTxSlotIndex(void);
+    TxDataType* getTxData(int roleIndex, int txIndex);
 
     static bool extractLineData(String s, EventLineData* result);
     static bool isSoonerEvent(EventFileRef a, EventFileRef b, unsigned long currentEpoch);
