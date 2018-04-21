@@ -19,7 +19,7 @@ Load a string to send by passing in a pointer via the argument.
 Call this function with a NULL argument at intervals of 1 element of time to generate Morse code. 
 Once loaded with a string each call to this function returns a BOOL indicating whether a CW carrier should be sent
 */
-BOOL makeMorse(char* s, BOOL repeating)
+BOOL makeMorse(char* s, BOOL repeating, BOOL* finished)
 {
 	static char* str = NULL;
 	static BOOL repeat = TRUE;
@@ -28,6 +28,7 @@ BOOL makeMorse(char* s, BOOL repeating)
 	static uint8_t symbolIndex; /* dits and dahs */
 	static uint8_t elementIndex; /* units of time: dit = 1, dah = 3, intersymbol = 1, intercharacter = 3, etc. */
 	static uint8_t addedSpace; /* adds additional time to make an inter-character space */
+	static BOOL completedString = FALSE;
 	static BOOL carrierOn = FALSE;
 	
 	if(s) /* load a new NULL-terminated string to send */
@@ -39,6 +40,7 @@ BOOL makeMorse(char* s, BOOL repeating)
 			charIndex = 0;
 			symbolIndex = 0;
 			repeat = repeating;
+			completedString = FALSE;
 		}
 		else /* a zero-length string shuts down makeMorse */
 		{
@@ -81,6 +83,8 @@ BOOL makeMorse(char* s, BOOL repeating)
 						carrierOn = FALSE;
 						return carrierOn;
 					}
+					
+					completedString = TRUE;
 				}
 			
 				morseInProgress = getMorseChar(c);
@@ -112,6 +116,8 @@ BOOL makeMorse(char* s, BOOL repeating)
 			}
 		}
 	}
+	
+	if(finished) *finished = completedString;
 	
 	return carrierOn;
 }

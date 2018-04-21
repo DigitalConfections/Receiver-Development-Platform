@@ -576,7 +576,7 @@ void Event::setEventStartDateTime(String str)
   // Add seconds if they are missing
   if (str.lastIndexOf(':') == str.indexOf(':')) // if time contains only one ':'
   {
-    int index = str.lastIndexOf(':') + 2;
+    int index = str.lastIndexOf(':') + 3;
     str = str.substring(0, index);
     str = str + ":00Z";
   }
@@ -612,7 +612,7 @@ void Event::setEventFinishDateTime(String str)
   // Add seconds if they are missing
   if (str.lastIndexOf(':') == str.indexOf(':')) // if time contains only one ':'
   {
-    int index = str.lastIndexOf(':') + 2;
+    int index = str.lastIndexOf(':') + 3;
     str = str.substring(0, index);
     str = str + ":00Z";
   }

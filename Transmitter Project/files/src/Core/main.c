@@ -118,7 +118,8 @@ static time_t g_event_start_time = EEPROM_START_TIME_DEFAULT;
 static time_t g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
 
 static int16_t g_on_the_air = 0;
-static uint16_t g_time_to_send_ID = 0;
+static uint16_t g_time_to_send_ID_countdown = -1;
+static BOOL g_finished_sending_first_string = FALSE;
 static uint16_t g_code_throttle = 50;
 static uint8_t g_WiFi_shutdown_seconds = 120;
 
@@ -199,6 +200,8 @@ ISR( INT0_vect )
 {
 #ifdef ENABLE_1_SEC_INTERRUPTS
 	system_tick();
+	
+	if(g_time_to_send_ID_countdown) g_time_to_send_ID_countdown--;
 
 	if(g_on_the_air)
 	{
@@ -215,25 +218,35 @@ ISR( INT0_vect )
 		if(g_on_the_air > 0) /* on the air */
 		{
 			g_on_the_air--;
+			
+			if(!g_time_to_send_ID_countdown)
+			{
+				g_time_to_send_ID_countdown = g_ID_time;
+				g_code_throttle = throttleValue(g_id_codespeed);
+				makeMorse(g_station_ID, FALSE, &g_finished_sending_first_string); /* Send only once */
+			}
+
 		
 			if(!g_on_the_air)
 			{
-				if(g_off_air_time)
+				if(!g_finished_sending_first_string) // ensure ID gets fully sent
 				{
-					keyTransmitter(OFF);
-					g_on_the_air -= g_off_air_time;
+					g_on_the_air = 1;
 				}
 				else
 				{
-					g_on_the_air = g_on_air_time;
-					g_code_throttle = throttleValue(g_pattern_codespeed);
-					makeMorse(g_pattern_text, TRUE);
+					if(g_off_air_time)
+					{
+						keyTransmitter(OFF);
+						g_on_the_air -= g_off_air_time;
+					}
+					else
+					{
+						g_on_the_air = g_on_air_time;
+						g_code_throttle = throttleValue(g_pattern_codespeed);
+						makeMorse(g_pattern_text, TRUE, NULL);
+					}
 				}
-			}
-			else if(g_on_the_air == g_time_to_send_ID)
-			{
-				g_code_throttle = throttleValue(g_id_codespeed);
-				makeMorse(g_station_ID, FALSE); /* Send only once */
 			}
 		}
 		else if(g_on_the_air < 0) /* off the air - g_on_the_air = 0 means all transmissions are disabled */
@@ -244,7 +257,7 @@ ISR( INT0_vect )
 			{
 				g_on_the_air = g_on_air_time;
 				g_code_throttle = throttleValue(g_pattern_codespeed);
-				makeMorse(g_pattern_text, TRUE);
+				makeMorse(g_pattern_text, TRUE, NULL);
 			}
 		}
 	}
@@ -260,7 +273,7 @@ ISR( INT0_vect )
 			{
 				g_on_the_air = g_on_air_time;
 				g_code_throttle = throttleValue(g_pattern_codespeed);
-				makeMorse(g_pattern_text, TRUE);
+				makeMorse(g_pattern_text, TRUE, NULL);
 			}
 		}
 	}
@@ -322,12 +335,8 @@ ISR( TIMER2_COMPB_vect )
 		{
 			if(codeInc == 10)
 			{
-				key = makeMorse(NULL, FALSE);
+				key = makeMorse(NULL, FALSE, &g_finished_sending_first_string);
 				if(key) powerToTransmitter(ON);
-			}
-			else if(codeInc == g_code_throttle)
-			{
-//				if(!key) powerToTransmitter(OFF);	
 			}
 			
 			codeInc--;
@@ -337,10 +346,6 @@ ISR( TIMER2_COMPB_vect )
 			keyTransmitter(key);
 			codeInc = g_code_throttle;
 		}
-	}
-	else
-	{
-		
 	}
 
 	/**
@@ -1014,7 +1019,6 @@ int main( void )
 		
 	#ifdef INCLUDE_DS3231_SUPPORT
 		g_startup_time = ds3231_get_epoch();
-//		ds3231_read_date_time(&g_startup_time, g_tempStr, Time_Format_Not_Specified);
 		set_system_time(g_startup_time);
 	   #ifdef ENABLE_1_SEC_INTERRUPTS
 			ds3231_1s_sqw(ON);
@@ -1295,20 +1299,18 @@ int main( void )
 								if(turnOnTransmitter)
 								{
 									g_code_throttle = throttleValue(g_pattern_codespeed);
-//									makeMorse(g_pattern_text, TRUE);
-//									keyTransmitter(ON);
 								}
 								else
 								{
-//									makeMorse(NULL, FALSE);
 									keyTransmitter(OFF);
 								}
 							}
 							else // start time is in the future
 							{
-								g_on_the_air = 0;
-//								makeMorse(NULL, FALSE);
+								cli();
+								g_on_the_air = dif; // dif is negative
 								keyTransmitter(OFF);
+								sei();
 							}
 						}
 					}
@@ -1401,13 +1403,10 @@ int main( void )
 					{
 						strncpy(g_station_ID, lb_buff->fields[FIELD1], MAX_STATION_ID_LENGTH);
 						saveAllEEPROM(); 
-						g_time_to_send_ID = (stringTimeRequiredToSend(g_station_ID, g_id_codespeed) + 999) / 1000;
 					}
 					
 //						if(g_terminal_mode)  {
 					lb_send_string(g_station_ID);
-					lb_send_value(stringTimeRequiredToSend(g_station_ID, g_id_codespeed), "ms");
-					lb_send_value(g_time_to_send_ID, "s");
 					lb_send_NewLine();
 //                                           }
 				}
