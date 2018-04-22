@@ -157,6 +157,8 @@ void initializeEEPROMVars(void);
 void saveAllEEPROM(void);
 void wdt_init(WDReset resetType);
 uint16_t throttleValue(uint8_t speed);
+void initializeTxWithSettings(time_t startTime);
+
 
 /***********************************************************************
  * Watchdog Timer ISR
@@ -329,7 +331,7 @@ ISR( TIMER2_COMPB_vect )
 
 	static BOOL key = FALSE;
 	
-	if(g_on_the_air >= 0)
+	if(g_on_the_air > 0)
 	{
 		if(codeInc)
 		{
@@ -345,6 +347,15 @@ ISR( TIMER2_COMPB_vect )
 		{
 			keyTransmitter(key);
 			codeInc = g_code_throttle;
+		}
+	}
+	else if(!g_on_the_air)
+	{
+		if(key)
+		{
+			key = OFF;
+			keyTransmitter(OFF);
+			powerToTransmitter(OFF);
 		}
 	}
 
@@ -1267,51 +1278,8 @@ int main( void )
 						}
 		
 						if(mtime) 
-						{
-							g_event_start_time = mtime;
-							
-							int32_t dif = difftime(time(NULL), g_event_start_time); // returns arg1 - arg2
-		
-							if(dif >= 0) // start time is in the past
-							{
-								BOOL turnOnTransmitter = FALSE;
-								int cyclePeriod = g_on_air_time + g_off_air_time;
-								int secondsIntoCycle = dif % cyclePeriod;
-								int timeTillTransmit = g_intra_cycle_delay_time - secondsIntoCycle;
-								
-								if(timeTillTransmit <= 0) // we should have started transmitting already
-								{
-									if(g_on_air_time <= -timeTillTransmit) // we should have finished transmitting in this cycle
-									{
-										g_on_the_air = -(cyclePeriod + timeTillTransmit);
-									}
-									else // we should be transmitting right now
-									{
-										g_on_the_air = g_on_air_time + timeTillTransmit;
-										turnOnTransmitter = TRUE;
-									}
-								}
-								else // not yet time time to transmit in this cycle
-								{
-									g_on_the_air = -timeTillTransmit;
-								}
-								
-								if(turnOnTransmitter)
-								{
-									g_code_throttle = throttleValue(g_pattern_codespeed);
-								}
-								else
-								{
-									keyTransmitter(OFF);
-								}
-							}
-							else // start time is in the future
-							{
-								cli();
-								g_on_the_air = dif; // dif is negative
-								keyTransmitter(OFF);
-								sei();
-							}
+						{							
+							initializeTxWithSettings(mtime);
 						}
 					}
 					else if(lb_buff->fields[FIELD1][0] == 'F')
@@ -1357,6 +1325,7 @@ int main( void )
 								#ifdef INCLUDE_DS3231_SUPPORT
 								ds3231_set_date_time(g_tempStr, RTC_CLOCK);
 								#endif
+								initializeTxWithSettings(0);
 							}
 						}
 						
@@ -1372,6 +1341,7 @@ int main( void )
 								ds3231_set_date_time(g_tempStr, RTC_CLOCK);
 								set_system_time(ds3231_get_epoch()); // update system clock
 							#endif
+							initializeTxWithSettings(-1);
 						}
 						else
 						{
@@ -1484,8 +1454,7 @@ int main( void )
 					{
 						strncpy(g_pattern_text, lb_buff->fields[FIELD1], MAX_PATTERN_TEXT_LENGTH);
 						saveAllEEPROM(); 
-//						g_code_throttle = throttleValue(g_pattern_codespeed);
-//						makeMorse(g_pattern_text, TRUE);
+						initializeTxWithSettings(0);
 					}
 					
 					lb_send_string(g_pattern_text);
@@ -1643,6 +1612,59 @@ int main( void )
 //			}
 	}       /* while(1) */
 }/* main */
+
+void initializeTxWithSettings(time_t startTime) 
+{
+	if(startTime > 0)
+	{
+		g_event_start_time = startTime;
+	}
+	
+	if(g_event_start_time <= 0) return;
+	if(startTime > -1) set_system_time(ds3231_get_epoch()); // update system clock
+							
+	int32_t dif = difftime(time(NULL), g_event_start_time); // returns arg1 - arg2
+		
+	if(dif >= 0) // start time is in the past
+	{
+		BOOL turnOnTransmitter = FALSE;
+		int cyclePeriod = g_on_air_time + g_off_air_time;
+		int secondsIntoCycle = dif % cyclePeriod;
+		int timeTillTransmit = g_intra_cycle_delay_time - secondsIntoCycle;
+								
+		if(timeTillTransmit <= 0) // we should have started transmitting already
+		{
+			if(g_on_air_time <= -timeTillTransmit) // we should have finished transmitting in this cycle
+			{
+				g_on_the_air = -(cyclePeriod + timeTillTransmit);
+			}
+			else // we should be transmitting right now
+			{
+				g_on_the_air = g_on_air_time + timeTillTransmit;
+				turnOnTransmitter = TRUE;
+			}
+		}
+		else // not yet time time to transmit in this cycle
+		{
+			g_on_the_air = -timeTillTransmit;
+		}
+								
+		if(!turnOnTransmitter)
+		{
+			keyTransmitter(OFF);
+		}
+	}
+	else // start time is in the future
+	{
+		g_on_the_air = dif; // dif is negative
+		keyTransmitter(OFF);
+	}
+	
+	cli();
+	makeMorse(g_pattern_text, TRUE, &g_finished_sending_first_string);
+	g_code_throttle = throttleValue(g_pattern_codespeed);
+	sei();
+}
 
 /**********************
 **********************/

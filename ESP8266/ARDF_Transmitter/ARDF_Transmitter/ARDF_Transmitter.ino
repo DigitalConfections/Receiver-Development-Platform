@@ -1520,8 +1520,8 @@ void httpWebServerLoop()
               case 0:
                 {
                   tx = g_activeEvent->getTxSlotIndex();
-                  txData = g_activeEvent->getTxData(role, tx);
                   role = g_activeEvent->getTxRoleIndex();
+                  txData = g_activeEvent->getTxData(role, tx);
 
                   /* Note: message order matters! */
                   /* Finish time should be sent first */
