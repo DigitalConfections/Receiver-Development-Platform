@@ -166,11 +166,13 @@
         var freq3HeaderText = "";
         var freq4HeaderText = "";
     
+        var numberOfOpenWebSockets = 0;
         var stillConnected = 0;
+        var stillDisconnected = 60;
         var lastPacketTime = 0;
         var webSocketTxTimer = 0;
         var lastSocketTxMessage;
-        var transmitterTime = "";
+        var transmitterTimeMs = 0;
     
         var g_timesync_sent = 0;
         var g_timesync_rcvd = 0;
@@ -193,7 +195,7 @@
     
         ///////////////////////////////
     
-        var websock;
+        var websock = null;
     
         timeUpdateTimer = setInterval(function() {
           if(stillConnected) 
@@ -203,32 +205,52 @@
               stillConnected--;
               if(stillConnected == 0) {
                 setOverlay("Disconnected");
+                websock = null;
                 timedOut = true;
+                stillDisconnected = 20;
+              }
+            }
+          }
+          else
+          {
+            if(stillDisconnected) {
+              stillDisconnected--;
+              if(stillDisconnected == 0) {
+                stillDisconnected = 20;
+                webSocketStart();
               }
             }
           }
         }, 1000);
-    
-        function start() {
+     
+        function webSocketStart() {
           var websocketcreated = true;
           var host = String(window.location.hostname);
     
           console.log("Host: " + host);
-          setOverlay("Event Loading...");
     
           if(host.length > 0) {
+            if(websock != null) // socket already exists
+            {
+               websock.close();
+               websock = null;
+            }
+    
             try {
+              numberOfOpenWebSockets++;
               websock = new WebSocket("ws://" + window.location.hostname + ":81/");
             } catch(err) {
               document.getElementById("xmtrTime").innerHTML = "Disconnected";
               console.log("Unable to create web socket");
               websocketcreated = false;
               setOverlay("Disconnected");
+              if(numberOfOpenWebSockets) numberOfOpenWebSockets--;
             }
           } else {
             document.getElementById("xmtrTime").innerHTML = "Disconnected";
             console.log("No websocket host available.");
             websocketcreated = false;
+            websock = null;
             setOverlay("Disconnected");
           }
     
@@ -243,12 +265,20 @@
             };
     
             websock.onclose = function(evt) {
-              console.log("websock close");
-              if(websocketcreated == true) { // handle test case where server refuses websocket
-              setOverlay("Disconnected");
+              if(numberOfOpenWebSockets) numberOfOpenWebSockets--;
+    
+              if(numberOfOpenWebSockets == 0)
+              {
+                console.log("all websocks closed");
+                if(websocketcreated == true) { // handle test case where server refuses websocket
+                setOverlay("Disconnected");
+                }
+                websocketcreated = false;
+                websock = null;
+                stillConnected = 0;
+              } else {
+                console.log("old websock closed");
               }
-              websocketcreated = false;
-              stillConnected = 0;
             };
     
             websock.onerror = function(evt) {
@@ -299,13 +329,7 @@
     
                 case "SYNC":
                   {
-                    var milliseconds = 1000 * arr[1];
-                    var now = new Date();
-                    var d = new Date(milliseconds);
-     //               document.getElementById("xmtrTime").innerHTML = "TX: " + d;
-                    transmitterTime = "TX: " + d;
-     //               g_timesync_rcvd = now.getTime()
-     //               console.log("received: ", g_timesync_rcvd, " sent: ", g_timesync_sent);
+                    transmitterTimeMs = 1000 * arr[1] + 500;
                  }
                   break;
     
@@ -374,7 +398,6 @@
                   var typeCount = typeTxCount.length + 1;
                   var numTxs = arr[1];
                   typeTxCount.push(numTxs);
-    //              console.log("TX_COUNT=", arr[1], typeTxCount.length);
                   break;
     
                 case "POWER":
@@ -454,11 +477,13 @@
                       msgText = "TX_ROLE," + newTypeIndex + ":" + newSubIndex;
     
                       sendToSocket(msgText);
+                      console.log("role code: ", arr[1]);
                     }
                     else
                     {
                       var foxtext = document.getElementById("txIDText");
                       foxtext.value = arr[1];
+                      console.log("role name: ", arr[1]);
                     }
                   }
                   break;
@@ -471,8 +496,15 @@
                 default:
                   break;
               }
-            };
-          }
+            }
+          }    
+        }
+    
+        function start() {
+          setOverlay("Event Loading...");
+    
+          webSocketStart();
+    
         }
     
         function clamp(min, num, max) {
@@ -492,17 +524,24 @@
             webSocketTxTimer = 0;
           }
     
-          if(dif > 100) {
-            if(stillConnected) websock.send(msg);
-            lastPacketTime = now;
-            lastSocketTxMessage = msg;
-          } else {
-            webSocketTxTimer = setInterval(function() {
-              sendToSocket(msg);
-            }, 200);
+          if((websock == null) || (websock.readyState != websock.OPEN))
+          {
+              webSocketTxTimer = setInterval(function() {
+                sendToSocket(msg);
+              }, 5000);
           }
-    
-    //      console.log(now, lastPacketTime, dif);
+          else
+          { 
+            if(dif > 100) {
+              websock.send(msg);
+              lastPacketTime = now;
+              lastSocketTxMessage = msg;
+            } else {
+              webSocketTxTimer = setInterval(function() {
+                sendToSocket(msg);
+              }, 200);
+            }
+          }
         }
     
         function syncClock() {
@@ -699,16 +738,24 @@
     
         // Convert the argument to UTC, remove seconds, and then return as a UTC string
         function localTimeToUTC(val) {
-          var d = new Date(val).toISOString();
-          var sub = d.slice(0, 16); // remove seconds
-          sub = sub + "Z"; // for to UTC      
+          try {
+            var d = new Date(val).toISOString();
+            var sub = d.slice(0, 16); // remove seconds
+            sub = sub + "Z"; // for to UTC      
+          } catch(err) {
+            var d = new Date().toISOString();
+            var sub = d.slice(0, 16); // remove seconds
+            sub = sub + "Z"; // for to UTC      
+          }
+    
           return sub;
         }
     
         function updateDisplayedLocalTime() {
           var d = Date();
+          var txd = "TX: " + Date(transmitterTimeMs);
           document.getElementById("currentTime").innerHTML = "OS: " + d;
-          document.getElementById("xmtrTime").innerHTML = transmitterTime;
+          document.getElementById("xmtrTime").innerHTML = txd;
           updateTextFormatting();
         }
     
@@ -716,6 +763,7 @@
           var msgText = "";
           var dtText = document.getElementById("datetimeStart");
           var utc = localTimeToUTC(dtText.value);
+          applyNewStartTime(utc);
           msgText = "START_TIME," + utc;
     
           console.log(msgText);
@@ -738,6 +786,7 @@
           var msgText = "";
           var dtText = document.getElementById("datetimeFinish");
           var utc = localTimeToUTC(dtText.value);
+          applyNewFinishTime(utc);
           msgText = "FINISH_TIME," + utc;
     
           console.log(msgText);
