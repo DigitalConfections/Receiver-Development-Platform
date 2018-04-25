@@ -174,7 +174,6 @@
         var lastSocketTxMessage;
         var transmitterTimeMs = 0;
     
-        var g_timesync_sent = 0;
         var g_timesync_rcvd = 0;
     
         ///////////////////////////////
@@ -218,6 +217,7 @@
               if(stillDisconnected == 0) {
                 stillDisconnected = 20;
                 webSocketStart();
+                console.log("Disconnected! Started new websocket");
               }
             }
           }
@@ -502,9 +502,7 @@
     
         function start() {
           setOverlay("Event Loading...");
-    
           webSocketStart();
-    
         }
     
         function clamp(min, num, max) {
@@ -524,7 +522,7 @@
             webSocketTxTimer = 0;
           }
     
-          if((websock == null) || (websock.readyState != websock.OPEN))
+          if((websock == null) || (websock.readyState != websock.OPEN)) // wait 5 seconds and try again
           {
               webSocketTxTimer = setInterval(function() {
                 sendToSocket(msg);
@@ -546,7 +544,6 @@
     
         function syncClock() {
           var d = Date();
-          var syncDate = d;
     
           if(timeUpdateTimer != 0) {
             clearInterval(timeUpdateTimer);
@@ -559,7 +556,6 @@
           };
     
           d = new Date();
-          g_timesync_sent = d.getTime();
     
           var btext = d.toISOString();
           btext = "SYNC," + btext;
@@ -709,11 +705,13 @@
         }
     
     
+        // Takes the time string argument and forces it to be UTC with seconds removed, 
+        // then applies any local timezone offset to obtain local time. Returns ISO string of converted time.
         function forceValueToLocalTime(val) {
           var sub = val.slice(0, 16); // remove seconds
           sub = sub + "Z"; // for to UTC
-          var tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
           var d = new Date(sub);
+          var tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
           var t = d.getTime() + tzoffset;
           var localISOTime = "";
           if(t > 0) {
@@ -736,19 +734,29 @@
           return d;
         }
     
-        // Convert the argument to UTC, remove seconds, and then return as a UTC string
+        // Converts the date value argument to UTC, removes seconds, and then returns as a UTC string without seconds
+        // An error results in the current time being returned as a UTC string without seconds
         function localTimeToUTC(val) {
           try {
             var d = new Date(val).toISOString();
             var sub = d.slice(0, 16); // remove seconds
-            sub = sub + "Z"; // for to UTC      
+            sub = sub + "Z"; // for UTC      
           } catch(err) {
             var d = new Date().toISOString();
             var sub = d.slice(0, 16); // remove seconds
-            sub = sub + "Z"; // for to UTC      
+            sub = sub + "Z"; // for UTC      
           }
     
           return sub;
+        }
+
+        function validateTimeStructure(str) {
+          try {
+            var d = new Date(str).toISOString();
+            return true;
+          } catch(err) {
+            return false;
+          }
         }
     
         function updateDisplayedLocalTime() {
@@ -762,8 +770,15 @@
         function newStartTime() {
           var msgText = "";
           var dtText = document.getElementById("datetimeStart");
-          var utc = localTimeToUTC(dtText.value);
-          applyNewStartTime(utc);
+          var dt = dtText.value;
+          var local;
+          if(!validateTimeStructure(dt)) {
+            local = Date();
+          } else {
+            local = forceValueToLocalTime(dt);
+          }      
+          applyNewStartTime(local);
+          var utc = localTimeToUTC(local);
           msgText = "START_TIME," + utc;
     
           console.log(msgText);
@@ -772,7 +787,14 @@
     
         function applyNewStartTime(t) {
           var dtText = document.getElementById("datetimeStart");
-          var local = utcTimeToLocalTime(t);
+          var local;
+
+          if(t.indexOf("Z") > 0) {
+             local = utcTimeToLocalTime(t);
+          } else {
+             local = new Date(t);
+          }
+
           var mon = ("0" + (local.getMonth()+1)).slice(-2);
           var day = ("0" + local.getDate()).slice(-2);
           var hour = ("0" + local.getHours()).slice(-2);
@@ -785,8 +807,15 @@
         function newFinishTime() {
           var msgText = "";
           var dtText = document.getElementById("datetimeFinish");
-          var utc = localTimeToUTC(dtText.value);
-          applyNewFinishTime(utc);
+          var dt = dtText.value;
+          var local;
+          if(!validateTimeStructure(dt)) {
+            local = Date();
+          } else {
+            local = forceValueToLocalTime(dt);
+          }      
+          applyNewFinishTime(local);
+          var utc = localTimeToUTC(local);
           msgText = "FINISH_TIME," + utc;
     
           console.log(msgText);
@@ -795,7 +824,14 @@
     
         function applyNewFinishTime(t) {
           var dtText = document.getElementById("datetimeFinish");
-          var local = utcTimeToLocalTime(t);
+          var local;
+
+          if(t.indexOf("Z") > 0) {
+             local = utcTimeToLocalTime(t);
+          } else {
+             local = new Date(t);
+          }
+
           var mon = ("0" + (local.getMonth()+1)).slice(-2);
           var day = ("0" + local.getDate()).slice(-2);
           var hour = ("0" + local.getHours()).slice(-2);
