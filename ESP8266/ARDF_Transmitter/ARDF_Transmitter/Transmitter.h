@@ -118,6 +118,7 @@
 #define LB_MESSAGE_TIME_INTERVAL_SET0 "$T,0," /* Prefix for sending time interval (sec) for off-air time to ATMEGA */
 #define LB_MESSAGE_TIME_INTERVAL_SET1 "$T,1," /* Prefix for sending time interval (sec) for on-air time to ATMEGA */
 #define LB_MESSAGE_TIME_INTERVAL_SETD "$T,D," /* Prefix for sending time interval (sec) for time-slot delay to ATMEGA */
+#define LB_MESSAGE_TIME_INTERVAL_SETID "$T,I," /* Prefix for sending time interval (sec) for station identification to ATMEGA */
 
 typedef enum {
   TX_WAKE_UP,

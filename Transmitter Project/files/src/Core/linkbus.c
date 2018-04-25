@@ -384,12 +384,6 @@ BOOL lb_send_string(char* str)
 	return FALSE;
 }
 
-void lb_poweroff_msg(uint8_t sec)
-{
-	sprintf(g_tempMsgBuff, "Power off in %d sec\n", sec);
-	linkbus_send_text(g_tempMsgBuff);
-}
-
 void lb_send_value(uint16_t value, char* label)
 {
 	sprintf(g_tempMsgBuff, "> %s=%d%s", label, value, lineTerm);
@@ -482,66 +476,6 @@ void lb_send_msg(LBMessageType msgType, char* msgLabel, char* msgStr)
 }
 
 
-void lb_send_VOL(LBMessageType msgType, VolumeType type, VolumeSetting volume)
-{
-	BOOL valid = TRUE;
-	char t[2] = "\0";
-	char v[4] = "\0";
-	char prefix = '$';
-	char terminus = ';';
-
-	if(type == TONE_VOLUME)
-	{
-		t[0] = 'T';
-	}
-	else if(type == MAIN_VOLUME)
-	{
-		t[0] = 'M';
-	}
-	else
-	{
-		valid = FALSE;
-	}
-
-	if(valid)
-	{
-		if(volume < DECREMENT_VOL)
-		{
-			sprintf(v, "%d", volume * 10);
-		}
-		else if(volume < VOL_NOT_SPECIFIED)
-		{
-			if(volume == INCREMENT_VOL)
-			{
-				v[0] = '+';
-			}
-			else
-			{
-				v[0] = '-';
-			}
-		}
-
-		if(msgType == LINKBUS_MSG_REPLY)
-		{
-			prefix = '!';
-		}
-		else if(msgType == LINKBUS_MSG_QUERY)
-		{
-			terminus = '?';
-		}
-		else if(msgType != LINKBUS_MSG_COMMAND)
-		{
-			valid = FALSE;
-		}
-
-		if(valid)
-		{
-			sprintf(g_tempMsgBuff, "%cVOL,%s,%s%c", prefix, t, v, terminus);
-			linkbus_send_text(g_tempMsgBuff);
-		}
-	}
-}
-
 void lb_send_BND(LBMessageType msgType, RadioBand band)
 {
 	char b[4];
@@ -586,63 +520,12 @@ void lb_send_BND(LBMessageType msgType, RadioBand band)
 	}
 }
 
-void lb_send_BCR(LBbroadcastType bcType, BOOL start)
-{
-	char t[4] = "\0";
-	char prefix = '$';
-	char terminus = ';';
-
-	sprintf(t, "%d", bcType);
-
-	if(start)
-	{
-		terminus = '?';
-	}
-
-	sprintf(g_tempMsgBuff, "%cBCR,%s%c", prefix, t, terminus);
-	linkbus_send_text(g_tempMsgBuff);
-}
-
 void lb_send_sync(void)
 {
 	sprintf(g_tempMsgBuff, ".....");
 	linkbus_send_text(g_tempMsgBuff);
 }
 
-void lb_broadcast_rssi(uint16_t data)
-{
-	char t[6] = "\0";
-
-	sprintf(t, "%d", data);
-
-	if(g_lb_terminal_mode)
-	{
-		sprintf(g_tempMsgBuff, "> RSSI=%s%s", t, lineTerm);
-	}
-	else
-	{
-		sprintf(g_tempMsgBuff, "!S,%s;", t);
-	}
-
-	linkbus_send_text(g_tempMsgBuff);
-}
-
-void lb_broadcast_rf(uint16_t data)
-{
-	char t[6] = "\0";
-
-	sprintf(t, "%d", data);
-
-	if(g_lb_terminal_mode)
-	{
-		sprintf(g_tempMsgBuff, "> RF=%s%s", t, lineTerm);
-	}
-	else
-	{
-		sprintf(g_tempMsgBuff, "!R,%s;", t);
-	}
-	linkbus_send_text(g_tempMsgBuff);
-}
 
 void lb_broadcast_num(uint16_t data, char* str)
 {

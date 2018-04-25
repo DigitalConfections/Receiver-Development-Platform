@@ -233,22 +233,6 @@ void lb_send_BND(LBMessageType msgType, RadioBand band);
 
 /**
  */
-void lb_send_VOL(LBMessageType msgType, VolumeType type, VolumeSetting volume);
-
-/**
- */
-void lb_send_BCR(LBbroadcastType bcType, BOOL start);
-
-/**
- */
-void lb_broadcast_rssi(uint16_t data);
-
-/**
- */
-void lb_broadcast_rf(uint16_t data);
-
-/**
- */
 void lb_broadcast_num(uint16_t data, char* str);
 
 /**
@@ -271,10 +255,6 @@ void lb_send_WDTError(void);
 /**
  */
 void linkbus_setLineTerm(char* term);
-
-/**
- */
-void lb_poweroff_msg(uint8_t sec);
 
 /**
  */

@@ -165,6 +165,8 @@ String Event::getTxDescriptiveName(String role_tx) // role_tx = "r:t"
 
 String Event::readMeFile(String path)
 {
+  if(path == NULL) return "";
+  
   if (!path.startsWith("/")) path = "/" + path;
 
   if (path.endsWith(".event"))
@@ -375,19 +377,29 @@ bool Event::writeEventFile(String path)
     return true;
   }
 
-  saveTxAssignment();
+  saveTxAssignment("");
 
   return false;
 }
 
-void Event::saveTxAssignment(void)
+void Event::saveTxAssignment(String newAssignment)
 {
   if (this->eventData == NULL) return;
   if ((this->eventData->tx_assignment.length() < 3) || (this->eventData->tx_assignment.indexOf(":") < 1)) return;
   if (this->myPath.length() < 7) return;
 
-  String hold = this->eventData->tx_assignment;
-  String path = this->readMeFile(this->myPath);
+  String hold;
+  
+  if(newAssignment.indexOf(":") < 1)
+  {
+    hold = this->eventData->tx_assignment;
+  }
+  else
+  {
+    hold = newAssignment;
+  }
+  
+  String path = readMeFile(this->myPath); // assigns file value to this->eventData->tx_assignment
 
   if(!hold.equals(this->eventData->tx_assignment))
   {
@@ -398,27 +410,33 @@ void Event::saveTxAssignment(void)
     file.close(); // Close the file
     if (debug_prints_enabled) Serial.println(String("\tWrote file: ") + path);
   }
+
+  this->eventData->tx_assignment = hold; // set tx_assignment to the latest value
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-void Event::setTxAssignment(String role_slot)
+bool Event::setTxAssignment(String role_slot)
 {
-  if (this->eventData == NULL) return;
+  if (this->eventData == NULL) return true;
   role_slot.trim();
-  if (role_slot.indexOf(":") < 1) return;
+  if (role_slot.indexOf(":") < 1) return true;
 
   if(this->eventData->tx_assignment != role_slot)
   {
     this->eventData->tx_assignment = role_slot;
     this->values_did_change = true;
+    Serial.println("Set role: " + this->eventData->tx_assignment);
   }
+
+  return false;
 }
 
 String Event::getTxAssignment(void)
 {
   if ((this->eventData->tx_assignment.length() < 1) || (this->eventData->tx_assignment.indexOf(":") < 1))
   {
+    Serial.println("Reading ME file...");
     readMeFile(this->myPath);
   }
 
@@ -428,7 +446,8 @@ String Event::getTxAssignment(void)
 int Event::getTxRoleIndex(void)
 {
   int result = -1;
-  String assign = this->getTxAssignment();
+  String assign = this->eventData->tx_assignment;
+  if(assign.indexOf(":") < 1) getTxAssignment();
   int colon = assign.indexOf(":");
   if (colon < 1) return result;
   result = (assign.substring(0, colon)).toInt(); // r
@@ -438,7 +457,8 @@ int Event::getTxRoleIndex(void)
 int Event::getTxSlotIndex(void)
 {
   int result = -1;
-  String assign = this->getTxAssignment();
+  String assign = this->eventData->tx_assignment;
+  if(assign.indexOf(":") < 1) getTxAssignment();
   int colon = assign.indexOf(":");
   if (colon < 1) return result;
   result = (assign.substring(colon + 1)).toInt(); // t
@@ -585,7 +605,7 @@ void Event::setEventStartDateTime(String str)
   {
     this->setEventData(EVENT_START_DATE_TIME, str);
     this->values_did_change = true;
-    Serial.println("setEventStartDateTime: str = " + str);
+//    Serial.println("setEventStartDateTime: str = " + str);
   }
 }
 
@@ -680,7 +700,7 @@ bool Event::setRolename(int roleIndex, String str)
   if (roleIndex < 0) return true;
   if (roleIndex >= this->eventData->event_number_of_tx_types) return true;
   this->eventData->role[roleIndex]->rolename = str;
-  if (debug_prints_enabled) Serial.println("Type" + String(roleIndex) + " role: " + str);
+//  if (debug_prints_enabled) Serial.println("Type" + String(roleIndex) + " role: " + str);
   this->values_did_change = true;
   return false;
 }
@@ -700,7 +720,7 @@ bool Event::setNumberOfTxsForRole(int roleIndex, String str)
   if (roleIndex < 0) return true;
   if (roleIndex >= this->eventData->event_number_of_tx_types) return true;
   this->eventData->role[roleIndex]->numberOfTxs = str.toInt();
-  if (debug_prints_enabled) Serial.println("Type" + String(roleIndex) + " No Txs: " + str);
+//  if (debug_prints_enabled) Serial.println("Type" + String(roleIndex) + " No Txs: " + str);
   this->values_did_change = true;
   return false;
 }
@@ -720,7 +740,7 @@ bool Event::setFrequencyForRole(int roleIndex, long freq)
   if (roleIndex < 0) return true;
   if (roleIndex >= this->eventData->event_number_of_tx_types) return true;
   this->eventData->role[roleIndex]->frequency = freq;
-  if (debug_prints_enabled) Serial.println("Type" + String(roleIndex) + " freq: " + String(freq));
+//  if (debug_prints_enabled) Serial.println("Type" + String(roleIndex) + " freq: " + String(freq));
   this->values_did_change = true;
   return false;
 }
@@ -740,7 +760,7 @@ bool Event::setPowerlevelForRole(int roleIndex, String str)
   if (roleIndex < 0) return true;
   if (roleIndex >= this->eventData->event_number_of_tx_types) return true;
   this->eventData->role[roleIndex]->powerLevel_mW = str.toInt();
-  if (debug_prints_enabled) Serial.println("Type" + String(roleIndex) + " freq: " + str);
+//  if (debug_prints_enabled) Serial.println("Type" + String(roleIndex) + " freq: " + str);
   this->values_did_change = true;
   return false;
 }
@@ -760,7 +780,7 @@ bool Event::setCodeSpeedForRole(int roleIndex, String str)
   if (roleIndex < 0) return true;
   if (roleIndex >= this->eventData->event_number_of_tx_types) return true;
   this->eventData->role[roleIndex]->code_speed = str.toInt();
-  if (debug_prints_enabled) Serial.println("Type" + String(roleIndex) + " freq: " + str);
+//  if (debug_prints_enabled) Serial.println("Type" + String(roleIndex) + " freq: " + str);
   this->values_did_change = true;
   return false;
 }
@@ -780,7 +800,7 @@ bool Event::setIDIntervalForRole(int roleIndex, String str)
   if (roleIndex < 0) return true;
   if (roleIndex >= this->eventData->event_number_of_tx_types) return true;
   this->eventData->role[roleIndex]->id_interval = str.toInt();
-  if (debug_prints_enabled) Serial.println("Type" + String(roleIndex) + " freq: " + str);
+//  if (debug_prints_enabled) Serial.println("Type" + String(roleIndex) + " freq: " + str);
   this->values_did_change = true;
   return false;
 }
@@ -810,12 +830,12 @@ bool Event::setEventData(String id, String value) {
 
   if (id.equalsIgnoreCase(TX_ASSIGNMENT))
   {
-    if (debug_prints_enabled) Serial.println("Tx assignment: " + value);
+//    if (debug_prints_enabled) Serial.println("Tx assignment: " + value);
     this->eventData->tx_assignment = value;
   }
   else if (id.equalsIgnoreCase(TX_ASSIGNMENT_IS_DEFAULT))
   {
-    if (debug_prints_enabled) Serial.println("Tx is default: " + value);
+//    if (debug_prints_enabled) Serial.println("Tx is default: " + value);
     if (value.equalsIgnoreCase("TRUE") || value.equals("1"))
     {
       this->eventData->tx_assignment_is_default = true;
@@ -827,52 +847,52 @@ bool Event::setEventData(String id, String value) {
   }
   else if (id.equalsIgnoreCase(EVENT_NAME))
   {
-    if (debug_prints_enabled) Serial.println("Event name: " + value);
+//    if (debug_prints_enabled) Serial.println("Event name: " + value);
     this->eventData->event_name = value;
   }
   else if (id.equalsIgnoreCase(EVENT_FILE_VERSION))
   {
-    if (debug_prints_enabled) Serial.println("File ver: " + value);
+//    if (debug_prints_enabled) Serial.println("File ver: " + value);
     this->eventData->event_file_version = value;
   }
   else if (id.equalsIgnoreCase(EVENT_BAND))
   {
-    if (debug_prints_enabled) Serial.println("Event band: " + value);
+//    if (debug_prints_enabled) Serial.println("Event band: " + value);
     this->eventData->event_band = value;
   }
   else if (id.equalsIgnoreCase(EVENT_CALLSIGN))
   {
-    if (debug_prints_enabled) Serial.println("Event callsign: " + value);
+//    if (debug_prints_enabled) Serial.println("Event callsign: " + value);
     this->eventData->event_callsign = value;
   }
   else if (id.equalsIgnoreCase(EVENT_ANTENNA_PORT))
   {
-    if (debug_prints_enabled) Serial.println("Event antenna: " + value);
+//    if (debug_prints_enabled) Serial.println("Event antenna: " + value);
     this->eventData->event_antenna_port = value;
   }
   else if (id.equalsIgnoreCase(EVENT_CALLSIGN_SPEED))
   {
-    if (debug_prints_enabled) Serial.println("Event ID speed: " + value);
+//    if (debug_prints_enabled) Serial.println("Event ID speed: " + value);
     this->eventData->event_callsign_speed = value;
   }
   else if (id.equalsIgnoreCase(EVENT_START_DATE_TIME))
   {
-    if (debug_prints_enabled) Serial.println("Event start: " + value);
+//    if (debug_prints_enabled) Serial.println("Event start: " + value);
     this->eventData->event_start_date_time = value;
   }
   else if (id.equalsIgnoreCase(EVENT_FINISH_DATE_TIME))
   {
-    if (debug_prints_enabled) Serial.println("Event finish: " + value);
+//    if (debug_prints_enabled) Serial.println("Event finish: " + value);
     this->eventData->event_finish_date_time = value;
   }
   else if (id.equalsIgnoreCase(EVENT_MODULATION))
   {
-    if (debug_prints_enabled) Serial.println("Event modulation: " + value);
+//    if (debug_prints_enabled) Serial.println("Event modulation: " + value);
     this->eventData->event_modulation = value;
   }
   else if (id.equalsIgnoreCase(EVENT_NUMBER_OF_TX_TYPES))
   {
-    if (debug_prints_enabled) Serial.println("Event tx types: " + value);
+//    if (debug_prints_enabled) Serial.println("Event tx types: " + value);
     this->eventData->event_number_of_tx_types = value.toInt();
   }
   else if (id.endsWith(TYPE_TX_COUNT))
@@ -882,7 +902,7 @@ bool Event::setEventData(String id, String value) {
     if ((typeIndex >= 0) && (typeIndex < MAXIMUM_NUMBER_OF_EVENT_TX_TYPES))
     {
       this->eventData->role[typeIndex]->numberOfTxs = value.toInt();
-      if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + " count: " + value);
+//      if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + " count: " + value);
     }
   }
   else if (id.endsWith(TYPE_NAME))
@@ -892,7 +912,7 @@ bool Event::setEventData(String id, String value) {
     if ((typeIndex >= 0) && (typeIndex < MAXIMUM_NUMBER_OF_EVENT_TX_TYPES))
     {
       this->eventData->role[typeIndex]->rolename = value;
-      if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + " role: " + value);
+//      if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + " role: " + value);
     }
   }
   else if (id.endsWith(TYPE_FREQ))
@@ -902,7 +922,7 @@ bool Event::setEventData(String id, String value) {
     if ((typeIndex >= 0) && (typeIndex < MAXIMUM_NUMBER_OF_EVENT_TX_TYPES))
     {
       this->eventData->role[typeIndex]->frequency = value.toInt();
-      if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + " freq: " + value);
+//      if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + " freq: " + value);
     }
   }
   else if (id.endsWith(TYPE_POWER_LEVEL))
@@ -912,7 +932,7 @@ bool Event::setEventData(String id, String value) {
     if ((typeIndex >= 0) && (typeIndex < MAXIMUM_NUMBER_OF_EVENT_TX_TYPES))
     {
       this->eventData->role[typeIndex]->powerLevel_mW = value.toInt();
-      if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + " power: " + value + " mW");
+//      if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + " power: " + value + " mW");
     }
   }
   else if (id.endsWith(TYPE_ID_INTERVAL))
@@ -922,7 +942,7 @@ bool Event::setEventData(String id, String value) {
     if ((typeIndex >= 0) && (typeIndex < MAXIMUM_NUMBER_OF_EVENT_TX_TYPES))
     {
       this->eventData->role[typeIndex]->id_interval = value.toInt();
-      if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + " ID interval: " + value + " sec");
+//      if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + " ID interval: " + value + " sec");
     }
   }
   else if (id.endsWith(TYPE_CODE_SPEED))
@@ -932,7 +952,7 @@ bool Event::setEventData(String id, String value) {
     if ((typeIndex >= 0) && (typeIndex < MAXIMUM_NUMBER_OF_EVENT_TX_TYPES))
     {
       this->eventData->role[typeIndex]->code_speed = value.toInt();
-      if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + " code speed: " + value + " WPM");
+//      if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + " code speed: " + value + " WPM");
     }
   }
   else if (id.endsWith(TYPE_TX_PATTERN))
@@ -946,7 +966,7 @@ bool Event::setEventData(String id, String value) {
       if ((txIndex >= 0) && (txIndex < MAXIMUM_NUMBER_OF_TXs_OF_A_TYPE))
       {
         this->eventData->role[typeIndex]->tx[txIndex]->pattern = value;
-        if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + "Tx" + txIndexStr + " pattern: " + value);
+//        if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + "Tx" + txIndexStr + " pattern: " + value);
       }
     }
   }
@@ -961,7 +981,7 @@ bool Event::setEventData(String id, String value) {
       if ((txIndex >= 0) && (txIndex < MAXIMUM_NUMBER_OF_TXs_OF_A_TYPE))
       {
         this->eventData->role[typeIndex]->tx[txIndex]->onTime = value.toInt();
-        if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + "Tx" + txIndexStr + " on time: " + value + "sec");
+//        if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + "Tx" + txIndexStr + " on time: " + value + "sec");
       }
     }
   }
@@ -976,7 +996,7 @@ bool Event::setEventData(String id, String value) {
       if ((txIndex >= 0) && (txIndex < MAXIMUM_NUMBER_OF_TXs_OF_A_TYPE))
       {
         this->eventData->role[typeIndex]->tx[txIndex]->offTime = value.toInt();
-        if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + "Tx" + txIndexStr + " off time: " + value + "sec");
+//        if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + "Tx" + txIndexStr + " off time: " + value + "sec");
       }
     }
   }
@@ -991,7 +1011,7 @@ bool Event::setEventData(String id, String value) {
       if ((txIndex >= 0) && (txIndex < MAXIMUM_NUMBER_OF_TXs_OF_A_TYPE))
       {
         this->eventData->role[typeIndex]->tx[txIndex]->delayTime = value.toInt();
-        if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + "Tx" + txIndexStr + " delay time: " + value + "sec");
+//        if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + "Tx" + txIndexStr + " delay time: " + value + "sec");
       }
     }
   }

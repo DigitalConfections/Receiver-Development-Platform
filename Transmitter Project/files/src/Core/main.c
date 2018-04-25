@@ -90,12 +90,11 @@ static BOOL g_terminal_mode = LINKBUS_TERMINAL_MODE_DEFAULT;
 static volatile uint16_t g_debug_atten_step = 0;
 #endif
 
-#define MAX_STATION_ID_LENGTH 20
 #define MAX_PATTERN_TEXT_LENGTH 20
 
 static BOOL EEMEM ee_interface_eeprom_initialization_flag = EEPROM_UNINITIALIZED;
 
-static char EEMEM ee_stationID_text[MAX_STATION_ID_LENGTH];
+static char EEMEM ee_stationID_text[MAX_PATTERN_TEXT_LENGTH];
 static char EEMEM ee_pattern_text[MAX_PATTERN_TEXT_LENGTH];
 static uint8_t EEMEM ee_pattern_codespeed;
 static uint8_t EEMEM ee_id_codespeed;
@@ -106,20 +105,21 @@ static uint16_t EEMEM ee_ID_time;
 static time_t EEMEM ee_start_time;
 static time_t EEMEM ee_finish_time;
 
-static char g_station_ID[MAX_STATION_ID_LENGTH] = "Foxcall";
-static char g_pattern_text[MAX_PATTERN_TEXT_LENGTH] = "\0";
+static char g_messages_text[2][MAX_PATTERN_TEXT_LENGTH] = {"\0", "\0"};
 static uint8_t g_id_codespeed = EEPROM_ID_CODE_SPEED_DEFAULT;
 static uint8_t g_pattern_codespeed = EEPROM_PATTERN_CODE_SPEED_DEFAULT;
-static uint16_t g_on_air_time = EEPROM_ON_AIR_TIME_DEFAULT; /* amount of time to spend on the air */
-static uint16_t g_off_air_time = EEPROM_OFF_AIR_TIME_DEFAULT; /* amount of time to wait before returning to the air */
-static uint16_t g_intra_cycle_delay_time = EEPROM_INTRA_CYCLE_DELAY_TIME_DEFAULT; /* offset time into a repeating transmit cycle */
-static uint16_t g_ID_time = EEPROM_ID_TIME_INTERVAL_DEFAULT; /* amount of time between ID/callsign transmissions */
+static uint16_t g_time_needed_for_ID = 0;
+static int16_t g_on_air_time = EEPROM_ON_AIR_TIME_DEFAULT; /* amount of time to spend on the air */
+static int16_t g_off_air_time = EEPROM_OFF_AIR_TIME_DEFAULT; /* amount of time to wait before returning to the air */
+static int16_t g_intra_cycle_delay_time = EEPROM_INTRA_CYCLE_DELAY_TIME_DEFAULT; /* offset time into a repeating transmit cycle */
+static int16_t g_ID_time = EEPROM_ID_TIME_INTERVAL_DEFAULT; /* amount of time between ID/callsign transmissions */
 static time_t g_event_start_time = EEPROM_START_TIME_DEFAULT;
 static time_t g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
+static BOOL g_event_enabled = FALSE;
+static BOOL g_event_commenced = FALSE;
 
-static int16_t g_on_the_air = 0;
-static uint16_t g_time_to_send_ID_countdown = -1;
-static BOOL g_finished_sending_first_string = FALSE;
+static int32_t g_on_the_air = 0;
+static uint16_t g_time_to_send_ID_countdown = 0;
 static uint16_t g_code_throttle = 50;
 static uint8_t g_WiFi_shutdown_seconds = 120;
 
@@ -203,79 +203,94 @@ ISR( INT0_vect )
 #ifdef ENABLE_1_SEC_INTERRUPTS
 	system_tick();
 	
-	if(g_time_to_send_ID_countdown) g_time_to_send_ID_countdown--;
-
-	if(g_on_the_air)
+	if(g_event_enabled)
 	{
-		if(g_event_finish_time > 0)
+		if(g_event_commenced)
 		{
-			if(time(NULL) >= g_event_finish_time)
-			{
-				g_on_the_air = 0;
-				g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
-				keyTransmitter(OFF);
-			}
-		}
-
-		if(g_on_the_air > 0) /* on the air */
-		{
-			g_on_the_air--;
+			BOOL repeat;
 			
-			if(!g_time_to_send_ID_countdown)
+			if(g_time_to_send_ID_countdown) g_time_to_send_ID_countdown--;
+
+			if(g_on_the_air)
 			{
-				g_time_to_send_ID_countdown = g_ID_time;
-				g_code_throttle = throttleValue(g_id_codespeed);
-				makeMorse(g_station_ID, FALSE, &g_finished_sending_first_string); /* Send only once */
-			}
+				if(g_event_finish_time > 0)
+				{
+					if(time(NULL) >= g_event_finish_time)
+					{
+						g_on_the_air = 0;
+						g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
+						keyTransmitter(OFF);
+						g_event_enabled = FALSE;
+						g_event_commenced = FALSE;
+					}
+				}
+
+				if(g_on_the_air > 0) /* on the air */
+				{
+					g_on_the_air--;
+			
+					if(!g_time_to_send_ID_countdown)
+					{
+						if(g_on_the_air == g_time_needed_for_ID) // wait until the end of a transmission
+						{
+							g_time_to_send_ID_countdown = g_ID_time;
+							g_code_throttle = throttleValue(g_id_codespeed);
+							repeat = FALSE;
+							makeMorse(g_messages_text[STATION_ID], &repeat, NULL); /* Send only once */
+						}
+					}
 
 		
-			if(!g_on_the_air)
-			{
-				if(!g_finished_sending_first_string) // ensure ID gets fully sent
-				{
-					g_on_the_air = 1;
-				}
-				else
-				{
-					if(g_off_air_time)
+					if(!g_on_the_air)
 					{
-						keyTransmitter(OFF);
-						g_on_the_air -= g_off_air_time;
+						if(g_off_air_time)
+						{
+							keyTransmitter(OFF);
+							g_on_the_air -= g_off_air_time;
+							repeat = TRUE;
+							makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL); /* Reset pattern to start */
+						}
+						else
+						{
+							g_on_the_air = g_on_air_time;
+							g_code_throttle = throttleValue(g_pattern_codespeed);
+						}
 					}
-					else
+				}
+				else if(g_on_the_air < 0) /* off the air - g_on_the_air = 0 means all transmissions are disabled */
+				{
+					g_on_the_air++;
+		
+					if(!g_on_the_air) // off-the-air time has expired
 					{
 						g_on_the_air = g_on_air_time;
 						g_code_throttle = throttleValue(g_pattern_codespeed);
-						makeMorse(g_pattern_text, TRUE, NULL);
+						BOOL repeat = TRUE;
+						makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
 					}
 				}
 			}
 		}
-		else if(g_on_the_air < 0) /* off the air - g_on_the_air = 0 means all transmissions are disabled */
+		else if(g_event_start_time > 0) /* off the air - waiting for the start time to arrive */
 		{
-			g_on_the_air++;
-		
-			if(!g_on_the_air)
+			time_t now = time(NULL);
+			
+			if(now >= g_event_start_time)
 			{
-				g_on_the_air = g_on_air_time;
-				g_code_throttle = throttleValue(g_pattern_codespeed);
-				makeMorse(g_pattern_text, TRUE, NULL);
-			}
-		}
-	}
-	else if(g_event_start_time > 0) /* off the air - waiting for the start time to arrive */
-	{
-		if(time(NULL) >= g_event_start_time)
-		{
-			if(g_intra_cycle_delay_time)
-			{
-				g_on_the_air = -g_intra_cycle_delay_time;
-			}
-			else
-			{
-				g_on_the_air = g_on_air_time;
-				g_code_throttle = throttleValue(g_pattern_codespeed);
-				makeMorse(g_pattern_text, TRUE, NULL);
+				if(g_intra_cycle_delay_time)
+				{
+					g_on_the_air = -g_intra_cycle_delay_time;
+				}
+				else
+				{
+					g_on_the_air = g_on_air_time;
+					g_code_throttle = throttleValue(g_pattern_codespeed);
+					BOOL repeat = TRUE;
+					makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
+				}
+				
+				g_time_to_send_ID_countdown = g_ID_time;
+				g_event_commenced = TRUE;
 			}
 		}
 	}
@@ -326,36 +341,49 @@ ISR( TIMER2_COMPB_vect )
 	static BOOL conversionInProcess = FALSE;
 	static int8_t indexConversionInProcess;
 	static uint16_t codeInc = 0;
+	BOOL repeat, finished;
 
 	g_tick_count++;
 
 	static BOOL key = FALSE;
 	
-	if(g_on_the_air > 0)
+	if(g_event_enabled && g_event_commenced)
 	{
-		if(codeInc)
+		if(g_on_the_air > 0)
 		{
-			if(codeInc == 10)
+			if(codeInc)
 			{
-				key = makeMorse(NULL, FALSE, &g_finished_sending_first_string);
-				if(key) powerToTransmitter(ON);
+				codeInc--;
+				
+				if(!codeInc)
+				{
+					key = makeMorse(NULL, &repeat, &finished);
+					
+					if(!repeat && finished) // ID has completed, so resume pattern
+					{
+						g_code_throttle = throttleValue(g_pattern_codespeed);
+						repeat = TRUE;
+						makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
+						key = makeMorse(NULL, &repeat, &finished);
+					}
+					
+					if(key) powerToTransmitter(ON);
+				}
 			}
-			
-			codeInc--;
+			else
+			{
+				keyTransmitter(key);
+				codeInc = g_code_throttle;
+			}
 		}
-		else
+		else if(!g_on_the_air)
 		{
-			keyTransmitter(key);
-			codeInc = g_code_throttle;
-		}
-	}
-	else if(!g_on_the_air)
-	{
-		if(key)
-		{
-			key = OFF;
-			keyTransmitter(OFF);
-			powerToTransmitter(OFF);
+			if(key)
+			{
+				key = OFF;
+				keyTransmitter(OFF);
+				powerToTransmitter(OFF);
+			}
 		}
 	}
 
@@ -1292,11 +1320,19 @@ int main( void )
 						if(mtime) g_event_finish_time = mtime;
 						
 						cli();
-//						makeMorse(NULL, FALSE);
+						g_event_enabled = FALSE;  // enabled when starttime is set
+						g_event_commenced = FALSE; // commences when starttime is reached
 						g_on_the_air = 0; // turn off all transmissions
-						g_event_start_time = 0;
-						keyTransmitter(OFF);
 						sei();
+						g_event_start_time = 0;
+						g_on_air_time = 0;
+						g_off_air_time = 0;
+						g_intra_cycle_delay_time = 0;
+						g_messages_text[PATTERN_TEXT][0] = '\0';
+						g_pattern_codespeed = 0;
+						g_ID_time = 0;
+						
+						keyTransmitter(OFF);
 					}
 						
 					if(mtime)
@@ -1341,7 +1377,7 @@ int main( void )
 								ds3231_set_date_time(g_tempStr, RTC_CLOCK);
 								set_system_time(ds3231_get_epoch()); // update system clock
 							#endif
-							initializeTxWithSettings(-1);
+							initializeTxWithSettings(0);
 						}
 						else
 						{
@@ -1371,14 +1407,19 @@ int main( void )
 				{
 					if(lb_buff->fields[FIELD1][0])
 					{
-						strncpy(g_station_ID, lb_buff->fields[FIELD1], MAX_STATION_ID_LENGTH);
+						strncpy(g_messages_text[STATION_ID], lb_buff->fields[FIELD1], MAX_PATTERN_TEXT_LENGTH);
 						saveAllEEPROM(); 
+						
+						if(g_messages_text[STATION_ID][0])
+						{
+							g_time_needed_for_ID = (500 + timeRequiredToSendStrAtWPM(g_messages_text[STATION_ID], g_id_codespeed)) / 1000;
+						}
 					}
 					
-//						if(g_terminal_mode)  {
-					lb_send_string(g_station_ID);
-					lb_send_NewLine();
-//                                           }
+					if(g_terminal_mode)  {
+						lb_send_string(g_messages_text[STATION_ID]);
+						lb_send_NewLine();
+                    }
 				}
 				break;
 				
@@ -1392,6 +1433,10 @@ int main( void )
 						if(lb_buff->fields[FIELD2][0]) speed = atol(lb_buff->fields[FIELD2]);
 						g_id_codespeed = CLAMP(5, speed, 20);
 						saveAllEEPROM(); 
+						if(g_messages_text[STATION_ID][0])
+						{
+							g_time_needed_for_ID = (500 + timeRequiredToSendStrAtWPM(g_messages_text[STATION_ID], g_id_codespeed)) / 1000;
+						}
 					}
 					else if(lb_buff->fields[FIELD1][0] == 'P')
 					{
@@ -1452,13 +1497,13 @@ int main( void )
 				{
 					if(lb_buff->fields[FIELD1][0])
 					{
-						strncpy(g_pattern_text, lb_buff->fields[FIELD1], MAX_PATTERN_TEXT_LENGTH);
+						strncpy(g_messages_text[PATTERN_TEXT], lb_buff->fields[FIELD1], MAX_PATTERN_TEXT_LENGTH);
 						saveAllEEPROM(); 
-						initializeTxWithSettings(0);
+//						initializeTxWithSettings(0);
 					}
 					
-					lb_send_string(g_pattern_text);
-					lb_send_value(stringTimeRequiredToSend(g_pattern_text, g_pattern_codespeed), "t");
+					lb_send_string(g_messages_text[PATTERN_TEXT]);
+					lb_send_value(timeRequiredToSendStrAtWPM(g_messages_text[PATTERN_TEXT], g_pattern_codespeed), "t");
 					lb_send_NewLine();
 				}
 				break;
@@ -1618,10 +1663,23 @@ void initializeTxWithSettings(time_t startTime)
 	if(startTime > 0)
 	{
 		g_event_start_time = startTime;
+		g_event_enabled = TRUE;
 	}
 	
-	if(g_event_start_time <= 0) return;
-	if(startTime > -1) set_system_time(ds3231_get_epoch()); // update system clock
+	// Make sure everything has been initialized
+	if(!g_event_start_time) return;
+	if(!g_on_air_time) return;
+	if(!g_off_air_time) return;
+	if(g_messages_text[PATTERN_TEXT][0] == '\0') return;
+	if(!g_pattern_codespeed) return;
+	//if(!g_transmitter_freq) return;
+	//if(!modulation_format) return;
+	//if(!power_level) return;
+	//if(!callsign) return;
+	//if(!csllsign_speed) return;
+	g_time_to_send_ID_countdown = g_ID_time;
+
+	if(startTime > 0) set_system_time(ds3231_get_epoch()); // update system clock
 							
 	int32_t dif = difftime(time(NULL), g_event_start_time); // returns arg1 - arg2
 		
@@ -1649,21 +1707,25 @@ void initializeTxWithSettings(time_t startTime)
 			g_on_the_air = -timeTillTransmit;
 		}
 								
-		if(!turnOnTransmitter)
+		if(turnOnTransmitter)
+		{
+			cli();
+			BOOL repeat = TRUE;
+			makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
+			g_code_throttle = throttleValue(g_pattern_codespeed);
+			sei();
+		}
+		else
 		{
 			keyTransmitter(OFF);
 		}
+
+		g_event_commenced = TRUE;
 	}
 	else // start time is in the future
 	{
-		g_on_the_air = dif; // dif is negative
 		keyTransmitter(OFF);
 	}
-	
-	cli();
-	makeMorse(g_pattern_text, TRUE, &g_finished_sending_first_string);
-	g_code_throttle = throttleValue(g_pattern_codespeed);
-	sei();
 }
 
 /**********************
@@ -1687,14 +1749,14 @@ void initializeEEPROMVars(void)
 		
 		for(i=0; i<20; i++)
 		{
-			g_station_ID[i] = (char)eeprom_read_byte((uint8_t*)(&ee_stationID_text[i]));
-			if(!g_station_ID[i]) break;
+			g_messages_text[STATION_ID][i] = (char)eeprom_read_byte((uint8_t*)(&ee_stationID_text[i]));
+			if(!g_messages_text[STATION_ID][i]) break;
 		}
 		
 		for(i=0; i<20; i++)
 		{
-			g_pattern_text[i] = (char)eeprom_read_byte((uint8_t*)(&ee_pattern_text[i]));
-			if(!g_pattern_text[i]) break;
+			g_messages_text[PATTERN_TEXT][i] = (char)eeprom_read_byte((uint8_t*)(&ee_pattern_text[i]));
+			if(!g_messages_text[PATTERN_TEXT][i]) break;
 		}
 	}
 	else
@@ -1709,8 +1771,8 @@ void initializeEEPROMVars(void)
 		g_intra_cycle_delay_time = EEPROM_INTRA_CYCLE_DELAY_TIME_DEFAULT;
 		g_ID_time = EEPROM_ID_TIME_INTERVAL_DEFAULT;
 		
-		strncpy(g_station_ID, EEPROM_STATION_ID_DEFAULT, MAX_STATION_ID_LENGTH);
-		strncpy(g_pattern_text, EEPROM_PATTERN_TEXT_DEFAULT, MAX_PATTERN_TEXT_LENGTH);
+		strncpy(g_messages_text[STATION_ID], EEPROM_STATION_ID_DEFAULT, MAX_PATTERN_TEXT_LENGTH);
+		strncpy(g_messages_text[PATTERN_TEXT], EEPROM_PATTERN_TEXT_DEFAULT, MAX_PATTERN_TEXT_LENGTH);
 
 		saveAllEEPROM();
 		eeprom_write_byte(&ee_interface_eeprom_initialization_flag, EEPROM_INITIALIZED_FLAG);
@@ -1733,16 +1795,16 @@ void saveAllEEPROM()
 	storeEEwordIfChanged(&ee_intra_cycle_delay_time, g_intra_cycle_delay_time);
 	storeEEwordIfChanged(&ee_ID_time, g_ID_time);
 
-	for(i=0; i<strlen(g_station_ID); i++)
+	for(i=0; i<strlen(g_messages_text[STATION_ID]); i++)
 	{
-		storeEEbyteIfChanged((uint8_t*)&ee_stationID_text[i], (uint8_t)g_station_ID[i]);
+		storeEEbyteIfChanged((uint8_t*)&ee_stationID_text[i], (uint8_t)g_messages_text[STATION_ID][i]);
 	}
 
 	storeEEbyteIfChanged((uint8_t*)&ee_stationID_text[i], 0);
 	
-	for(i=0; i<strlen(g_pattern_text); i++)
+	for(i=0; i<strlen(g_messages_text[PATTERN_TEXT]); i++)
 	{
-		storeEEbyteIfChanged((uint8_t*)&ee_pattern_text[i], (uint8_t)g_pattern_text[i]);
+		storeEEbyteIfChanged((uint8_t*)&ee_pattern_text[i], (uint8_t)g_messages_text[PATTERN_TEXT][i]);
 	}
 	
 	storeEEbyteIfChanged((uint8_t*)&ee_pattern_text[i], 0);

@@ -1521,7 +1521,12 @@ void httpWebServerLoop()
                 {
                   tx = g_activeEvent->getTxSlotIndex();
                   role = g_activeEvent->getTxRoleIndex();
-                  txData = g_activeEvent->getTxData(role, tx);
+
+                  if ((tx >= 0) && (role >= 0)) {
+                    txData = g_activeEvent->getTxData(role, tx);
+                  }
+                  
+//                Serial.println("r=" + String(role) + "; s=" + String(tx));
 
                   /* Note: message order matters! */
                   /* Finish time should be sent first */
@@ -1560,47 +1565,54 @@ void httpWebServerLoop()
 
               case 5:
                 {
-                  lbMsg = String(LB_MESSAGE_TX_POWER_SET + String(g_activeEvent->getPowerlevelForRole(role)) + ";");
+                  lbMsg = String(LB_MESSAGE_TIME_INTERVAL_SETID + String(g_activeEvent->getIDIntervalForRole(role)) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
               case 6:
                 {
-                  lbMsg = String(LB_MESSAGE_TX_MOD_SET + String(g_activeEvent->getEventModulation()) + ";");
+                  lbMsg = String(LB_MESSAGE_TX_POWER_SET + String(g_activeEvent->getPowerlevelForRole(role)) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
               case 7:
                 {
-                  lbMsg = String(LB_MESSAGE_TX_FREQ_SET + String(g_activeEvent->getFrequencyForRole(role)) + ";");
+                  lbMsg = String(LB_MESSAGE_TX_MOD_SET + String(g_activeEvent->getEventModulation()) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
               case 8:
                 {
-                  lbMsg = String(LB_MESSAGE_CALLSIGN_SET + g_activeEvent->getCallsign() + ";");
+                  lbMsg = String(LB_MESSAGE_TX_FREQ_SET + String(g_activeEvent->getFrequencyForRole(role)) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
               case 9:
                 {
-                  lbMsg = String(LB_MESSAGE_CODE_SPEED_SETPAT + String(g_activeEvent->getCodeSpeedForRole(role)) + ";");
+                  lbMsg = String(LB_MESSAGE_CALLSIGN_SET + g_activeEvent->getCallsign() + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
               case 10:
                 {
-                  lbMsg = String(LB_MESSAGE_CODE_SPEED_SETID + g_activeEvent->getCallsignSpeed() + ";");
+                  lbMsg = String(LB_MESSAGE_CODE_SPEED_SETPAT + String(g_activeEvent->getCodeSpeedForRole(role)) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
               case 11:
+                {
+                  lbMsg = String(LB_MESSAGE_CODE_SPEED_SETID + g_activeEvent->getCallsignSpeed() + ";");
+                  Serial.println(stringObjToConstCharString(&lbMsg));
+                }
+                break;
+
+              case 12:
                 {
                   /* Start time must be sent last */
                   lbMsg = String(LB_MESSAGE_STARTFINISH_SET_START + String(convertTimeStringToEpoch(g_activeEvent->getEventStartDateTime())) + ";");
@@ -1675,10 +1687,10 @@ void startWebSocketServer()
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length)
 {
-  if (g_debug_prints_enabled)
-  {
-    Serial.printf("webSocketEvent(%d, %d, ...)\r\n", num, type);
-  }
+  //  if (g_debug_prints_enabled)
+  //  {
+  //    Serial.printf("webSocketEvent(%d, %d, ...)\r\n", num, type);
+  //  }
 
   switch (type) {
     case WStype_DISCONNECTED:
@@ -1738,10 +1750,10 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 
     case WStype_TEXT:
       {
-        if (g_debug_prints_enabled)
-        {
-          Serial.printf("[%u] get Text: %s\r\n", num, payload);
-        }
+        //        if (g_debug_prints_enabled)
+        //        {
+        //          Serial.printf("[%u] get Text: %s\r\n", num, payload);
+        //        }
 
         String p = String((char*)payload);
         String msgHeader = p.substring(0, p.indexOf(','));
@@ -1814,10 +1826,10 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         {
           p = p.substring(p.indexOf(',') + 1);
 
-          if (g_debug_prints_enabled)
-          {
-            Serial.printf(String("Start Time: \"" + p + "\"\n").c_str());
-          }
+          //          if (g_debug_prints_enabled)
+          //          {
+          //            Serial.printf(String("Start Time: \"" + p + "\"\n").c_str());
+          //          }
 
           //          String lbMsg = String(LB_MESSAGE_STARTFINISH_SET_START + p + ";");
           //          Serial.printf(stringObjToConstCharString(&lbMsg)); // Send to Transmitter
@@ -1861,6 +1873,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         {
           if (g_activeEvent)
           {
+            g_activeEvent->writeEventFile(); /* save any changes */
             g_ESP_ATMEGA_Comm_State = TX_RECD_START_EVENT_REQUEST;
           }
         }
@@ -1949,15 +1962,15 @@ int numberOfEventsScheduled(unsigned long epoch)
       }
     }
 
-    if (g_debug_prints_enabled) {
-      Serial.println("Ordered Events:");
-      for (int i = 0; i < g_eventsRead; i++)
-      {
-        Serial.println( String(i) + ". " + g_eventList[i].path);
-        Serial.println( "    Start: " + String(g_eventList[i].startDateTimeEpoch));
-        Serial.println( "    Finish:" + String(g_eventList[i].finishDateTimeEpoch));
-      }
-    }
+    //    if (g_debug_prints_enabled) {
+    //      Serial.println("Ordered Events:");
+    //      for (int i = 0; i < g_eventsRead; i++)
+    //      {
+    //        Serial.println( String(i) + ". " + g_eventList[i].path);
+    //        Serial.println( "    Start: " + String(g_eventList[i].startDateTimeEpoch));
+    //        Serial.println( "    Finish:" + String(g_eventList[i].finishDateTimeEpoch));
+    //      }
+    //    }
   }
 
   for (int i = 0; i < g_eventsRead; i++)

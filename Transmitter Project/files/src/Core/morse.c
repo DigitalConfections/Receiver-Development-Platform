@@ -15,11 +15,12 @@ MorseCharacter getMorseChar(char c);
 #define INTER_WORD_SPACE 0xFD
 
 /*
-Load a string to send by passing in a pointer via the argument.
+Load a string to send by passing in a pointer via the first argument.
 Call this function with a NULL argument at intervals of 1 element of time to generate Morse code. 
 Once loaded with a string each call to this function returns a BOOL indicating whether a CW carrier should be sent
+Pass in a pointer to a BOOL in the second and third arguments:  
 */
-BOOL makeMorse(char* s, BOOL repeating, BOOL* finished)
+BOOL makeMorse(char* s, BOOL* repeating, BOOL* finished)
 {
 	static char* str = NULL;
 	static BOOL repeat = TRUE;
@@ -33,22 +34,37 @@ BOOL makeMorse(char* s, BOOL repeating, BOOL* finished)
 	
 	if(s) /* load a new NULL-terminated string to send */
 	{
+		if(repeating) repeat = *repeating;
+		
 		if(*s)
 		{
 			str = s;
 			morseInProgress = getMorseChar(*str);
 			charIndex = 0;
 			symbolIndex = 0;
-			repeat = repeating;
+			elementIndex = 0;
+			addedSpace = 0;
 			completedString = FALSE;
 		}
 		else /* a zero-length string shuts down makeMorse */
 		{
 			str = NULL;
+			completedString = TRUE;
+			if(finished) *finished = TRUE;
 		}
+
+		carrierOn = OFF;
+		return OFF;
 	}
 	else if(str)
 	{
+		if(repeating) *repeating = repeat;
+		if(completedString)
+		{
+			if(finished) *finished = TRUE;
+			return OFF;
+		}
+
 		if(elementIndex)
 		{
 			elementIndex--;
@@ -80,11 +96,11 @@ BOOL makeMorse(char* s, BOOL repeating, BOOL* finished)
 					else
 					{
 						str = NULL;
-						carrierOn = FALSE;
-						return carrierOn;
+						carrierOn = OFF;
+						completedString = TRUE;
+						if(finished) *finished = TRUE;
+						return OFF;
 					}
-					
-					completedString = TRUE;
 				}
 			
 				morseInProgress = getMorseChar(c);
@@ -122,7 +138,11 @@ BOOL makeMorse(char* s, BOOL repeating, BOOL* finished)
 	return carrierOn;
 }
 
-uint16_t stringTimeRequiredToSend(char* str, uint16_t spd)
+/** 
+Returns the number of milliseconds required to send the string pointed to by the first argument at the WPM code speed
+passed in the second argument.
+*/
+uint16_t timeRequiredToSendStrAtWPM(char* str, uint16_t spd)
 {
 	uint8_t elements = 0;
 	MorseCharacter m;

@@ -65,21 +65,22 @@ void storeEEdwordIfChanged(uint32_t* ee_var, uint32_t val)
  ************************************************************************************************/
 
 
+#ifdef DATE_STRING_SUPPORT_ENABLED
 
 /**
- * Returns parsed time structure from a string of format "yyyy-mm-ddThh:mm:ss"
+ * Returns parsed time structure from a string of format "yyyy-mm-ddThh:mm:ssZ"
  */
 BOOL mystrptime(char* s, struct tm* ltm) {
   const int month_days[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
   char temp[6];
-  char str[20];
+  char str[21];
   int hold;
   BOOL isleap;
   char *ptr0;
   char *ptr1;
   BOOL noSeconds = FALSE;
 
-  strcpy(str, s);
+  strncpy(str, s, 21);  // "yyyy-mm-ddThh:mm:ssZ\0" <- maximum length null-terminated string
   
   ptr1 = strchr(str, 'Z');
   if(ptr1) *ptr1 = '\0'; // erase the 'Z' character at the end if one exists
@@ -88,7 +89,7 @@ BOOL mystrptime(char* s, struct tm* ltm) {
   
   ptr1 = strchr(str, '-');
   *ptr1 = '\0';
-  strcpy(temp, str);
+  strncpy(temp, str, 5);
   ++ptr1;
   hold = atoi(temp);
   isleap = is_leap_year(hold);
@@ -100,7 +101,7 @@ BOOL mystrptime(char* s, struct tm* ltm) {
 
   ptr1 = strchr(ptr0, '-');
   *ptr1 = '\0';
-  strcpy(temp, ptr0);
+  strncpy(temp, ptr0, 3);
   ++ptr1;
   hold = atoi(temp) - 1;
   if((hold > 11) || (hold < 0)) return TRUE;
@@ -110,7 +111,7 @@ BOOL mystrptime(char* s, struct tm* ltm) {
 
   ptr1 = strchr(ptr0, 'T');
   *ptr1 = '\0';
-  strcpy(temp, ptr0);
+  strncpy(temp, ptr0, 3);
   ++ptr1;
   hold = atoi(temp);
   if((hold > 31) || (hold < 1)) return TRUE;
@@ -129,7 +130,7 @@ BOOL mystrptime(char* s, struct tm* ltm) {
 
   ptr1 = strchr(ptr0, ':');
   *ptr1 = '\0';
-  strcpy(temp, ptr0);
+  strncpy(temp, ptr0, 3);
   ++ptr1;
   hold = atoi(temp);
   if((hold > 23) || (hold < 0)) return TRUE;
@@ -139,7 +140,7 @@ BOOL mystrptime(char* s, struct tm* ltm) {
 
   if(noSeconds)
   {
-	  strcpy(temp, ptr0);
+	  strncpy(temp, ptr0, 3);
 	  hold = atoi(temp);
 	  if(hold > 59) return TRUE;
 	  ltm->tm_min = hold;
@@ -148,7 +149,7 @@ BOOL mystrptime(char* s, struct tm* ltm) {
   {
 	  ptr1 = strchr(ptr0, ':');
 	  *ptr1 = '\0';
-	  strcpy(temp, ptr0);
+	  strncpy(temp, ptr0, 3);
 	  ++ptr1;
 	  hold = atoi(temp);
 	  if(hold > 59) return TRUE;
@@ -163,7 +164,6 @@ BOOL mystrptime(char* s, struct tm* ltm) {
 }
 
 
-#ifdef DATE_STRING_SUPPORT_ENABLED
 /**
  * Converts a string of format "yyyy-mm-ddThh:mm:ss" to seconds since 1900
  */

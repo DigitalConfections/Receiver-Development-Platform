@@ -76,8 +76,8 @@
 #define EEPROM_STATION_ID_DEFAULT "FOXBOX"
 #define EEPROM_PATTERN_TEXT_DEFAULT "PARIS|"
 
-#define EEPROM_START_TIME_DEFAULT -1
-#define EEPROM_FINISH_TIME_DEFAULT -1
+#define EEPROM_START_TIME_DEFAULT 0
+#define EEPROM_FINISH_TIME_DEFAULT 0
 #define EEPROM_ID_CODE_SPEED_DEFAULT 20
 #define EEPROM_PATTERN_CODE_SPEED_DEFAULT 8
 #define EEPROM_ON_AIR_TIME_DEFAULT 60
@@ -305,6 +305,12 @@ typedef enum
 
 #define SecondsFromHours(hours) ((hours) * 3600)
 #define SecondsFromMinutes(min) ((min) * 60)
+
+typedef enum
+{
+	PATTERN_TEXT,
+	STATION_ID
+} TextIndex;
 
 #endif  /* DEFS_H */
 

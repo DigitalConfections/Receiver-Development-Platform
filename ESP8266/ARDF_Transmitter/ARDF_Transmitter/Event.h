@@ -92,8 +92,8 @@ class Event {
     ~Event();
 
     String readMeFile(String path);
-    void saveTxAssignment(void);
-    void setTxAssignment(String role_slot);
+    void saveTxAssignment(String newAssignment);
+    bool setTxAssignment(String role_slot);
     String getTxAssignment(void);
 
     void setEventName(String str);
