@@ -96,6 +96,9 @@ typedef enum
 #define TX_MINIMUM_80M_FREQUENCY 3500000
 #define TX_MAXIMUM_80M_FREQUENCY 8000000
 
+#define MAX_2M_PWR_SETTING 80 /* maximum safe DAC setting */
+#define MAX_80M_PWR_SETTING 20 /* maximum safe DAC setting */
+
 #define DEFAULT_AM_DRIVE_LEVEL 180
 #define DEFAULT_CW_DRIVE_LEVEL 180
 

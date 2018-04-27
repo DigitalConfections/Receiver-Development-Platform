@@ -232,13 +232,14 @@
 	
 	void txSetPowerLevel(uint8_t power)
 	{
+		// Prevent possible damage to transmitter
 		if(g_activeBand == BAND_2M)
 		{
-			g_2m_power_level = power;
+			g_2m_power_level = MIN(power, MAX_2M_PWR_SETTING);
 		}
 		else
 		{
-			g_80m_power_level = power;
+			g_80m_power_level = MIN(power, MAX_80M_PWR_SETTING);
 		}
 		
 		dac081c_set_dac(power);
@@ -261,17 +262,20 @@
 	
 	void txSetModulation(Modulation mode)
 	{
-		if((g_activeBand == BAND_2M) && (mode == MODE_AM))
+		if(g_activeBand == BAND_2M)
 		{
-			txSetDrive(g_am_drive_level);
-			g_2m_modulationFormat = MODE_AM;
-		}
-		else
-		{
-			if(g_activeBand == BAND_2M)
+			if(mode == MODE_AM)
+			{
+				g_2m_modulationFormat = MODE_AM;
+				txSetDrive(g_am_drive_level);
+				DDRD |= (1 << PORTD5); // set clock pin to an output
+			}
+			else
 			{
 				g_2m_modulationFormat = MODE_CW;
 				txSetDrive(g_cw_drive_level);
+				DDRD  &= ~(1 << PORTD5); // set clock pin to an input
+				PORTD |= (1 << PORTD5); // enable pull-up
 			}
 		}
 	}

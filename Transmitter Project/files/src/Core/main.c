@@ -1268,16 +1268,6 @@ int main( void )
 							pwr = atoi(lb_buff->fields[FIELD1]);
 						}
 						
-						// Prevent possible damage to transmitter
-						if(txGetBand() == BAND_2M)
-						{
-							pwr = MIN(pwr, 10);
-						}
-						else
-						{
-							pwr = MIN(pwr, 10);;
-						}
-
 						txSetPowerLevel(pwr);
 						saveAllEEPROM();
 					}
@@ -1338,13 +1328,10 @@ int main( void )
 					if(mtime)
 					{
 						saveAllEEPROM(); 
-//						if(g_terminal_mode)  {
-						  lb_send_value((int16_t)g_on_the_air, "sec=>");
-						  // }
 					}
 					else if(g_terminal_mode)
 					{
-						lb_send_string("err\n");
+						lb_send_string("Usage: SF F|S epoch\n");
 					}
 				}
 				break;
@@ -1418,7 +1405,7 @@ int main( void )
 					
 					if(g_terminal_mode)  {
 						lb_send_string(g_messages_text[STATION_ID]);
-						lb_send_NewLine();
+						lb_send_string("\n");
                     }
 				}
 				break;
@@ -1429,27 +1416,40 @@ int main( void )
 					
 					if(lb_buff->fields[FIELD1][0] == 'I')
 					{
-						speed = g_id_codespeed;
-						if(lb_buff->fields[FIELD2][0]) speed = atol(lb_buff->fields[FIELD2]);
-						g_id_codespeed = CLAMP(5, speed, 20);
-						saveAllEEPROM(); 
-						if(g_messages_text[STATION_ID][0])
+						if(lb_buff->fields[FIELD2][0])
 						{
-							g_time_needed_for_ID = (500 + timeRequiredToSendStrAtWPM(g_messages_text[STATION_ID], g_id_codespeed)) / 1000;
+							speed = atol(lb_buff->fields[FIELD2]);
+							g_id_codespeed = CLAMP(5, speed, 20);
+							saveAllEEPROM(); 
+							if(g_messages_text[STATION_ID][0])
+							{
+								g_time_needed_for_ID = (500 + timeRequiredToSendStrAtWPM(g_messages_text[STATION_ID], g_id_codespeed)) / 1000;
+							}
 						}
+						else
+						{
+							speed = g_id_codespeed;
+						}
+						
 					}
 					else if(lb_buff->fields[FIELD1][0] == 'P')
 					{
-						if(lb_buff->fields[FIELD2][0]) speed = atol(lb_buff->fields[FIELD2]);
-						g_pattern_codespeed = CLAMP(5, speed, 20);
-						saveAllEEPROM();
-						g_code_throttle = (7042 / g_pattern_codespeed) / 10;
+						if(lb_buff->fields[FIELD2][0]) 
+						{
+							speed = atol(lb_buff->fields[FIELD2]);
+							g_pattern_codespeed = CLAMP(5, speed, 20);
+							saveAllEEPROM();
+							g_code_throttle = (7042 / g_pattern_codespeed) / 10;
+						}
+						else
+						{
+							speed = g_pattern_codespeed;
+						}
 					}
 					
-//						if(g_terminal_mode)  {
-					lb_send_value(speed, "spd");
-					lb_send_NewLine();
-//                                            }
+					if(g_terminal_mode)  {
+						lb_send_value(speed, "spd");
+                    }
 				}
 				break;
 				
@@ -1460,15 +1460,29 @@ int main( void )
 					if(lb_buff->fields[FIELD1][0] == '0')
 					{
 						time = g_off_air_time;
-						if(lb_buff->fields[FIELD2][0]) time = atol(lb_buff->fields[FIELD2]);
-						g_off_air_time = time;
-						saveAllEEPROM(); 
+						if(lb_buff->fields[FIELD2][0])
+						{
+							time = atol(lb_buff->fields[FIELD2]);
+							g_off_air_time = time;
+							saveAllEEPROM(); 
+						}
+						else
+						{
+							time = g_off_air_time;
+						}
 					}
 					else if(lb_buff->fields[FIELD1][0] == '1')
 					{
-						if(lb_buff->fields[FIELD2][0]) time = atol(lb_buff->fields[FIELD2]);
-						g_on_air_time = time;
-						saveAllEEPROM();
+						if(lb_buff->fields[FIELD2][0])
+						{
+							time = atol(lb_buff->fields[FIELD2]);
+							g_on_air_time = time;
+							saveAllEEPROM();
+						}
+						else
+						{
+							time = g_on_air_time;
+						}
 					}
 					else if(lb_buff->fields[FIELD1][0] == 'I')
 					{
@@ -1478,18 +1492,28 @@ int main( void )
 							g_ID_time = time;
 							saveAllEEPROM();
 						}
+						else
+						{
+							time = g_ID_time;
+						}
 					}
 					else if(lb_buff->fields[FIELD1][0] == 'D')
 					{
-						if(lb_buff->fields[FIELD2][0]) time = atol(lb_buff->fields[FIELD2]);
-						g_intra_cycle_delay_time = time;
-						saveAllEEPROM();
+						if(lb_buff->fields[FIELD2][0])
+						{
+							time = atol(lb_buff->fields[FIELD2]);
+							g_intra_cycle_delay_time = time;
+							saveAllEEPROM();
+						}
+						else
+						{
+							time = g_intra_cycle_delay_time;							
+						}
 					}
 					
-//						if(g_terminal_mode) {
-					lb_send_value(time, "t");
-					lb_send_NewLine();
-					// }
+					if(g_terminal_mode) {
+						lb_send_value(time, "t");
+					}
 				}
 				break;
 				
@@ -1499,12 +1523,12 @@ int main( void )
 					{
 						strncpy(g_messages_text[PATTERN_TEXT], lb_buff->fields[FIELD1], MAX_PATTERN_TEXT_LENGTH);
 						saveAllEEPROM(); 
-//						initializeTxWithSettings(0);
 					}
 					
-					lb_send_string(g_messages_text[PATTERN_TEXT]);
-					lb_send_value(timeRequiredToSendStrAtWPM(g_messages_text[PATTERN_TEXT], g_pattern_codespeed), "t");
-					lb_send_NewLine();
+					if(g_terminal_mode) {
+						lb_send_string(g_messages_text[PATTERN_TEXT]);
+						lb_send_string("\n");
+					}
 				}
 				break;
 
@@ -1669,7 +1693,7 @@ void initializeTxWithSettings(time_t startTime)
 	// Make sure everything has been initialized
 	if(!g_event_start_time) return;
 	if(!g_on_air_time) return;
-	if(!g_off_air_time) return;
+	//if(!g_off_air_time) return;
 	if(g_messages_text[PATTERN_TEXT][0] == '\0') return;
 	if(!g_pattern_codespeed) return;
 	//if(!g_transmitter_freq) return;
@@ -1680,8 +1704,8 @@ void initializeTxWithSettings(time_t startTime)
 	g_time_to_send_ID_countdown = g_ID_time;
 
 	if(startTime > 0) set_system_time(ds3231_get_epoch()); // update system clock
-							
-	int32_t dif = difftime(time(NULL), g_event_start_time); // returns arg1 - arg2
+	time_t t = time(NULL);
+	int32_t dif = difftime(t, g_event_start_time); // returns arg1 - arg2
 		
 	if(dif >= 0) // start time is in the past
 	{
