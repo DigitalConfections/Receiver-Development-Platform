@@ -156,6 +156,7 @@ static WiFiEventHandler e1, e2;
 
 Transmitter *g_xmtr;
 Event* g_activeEvent;
+String g_selectedEventName = "";
 int g_activeEventIndex = 0;
 EventFileRef g_eventList[20];
 int g_eventsRead = 0;
@@ -186,11 +187,11 @@ void setup()
 
   populateEventFileList();
 
-  showSettings();
+  //  showSettings();
 
 #if WIFI_DEBUG_PRINTS_ENABLED
   WiFi.onEvent(eventWiFi);      // Handle WiFi event
-#endif
+#endif // WIFI_DEBUG_PRINTS_ENABLED
 
   g_xmtr = new Transmitter(g_debug_prints_enabled);
 }
@@ -198,6 +199,7 @@ void setup()
 /*******************************************************
    Handle WiFi events
 ********************************************************/
+#if WIFI_DEBUG_PRINTS_ENABLED
 void eventWiFi(WiFiEvent_t event) {
   String e = String(event);
 
@@ -248,6 +250,7 @@ void eventWiFi(WiFiEvent_t event) {
       break;
   }
 }
+#endif // WIFI_DEBUG_PRINTS_ENABLED
 
 
 /*******************************************************
@@ -477,10 +480,7 @@ void onNewStation(WiFiEventSoftAPModeStationConnected sta_info) {
   {
     Serial.println("New Station: " + newMacStr);
     Serial.println("  Total stations: " + String(g_numberOfWebClients) + "; Socket clients: " + String(g_numberOfSocketClients));
-  }
 
-  if (g_debug_prints_enabled)
-  {
     for (int i = 0; i < g_numberOfSocketClients; i++)
     {
       Serial.printf("%d. WebSocketClient: WebID# %d. MAC address : %s\n", i, g_webSocketClient[i].webID, (g_webSocketClient[i].macAddr).c_str());
@@ -1346,20 +1346,41 @@ void httpWebServerLoop()
 
               if (g_eventsRead)
               {
-                if (g_activeEvent == NULL)
+                if ((g_selectedEventName != "") && (g_activeEvent != NULL))
                 {
-                  g_activeEventIndex = 0;
-                  g_activeEvent = new Event(g_debug_prints_enabled);
-                  g_activeEvent->readEventFile(g_eventList[0].path);
-                }
-                else if (!firstPageLoad)
-                {
-                  g_activeEventIndex = (g_activeEventIndex + 1) % g_eventsRead;
+                  bool found = false;
+                  
+                  for(int i=0; i<g_eventsRead; i++)
+                  {
+                    if(g_selectedEventName.equals(g_eventList[i].ename))
+                    {
+                      g_activeEventIndex = i;
+                      found = true;
+                      break;
+                    }
+                  }
+
+                  if(!found) g_activeEventIndex = (g_activeEventIndex + 1) % g_eventsRead;
+                  
                   g_activeEvent->readEventFile(g_eventList[g_activeEventIndex].path);
                 }
                 else
                 {
-                  firstPageLoad = false;
+                  if (g_activeEvent == NULL)
+                  {
+                    g_activeEventIndex = 0;
+                    g_activeEvent = new Event(g_debug_prints_enabled);
+                    g_activeEvent->readEventFile(g_eventList[0].path);
+                  }
+                  else if (!firstPageLoad)
+                  {
+                    g_activeEventIndex = (g_activeEventIndex + 1) % g_eventsRead;
+                    g_activeEvent->readEventFile(g_eventList[g_activeEventIndex].path);
+                  }
+                  else
+                  {
+                    firstPageLoad = false;
+                  }
                 }
 
                 String msg = String(String(SOCK_COMMAND_EVENT_NAME) + "," + g_activeEvent->getEventName() );
@@ -1371,6 +1392,12 @@ void httpWebServerLoop()
 
                 g_http_server.handleClient();
                 g_webSocketServer.loop();
+
+                for (int i = 0; i < g_eventsRead; i++)
+                {
+                  msg = String(String(SOCK_COMMAND_EVENT_DATA) + "," + g_eventList[i].ename + "," + g_eventList[i].vers + "," +  g_eventList[i].startDateTimeEpoch + "," +  g_eventList[i].finishDateTimeEpoch + "," + g_eventList[i].role);
+                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+                }
 
                 msg = String(String(SOCK_COMMAND_EVENT_FILE_VERSION) + "," + g_activeEvent->getEventFileVersion() );
                 g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
@@ -1525,8 +1552,8 @@ void httpWebServerLoop()
                   if ((tx >= 0) && (role >= 0)) {
                     txData = g_activeEvent->getTxData(role, tx);
                   }
-                  
-//                Serial.println("r=" + String(role) + "; s=" + String(tx));
+
+                  //                Serial.println("r=" + String(role) + "; s=" + String(tx));
 
                   /* Note: message order matters! */
                   /* Finish time should be sent first */
@@ -1794,12 +1821,15 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         }
         else if (msgHeader == SOCK_COMMAND_EVENT_NAME)
         {
-          if (p.indexOf("NEW!") == 0)
+           if (p.indexOf("NEW!") >= 0)
           {
+            g_selectedEventName = "";
             g_ESP_ATMEGA_Comm_State = TX_HTML_PAGE_SERVED;
           }
           else
           {
+            p = p.substring(p.indexOf(',') + 1);
+            g_selectedEventName = p;
             g_ESP_ATMEGA_Comm_State = TX_HTML_NEXT_EVENT;
           }
         }
@@ -1995,7 +2025,7 @@ int numberOfEventsScheduled(unsigned long epoch)
 bool readEventTimes(String path, EventFileRef* fileRef)
 {
   fileRef->path = path;
-  bool startRead = false, finishRead = false;
+  int data_count = 0;
 
   if (SPIFFS.exists(path))
   {
@@ -2003,18 +2033,19 @@ bool readEventTimes(String path, EventFileRef* fileRef)
     String s = file.readStringUntil('\n');
     int count = 0;
 
-    while (s.length() && (count++ < MAXIMUM_NUMBER_OF_EVENT_FILE_LINES) && (!startRead || !finishRead))
+    while (s.length() && (count++ < MAXIMUM_NUMBER_OF_EVENT_FILE_LINES) && (data_count < 4))
     {
       if (s.indexOf("EVENT_START_DATE_TIME") >= 0)
       {
         EventLineData data;
         Event::extractLineData(s, &data);
         fileRef->startDateTimeEpoch = convertTimeStringToEpoch(data.value);
-        startRead = true;
+        //        startRead = true;
+        data_count++;
 
         if ( g_debug_prints_enabled )
         {
-          Serial.printf("Start epoch: %s\r\n", String(fileRef->startDateTimeEpoch).c_str());
+          Serial.println("Start epoch: " + String(fileRef->startDateTimeEpoch));
         }
       }
       else if (s.indexOf("EVENT_FINISH_DATE_TIME") >= 0)
@@ -2022,11 +2053,35 @@ bool readEventTimes(String path, EventFileRef* fileRef)
         EventLineData data;
         Event::extractLineData(s, &data);
         fileRef->finishDateTimeEpoch = convertTimeStringToEpoch(data.value);
-        finishRead = true;
+        data_count++;
 
         if ( g_debug_prints_enabled )
         {
-          Serial.printf("Finish epoch: %s\r\n", String(fileRef->finishDateTimeEpoch).c_str());
+          Serial.println("Finish epoch: " + String(fileRef->finishDateTimeEpoch));
+        }
+      }
+      else if ( s.indexOf("EVENT_NAME") >= 0)
+      {
+        EventLineData data;
+        Event::extractLineData(s, &data);
+        fileRef->ename = data.value;
+        data_count++;
+
+        if ( g_debug_prints_enabled )
+        {
+          Serial.println("Event name: " + fileRef->ename);
+        }
+      }
+      else if ( s.indexOf(EVENT_FILE_VERSION) >= 0)
+      {
+        EventLineData data;
+        Event::extractLineData(s, &data);
+        fileRef->vers = data.value;
+        data_count++;
+
+        if ( g_debug_prints_enabled )
+        {
+          Serial.println("File version: " + fileRef->vers);
         }
       }
 
@@ -2035,13 +2090,15 @@ bool readEventTimes(String path, EventFileRef* fileRef)
 
     file.close(); // Close the file
 
+    Event::extractMeFileData(path, fileRef);
+
     if (g_debug_prints_enabled)
     {
-      Serial.println(String("\tRead file: ") + path);
+      Serial.println(String("Read file: ") + path);
     }
   }
 
-  return (!startRead || !finishRead);
+  return (data_count != 4);
 }
 
 bool populateEventFileList(void)
@@ -2078,8 +2135,12 @@ bool populateEventFileList(void)
     for (int i = 0; i < g_eventsRead; i++)
     {
       Serial.println( String(i) + ". " + g_eventList[i].path);
-      Serial.println( "    " + g_eventList[i].startDateTimeEpoch);
-      Serial.println( "    " + g_eventList[i].finishDateTimeEpoch);
+      Serial.println( "    " + String(g_eventList[i].startDateTimeEpoch));
+      Serial.println( "    " + String(g_eventList[i].finishDateTimeEpoch));
+      Serial.println( "    " + String(g_eventList[i].vers));
+      Serial.println( "    " + String(g_eventList[i].ename));
+      Serial.println( "    " + String(g_eventList[i].role));
+
     }
     Serial.printf("\n");
   }

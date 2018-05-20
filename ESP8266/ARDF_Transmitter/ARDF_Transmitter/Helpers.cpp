@@ -21,11 +21,12 @@
    Removes extraneous characters that tend to clutter the ends of String object contents. Then
    returns a const char * to the C string contained in the String.
 */
+#define MAX_CONST_CHAR_STR_LEN (150)
 const char * stringObjToConstCharString(String *val)
 {
-  char str[50];
+  char str[MAX_CONST_CHAR_STR_LEN];
 
-  strcpy(str, (*val).c_str());
+  strncpy(str, (*val).c_str(), MAX_CONST_CHAR_STR_LEN);
 
   for (uint16_t i = 0; i < strlen(str); i++)
   {
@@ -40,6 +41,35 @@ const char * stringObjToConstCharString(String *val)
   *val = str;
 
   return ((const char*)(*val).c_str());
+}
+
+String checksum(String str) 
+{
+  char hex[4];
+  int star = str.lastIndexOf("*");
+  if(star > 0) str = str.substring(0, star);
+  int checksum = 0; 
+  
+  for (uint16_t i = 0; i < str.length(); i++){ 
+    checksum ^= str.charAt(i);
+  }
+
+  sprintf(hex, "*%02x", checksum);
+  return String(hex);
+}
+
+/**
+ * Returns true if checksum calculation does not match the string's checksum, 
+ * or if the string passed in the argument doesn't include a checksum
+ */
+bool validateMessage(String str)
+{
+  str.trim();
+  int star = str.lastIndexOf("*");
+  if(star < ((int)str.length() - 3)) return true;
+  String cs = str.substring(star);
+  String check = checksum(str);
+  return (!cs.equals(check));
 }
 
 

@@ -41,5 +41,7 @@ String getContentType(String filename);
 bool isLeapYear(int year);
 unsigned long convertTimeStringToEpoch(String s);
 bool mystrptime(String s, Tyme* tm);
+String checksum(String str);
+bool validateMessage(String str);
 
 #endif //_HELPERS_H_

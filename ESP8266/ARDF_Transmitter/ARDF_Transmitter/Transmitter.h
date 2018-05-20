@@ -64,6 +64,7 @@
 // Websocket Command Messages
 #define SOCK_COMMAND_EVENT_NAME "EVENT_NAME" /* read only */
 #define SOCK_COMMAND_EVENT_FILE_VERSION "FILE_VERSION" /* read only */
+#define SOCK_COMMAND_EVENT_DATA "EVENT_DATA" /* read only */
 #define SOCK_COMMAND_SYNC_TIME "SYNC"
 #define SOCK_COMMAND_TEMPERATURE "TEMP" /* read only */
 #define SOCK_COMMAND_SSID "SSID" /* read only */
