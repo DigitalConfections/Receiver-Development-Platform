@@ -3,6 +3,46 @@
 <head>
   <title>Tx</title>
   <style type="text/css">
+
+.button {
+    background-color: #4CAF50;
+    border: none;
+    color: white;
+    padding: 15px 32px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    margin: 4px 2px;
+    cursor: pointer;
+}
+
+.incbutton {
+    background-color:blue;
+    border: none;
+    color: white;
+    padding: 15px 32px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    margin: 4px 2px;
+    cursor: pointer;
+}
+
+.decbutton {
+    background-color:blue;
+    border: none;
+    color: white;
+    padding: 15px 32px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    margin: 4px 2px;
+    cursor: pointer;
+}
+
     input[type="text"]:value {
       -webkit-text-font-weight: bold;
     }
@@ -181,7 +221,8 @@
     var eventStartDateTime = "2018-01-01T00:00:00"; /* Start date and time in yyyy-mm-ddThh:mm:ssZ format */
     var eventFinishDateTime = "2018-01-01T00:00:00"; /* Finish date and time in yyyy-mm-ddThh:mm:ssZ format */
     var eventNumberOfTxTypes = 2; /* Quantity of different "roles": Home, Foxes, Fast Foxes, Slow Foxes, etc. */
-    var typeTxName = ["Home", "Fox"]; /* Human readable "role" name: "Home", "Fox", "Fast Fox", "Slow Fox", "Spectator", etc. */
+    var g_typeTxName = [{name:"Name", indices:"0:0"}]; /* Human readable "role" name: "Home", and indices: "0:1" */
+    var g_selectedTxType;
     var typeTxCount = []; /* Number of transmitters in a particular "role" */
     var typeFrequency = [3510000, 3600000]; /* Frequency used by transmitters in that "role" */
     var typePower = [1000, 1000]; /* Transmit power in mW for transmitters in that "role" */
@@ -198,7 +239,8 @@
       version: "Ver",
       start: "Start",
       finish: "Finish",
-      role: "Fox"
+      role: "Fox",
+      callsign: "Call"
     }]; /* Event data to display in a table header */
     var g_selectedEvent = "";
 
@@ -255,26 +297,6 @@
       sendTest();
     }
 
-
-function placeCaretAtEnd(el) {
-    el.focus();
-    if (typeof window.getSelection != "undefined"
-            && typeof document.createRange != "undefined") {
-        var range = document.createRange();
-        range.selectNodeContents(el);
-        range.collapse(false);
-        var sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
-    } else if (typeof document.body.createTextRange != "undefined") {
-        var textRange = document.body.createTextRange();
-        textRange.moveToElementText(el);
-        textRange.collapse(false);
-        textRange.select();
-    }
-}
-
-
     function eventRow(rowData, isHeader) {
       var row = document.createElement("tr");
       var cellText;
@@ -314,39 +336,53 @@ function placeCaretAtEnd(el) {
         row.appendChild(cell4);
 
         var cell5 = document.createElement("td");
-        cellText = document.createTextNode(rowData.role);
+        cellText = document.createTextNode("State");
         cell5.setAttribute("border", "1px solid black");
         cell5.appendChild(cellText);
         row.appendChild(cell5);
 
         var cell6 = document.createElement("td");
-        //      cellText = document.createTextNode(rowData.role);
+        cellText = document.createTextNode(rowData.role);
         cell6.setAttribute("border", "1px solid black");
-        //      cell6.appendChild(cellText);
+        cell6.appendChild(cellText);
         row.appendChild(cell6);
+
+        var cell7 = document.createElement("td");
+        cellText = document.createTextNode("Call");
+        cell7.setAttribute("border", "1px solid black");
+        cell7.appendChild(cellText);
+        row.appendChild(cell7);
+
+        var cell8 = document.createElement("td");
+        cellText = document.createTextNode("Freq");
+        cell8.setAttribute("border", "1px solid black");
+        cell8.appendChild(cellText);
+        row.appendChild(cell8);
       } else {
 
         // create cells in row
         var btn = document.createElement('input');
         var entry = rowData.name;
         btn.type = "button";
-        btn.className = "btn";
+        btn.className = "button";
         if (g_selectedEvent == rowData.name) {
+//          btn.style = "font-family:verdana; font-size:17px; color:blue; font-weight:bold; text-align:center;");
           btn.value = "Run";
           btn.onclick = (function(entry) {
             return function() {
               eventRunSelect(entry);
             }
           })(entry);
-          row.setAttribute("style", "font-family:verdana; font-size:17px; color:Blue; font-weight:bold; text-align:center;");
+          row.setAttribute("style", "font-family:verdana; font-size:17px; color:blue; font-weight:bold; text-align:center;");
         } else {
+//          btn.style = "font-family:verdana; font-size:17px; color:black; font-weight:bold; text-align:center;");
           btn.value = "Select";
           btn.onclick = (function(entry) {
             return function() {
               eventSelect(entry);
             }
           })(entry);
-          row.setAttribute("style", "font-family:verdana; font-size:15px; color:Black; text-align:center;");
+          row.setAttribute("style", "font-family:verdana; font-size:15px; color:black; text-align:center;");
         }
 
         var cell0 = document.createElement("td");
@@ -358,16 +394,25 @@ function placeCaretAtEnd(el) {
         var cell1 = document.createElement("td");
         cellText = document.createTextNode(rowData.name);
         cell1.setAttribute("border", "1px solid black");
+        if (g_selectedEvent == rowData.name) {
+          cell1.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold; color:black; text-align:center;");
+        } else {
+          cell1.setAttribute("style", "font-family:verdana; font-size:15px; color:black; text-align:center;");
+        }
         cell1.appendChild(cellText);
         row.appendChild(cell1);
 
         var cell2 = document.createElement("td");
         cellText = document.createTextNode(rowData.version);
         cell2.setAttribute("border", "1px solid black");
+        if (g_selectedEvent == rowData.name) {
+          cell2.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold; color:black; text-align:center;");
+        } else {
+          cell2.setAttribute("style", "font-family:verdana; font-size:15px; color:black; text-align:center;");
+        }
         cell2.appendChild(cellText);
         row.appendChild(cell2);
 
-        var now = new Date();
         var cell3 = document.createElement("td");
         var start = new Date(Number(rowData.start));
         cellText = document.createTextNode(start);
@@ -377,9 +422,10 @@ function placeCaretAtEnd(el) {
           var i = document.createElement("input");
           i.setAttribute("id", "datetimeStart");
           i.setAttribute("type", "datetime-local");
-          i.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold;");
+          i.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold; color:blue;");
           i.setAttribute("oninput", "newStartTime();");
-          i.appendChild(cellText);
+          i.setAttribute("value", epochToLocalDateTimeFormat(rowData.start));
+console.log("Start time text =", epochToLocalDateTimeFormat(rowData.start));
           cell3.appendChild(i);
         } else {
           cell3.appendChild(cellText);
@@ -387,88 +433,102 @@ function placeCaretAtEnd(el) {
         row.appendChild(cell3);
 
         var cell4 = document.createElement("td");
-        var finish = new Date(Number(rowData.finish));
-        cellText = document.createTextNode(finish);
         cell4.setAttribute("border", "1px solid black");
         if (g_selectedEvent == rowData.name) {
           cell4.setAttribute("id", "datetimeFinishCell");
           var i = document.createElement("input");
           i.setAttribute("id", "datetimeFinish");
           i.setAttribute("type", "datetime-local");
-          i.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold;");
+          i.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold; color:blue;");
           i.setAttribute("oninput", "newFinishTime();");
-          i.appendChild(cellText);
+          i.setAttribute("value", epochToLocalDateTimeFormat(rowData.finish));
+console.log("Start time text =", epochToLocalDateTimeFormat(rowData.finish));
           cell4.appendChild(i);
         } else {
+          var finish = new Date(Number(rowData.finish));
+          cellText = document.createTextNode(finish);
           cell4.appendChild(cellText);
         }
         row.appendChild(cell4);
 
+
+
         var cell5 = document.createElement("td");
-        cellText = document.createTextNode(rowData.role);
+        var stat = statusMessageText(rowData.start, rowData.finish);
+console.log("Status: ", stat);
+        cellText = document.createTextNode(stat);
         cell5.setAttribute("border", "1px solid black");
-        if (g_selectedEvent == rowData.name) {
-          cell5.setAttribute("id", "selectedRoleCell");
-          cell5.setAttribute("onclick", "foxClick();");
-        }
+        cell5.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold; color:black;");
         cell5.appendChild(cellText);
         row.appendChild(cell5);
 
+
+
         var cell6 = document.createElement("td");
-console.log("Event Call:", g_eventCallsign);
-        cellText = document.createTextNode(g_eventCallsign);
         cell6.setAttribute("border", "1px solid black");
         if (g_selectedEvent == rowData.name) {
-          cell6.setAttribute("id", "datetimeFinishCell");
-          var t = document.createElement("text");
-          t.setAttribute("id", "callText");
-          t.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold;");
-          t.setAttribute("placeholder", "Callsign");
-          t.setAttribute("contenteditable", "true");
-          t.setAttribute("oninput", "callSignEntered();");
-          t.appendChild(cellText);
-          cell6.appendChild(t);
+
+          var sel = document.createElement('select'),
+            option,
+            i = 0,
+            il = g_typeTxName.length;
+
+          sel.setAttribute("onchange", "foxClick()");
+          sel.setAttribute("id", "roleSelect");
+          sel.setAttribute("style", "font-family:verdana; font-size:15px; color:blue; font-weight:bold;");
+
+          for (; i < il; i += 1) {
+            option = document.createElement('option');
+            option.setAttribute('value', g_typeTxName[i].name);
+            option.appendChild(document.createTextNode(g_typeTxName[i].name));
+            if(g_typeTxName[i].name == rowData.role)
+            {
+              option.setAttribute("selected", "true");
+              g_selectedTxType = rowData.role;
+            }
+            sel.appendChild(option);
+console.log("TxType name:", g_typeTxName[i].name);
+          }
+
+          cell6.appendChild(sel);
         } else {
+          cellText = document.createTextNode(rowData.role);
           cell6.appendChild(cellText);
         }
         row.appendChild(cell6);
 
-        //btn = document.createElement('input');
-        //entry = rowData.name;
-        //btn.type = "button";
-        //btn.className = "btn";
+        var cell7 = document.createElement("td");
+        console.log("Event Call:", rowData.callsign);
+        cell7.setAttribute("border", "1px solid black");
+        if (g_selectedEvent == rowData.name) {
+          cell7.setAttribute("id", "datetimeFinishCell");
+          var t = document.createElement("input");
+          t.setAttribute("type", "text");
+          t.setAttribute("id", "callText");
+          t.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold; text-align:center");
+          t.setAttribute("placeholder", "Callsign");
+          t.setAttribute("contenteditable", "true");
+          t.setAttribute("oninput", "callSignEntered();");
+          t.setAttribute("value", rowData.callsign);
+          cell7.appendChild(t);
+        } else {
+          cellText = document.createTextNode(rowData.callsign);
+          cell7.appendChild(cellText);
+        }
+        row.appendChild(cell7);
 
-        //if (g_selectedEvent == rowData.name) {
-        //  btn.value = "Fox";
-        //  btn.onclick = (function(entry) {
-        //    return function() {
-        //      foxClick();
-        //    }
-        //  })(entry);
-        //  row.setAttribute("style", "font-family:verdana; font-size:17px; color:Blue; font-weight:bold; text-align:center;");
-
-        //  var cell6 = document.createElement("td");
-        //      cell6.setAttribute("border", "1px solid black");
-        //  cell6.appendChild(btn);
-        //  row.appendChild(cell6);
-        //}
-        //  else
-        //  {
-        //btn.value = "Select";
-        //btn.onclick = (function(entry) {return function() {eventSelect(entry);}})(entry);
-        //      row.setAttribute("style", "font-family:verdana; font-size:15px; color:Black; text-align:center;");
-        //  }
-
-        //var btn = document.createElement('input');
-        //var entry = rowData.name;
-        //btn.type = "button";
-        //btn.className = "btn";
-        //btn.value = "Select";
-        //btn.onclick = (function(entry) {return function() {eventSelect(entry);}})(entry);
-        //      var cell5 = document.createElement("td");
-        //      cell5.setAttribute("border", "1px solid black");
-        //cell5.appendChild(btn);
-        //      row.appendChild(cell5);
+        var cell8 = document.createElement("td");
+        if (g_selectedEvent == rowData.name) {
+          var b = document.createElement('input');
+          entry = rowData.name;
+          b.setAttribute("type", "button");
+          b.setAttribute("class", "incbutton");
+          b.setAttribute("value", "Set Freq");
+          b.setAttribute("onclick", "toggleFreqSettings();");
+          cell8.appendChild(b);
+        }
+ 
+        row.appendChild(cell8);
       }
       return row;
     }
@@ -577,12 +637,14 @@ console.log("Event Call:", g_eventCallsign);
               {
                 setOverlay(null);
                 g_selectedEvent = arr[1];
-                typeTxName = [];
+                g_typeTxName = [];
                 typeTxCount = [];
                 typeFrequency = [];
                 typeWPM = [];
                 typeIDinterval = [];
                 typePower = []; /* Transmit power in mW for transmitters in that "role" */
+                g_selectedTxType = "";
+                hideFreqSettings();
 
                 txDesignation = {
                   typeIndex: 0,
@@ -621,10 +683,24 @@ console.log("Event Call:", g_eventCallsign);
                   version: arr[2],
                   start: 1000 * Number(arr[3]),
                   finish: 1000 * Number(arr[4]),
-                  role: arr[5]
+                  role: arr[5],
+                  callsign: arr[6]
                 };
                 g_eventTableData.push(eventLine);
+              }
+              break;
+
+            case "TYPE_NAME":
+              if((arr[1] == "Done") && (arr[2] == "Done"))
+              {
                 displayEvents();
+              }
+              else
+              {
+                var tn = {name:arr[1], indices:arr[2]};
+                g_typeTxName.push(tn);
+                console.log("TypeName = ", tn);
+                eventNumberOfTxTypes++;
               }
               break;
 
@@ -676,9 +752,8 @@ console.log("Event Call:", g_eventCallsign);
             case "CALLSIGN":
               var c = document.getElementById("callText");
               if (c != null) {
-                c.innerHTML = arr[1]; 
-placeCaretAtEnd( c );
-             }
+                c.value = arr[1];
+              }
               g_eventCallsign = arr[1];
               break;
 
@@ -699,11 +774,6 @@ placeCaretAtEnd( c );
               applyNewFinishTime(arr[1]);
               break;
 
-            case "TYPE_NAME":
-              typeTxName.push(arr[1]);
-              eventNumberOfTxTypes++;
-              break;
-
             case "TX_COUNT":
               var typeCount = typeTxCount.length + 1;
               var numTxs = arr[1];
@@ -717,42 +787,12 @@ placeCaretAtEnd( c );
             case "FREQ":
               var freqStr = arr[1];
               typeFrequency.push(freqStr);
-              var size = typeFrequency.length;
               var freq = Number(freqStr);
 
               if ((freq < Number("4000000")) && (freq > Number("3500000"))) {
                 eventRadioBand = "80m";
               } else if ((freq < Number("148000000")) && (freq > Number("144000000"))) {
                 eventRadioBand = "2m";
-              }
-
-              switch (size) {
-                case 1:
-                  showFreqSet1();
-                  freq1String(freqStr);
-                  document.getElementById("freqSet1Heading").innerHTML = typeTxName[0] + " Frequency";
-                  break;
-
-                case 2:
-                  showFreqSet2();
-                  freq2String(freqStr);
-                  document.getElementById("freqSet2Heading").innerHTML = typeTxName[1] + " Frequency";
-                  break;
-
-                case 3:
-                  showFreqSet3();
-                  freq3String(freqStr);
-                  document.getElementById("freqSet3Heading").innerHTML = typeTxName[2] + " Frequency";
-                  break;
-
-                case 4:
-                  showFreqSet4();
-                  freq4String(freqStr);
-                  document.getElementById("freqSet4Heading").innerHTML = typeTxName[3] + " Frequency";
-                  break;
-
-                default:
-                  break;
               }
 
               break;
@@ -788,8 +828,8 @@ placeCaretAtEnd( c );
                   //                      foxtext.value = arr[1];
                   console.log("role name: ", arr[1]);
 
-                  var rolecell = document.getElementById("selectedRoleCell");
-                  rolecell.innerHTML = arr[1];
+//                  var rolecell = document.getElementById("selectedRoleCell");
+//                  rolecell.innerHTML = arr[1];
                 }
               }
               break;
@@ -895,7 +935,7 @@ placeCaretAtEnd( c );
       var b = document.getElementById("callText");
       var btext = "";
       if (b != null) {
-        btext = b.innerHTML;
+        btext = b.value;
         btext = "CALLSIGN," + btext;
         sendToSocket(btext);
       }
@@ -947,7 +987,7 @@ placeCaretAtEnd( c );
       var x = document.getElementById("callText");
 
       if (x != null) {
-        var callString = x.innerHTML;
+        var callString = x.value;
         var isValid = false;
 
         if (hasNumber(callString) && hasAlpha(callString) && (callString.length > 2)) {
@@ -964,28 +1004,10 @@ placeCaretAtEnd( c );
     }
 
     function foxClick() {
-      var x;
-      var msgText = "";
-
-      var newTypeIndex = txDesignation.typeIndex;
-      var newSubIndex = txDesignation.subIndex + 1;
-
-      if (newSubIndex >= typeTxCount[txDesignation.typeIndex]) {
-        newTypeIndex++;
-        newSubIndex = 0;
-        if (newTypeIndex >= typeTxName.length) {
-          newTypeIndex = 0;
-        }
-      }
-
-      txDesignation.typeIndex = newTypeIndex;
-      txDesignation.subIndex = newSubIndex;
-
-      console.log("typeIndex = " + txDesignation.typeIndex);
-      console.log("subIndex = " + txDesignation.subIndex);
-
-      msgText = "TX_ROLE," + newTypeIndex + ":" + newSubIndex;
-
+      g_selectedTxType = document.getElementById("roleSelect").value;;
+      var msgText = "TX_ROLE," + g_typeTxName.find(g_typeTxName => g_typeTxName.name == g_selectedTxType).indices;
+      var theEvent = g_eventTableData.find(g_eventTableData => g_eventTableData.name == g_selectedEvent);
+      theEvent.role = g_selectedTxType;
       console.log(msgText);
 
       if (msgText.length > 0) {
@@ -1101,6 +1123,19 @@ placeCaretAtEnd( c );
       dtText.value = time;
     }
 
+    function epochToLocalDateTimeFormat(epoch_ms)
+    {
+      var local = new Date(epoch_ms);
+ 
+      var mon = ("0" + (local.getMonth() + 1)).slice(-2);
+      var day = ("0" + local.getDate()).slice(-2);
+      var hour = ("0" + local.getHours()).slice(-2);
+      var min = ("0" + local.getMinutes()).slice(-2);
+      var timeStr = local.getFullYear() + "-" + mon + "-" + day + "T" + hour + ":" + min;
+
+      return timeStr;
+    }
+
     function newFinishTime() {
       var msgText = "";
       var dtText = document.getElementById("datetimeFinish");
@@ -1145,12 +1180,46 @@ placeCaretAtEnd( c );
       return /\D/.test(myString);
     }
 
+    function statusMessageText(startTimeEpoch, finishTimeEpoch)
+    {
+      var statusMsg;
+      var s = startTimeEpoch;
+      var n = (new Date).getTime();
+      var f = finishTimeEpoch;
+
+      if(s>946684800000) s/= 1000;
+      if(n>946684800000) n/= 1000;
+      if(f>946684800000) f/=1000;
+
+      if (n > s) {
+        if (n > f) {
+          statusMsg = "Finished";
+        } else {
+          statusMsg = "Ongoing";
+        }
+      } else {
+        statusMsg = "Scheduled";
+
+        var del = (s - n)/60;
+        del = del.toFixed();
+
+        if (del > 10) {
+          statusMsg = "In " + del + "m";
+        } else {
+          statusMsg = "Starting";
+        }
+      }
+
+      return statusMsg;
+    }
+
+
     function updateTextFormatting() {
       var callsignText = document.getElementById("callText");
       var callString = "";
 
       if (callsignText != null) {
-        callString = String(callsignText.innerHTML);
+        callString = String(callsignText.value);
         if (hasNumber(callString) && hasAlpha(callString) && (callString.length > 2)) {
           callsignText.style.color = "blue";
         } else {
@@ -1160,134 +1229,6 @@ placeCaretAtEnd( c );
 
       if (stillConnected == 0) {
         setOverlay("Disconnected");
-      }
-
-      var startTime = document.getElementById("datetimeStart");
-      var finishTime = document.getElementById("datetimeFinish");
-      var startTimeMsg = document.getElementById("startTimeMsg");
-      var finishTimeMsg = document.getElementById("finishTimeMsg");
-      var ns = new Date();
-
-      var txt = "";
-
-      if (startTime != null) {
-        txt = startTime.value;
-
-        var ss = "";
-        var s;
-        if (startTime != null) {
-          ss = new Date(forceValueToLocalTime(startTime.value));
-          s = ss.getTime();
-        } else {
-          ss = new Date();
-          s = ss.getTime();
-        }
-
-        if (finishTime != null) {
-          var fs = new Date(forceValueToLocalTime(finishTime.value));
-
-          var n = ns.getTime();
-          var f = fs.getTime();
-
-          if (startTimeMsg != null) {
-            startTimeMsg.style.color = "black";
-          }
-
-          if (finishTimeMsg != null) {
-            finishTimeMsg.style.color = "black";
-          }
-
-          if (n > s) {
-            if (n > f) {
-              if (startTimeMsg != null) {
-                startTimeMsg.style.color = "red";
-                startTimeMsg.innerHTML = "&lt;Event Disabled";
-              }
-
-              if (startTime != null) {
-                startTime.style.color = "gray";
-              }
-
-              if (finishTimeMsg != null) {
-                finishTimeMsg.innerHTML = "";
-              }
-
-              if (finishTime != null) {
-                finishTime.style.color = "gray";
-              }
-            } else if ((f - n) > 10) {
-
-              if (startTimeMsg != null) {
-                startTimeMsg.innerHTML = "&lt;Manual Start";
-              }
-
-              if (startTime != null) {
-                startTime.style.color = "gray";
-              }
-
-              if (finishTime != null) {
-                finishTime.style.color = "blue";
-              }
-
-              var duration = Math.ceil((f - n) / 60000);
-              var msg = "&lt;in " + duration + " mins";
-
-              if (finishTimeMsg != null) {
-                finishTimeMsg.innerHTML = msg;
-              }
-            } else {
-
-              if (finishTime != null) {
-                finishTime.style.color = "red";
-              }
-
-              if (finishTimeMsg != null) {
-                finishTimeMsg.style.color = "red";
-                finishTimeMsg.innerHTML = "&lt;Event Too Short!";
-              }
-            }
-          } else {
-
-            if (startTime != null) {
-              startTime.style.color = "blue";
-            }
-
-            if (startTimeMsg != null) {
-              startTimeMsg.innerHTML = "&lt;Timed Start";
-            }
-
-            if (s > f) {
-
-              if (finishTimeMsg != null) {
-                finishTimeMsg.innerHTML = "&lt;Never Ends";
-              }
-
-              if (finishTime != null) {
-                finishTime.style.color = "gray";
-              }
-            } else if ((f - s) > 10) {
-              if (finishTime != null) {
-                finishTime.style.color = "blue";
-              }
-
-              var duration = (f - s) / 60000;
-              var msg = "&lt; " + duration + " mins";
-
-              if (finishTimeMsg != null) {
-                finishTimeMsg.innerHTML = msg;
-              }
-            } else {
-              if (finishTime != null) {
-                finishTime.style.color = "red";
-              }
-
-              if (finishTimeMsg != null) {
-                finishTimeMsg.style.color = "red";
-                finishTimeMsg.innerHTML = "&lt;Event Too Short!";
-              }
-            }
-          }
-        }
       }
 
       var freq1 = document.getElementById("freq1Text");
@@ -1840,6 +1781,66 @@ placeCaretAtEnd( c );
 
     ////////////////////////////////////////////////////////////
 
+    function toggleFreqSettings() {
+      var x = document.getElementById("freqSet1");
+
+console.log("Toggle: ", x);
+
+      if(x.style.display == "block")
+      {
+        hideFreqSettings();
+      }
+      else
+      {
+        showFreqSettings();
+      }
+    }
+
+    function showFreqSettings() {
+      var size = typeFrequency.length;
+
+console.log("Show: ", size);
+
+      switch (size) {
+        case 4:
+          showFreqSet4();
+          freqStr = typeFrequency[3];
+          freq1String(freqStr);
+          document.getElementById("freqSet4Heading").innerHTML = g_typeTxName[3] + " Frequency";
+
+        case 3:
+          showFreqSet3();
+          freqStr = typeFrequency[2];
+          freq2String(freqStr);
+          document.getElementById("freqSet3Heading").innerHTML = g_typeTxName[2] + " Frequency";
+
+        case 2:
+          showFreqSet2();
+          freqStr = typeFrequency[1];
+          freq3String(freqStr);
+          document.getElementById("freqSet2Heading").innerHTML = g_typeTxName[1] + " Frequency";
+
+        case 1:
+          showFreqSet1();
+          freqStr = typeFrequency[0];
+          freq4String(freqStr);
+          document.getElementById("freqSet1Heading").innerHTML = g_typeTxName[0] + " Frequency";
+          break;
+
+        default:
+          break;
+      }
+    }
+
+    function hideFreqSettings() {
+      hideFreqSet1();
+      hideFreqSet2();
+      hideFreqSet3();
+      hideFreqSet4();
+    }
+
+    ////////////////////////////////////////////////////////////
+
     function showFreqSet1() {
       var x = document.getElementById("freqSet1");
       x.style.display = "block";
@@ -2015,7 +2016,7 @@ placeCaretAtEnd( c );
       <table>
         <tr>
           <td style="text-align:left; vertical-align:center;">
-            <button id="SyncButton" class="button" style="background-color:#EEE; width:100px; height:25px; font-size:20px color:Black; font-weight:bold; vertical-align:center;" onclick="syncClock();">Sync</button>
+            <button id="SyncButton" class="incbutton" onclick="syncClock();">Sync</button>
           </td>
         </tr>
       </table>
@@ -2034,7 +2035,7 @@ placeCaretAtEnd( c );
       <table>
         <tr>
           <td>
-            <button id="FreqDownButton" class="button" style="background-color:#EEE; width:100px; height:25px; font-size:20px color:Black; font-weight:bold; vertical-align:center;" onclick="decFreq1Click();">DEC</button>
+            <button id="FreqDownButton" class="decbutton" onclick="decFreq1Click();">DEC</button>
           </td>
 
           <td>
@@ -2042,7 +2043,7 @@ placeCaretAtEnd( c );
           </td>
 
           <td style="width:14.4px; text-align: left">
-            <button id="FreqUpButton" class="button" style="background-color:#EEE; width:100px; height:25px; font-size:20px color:Black; font-weight:bold; vertical-align:center;" onclick="incFreq1Click();">INC</button>
+            <button id="FreqUpButton" class="incbutton" onclick="incFreq1Click();">INC</button>
           </td>
         </tr>
       </table>
@@ -2068,7 +2069,7 @@ placeCaretAtEnd( c );
       <table>
         <tr>
           <td>
-            <button id="freq2DownButton" class="button" style="background-color:#EEE; width:100px; height:25px; font-size:20px color:Black; font-weight:bold; vertical-align:center;" onclick="decFreq2Click();">DEC</button>
+            <button id="freq2DownButton" class="decbutton" onclick="decFreq2Click();">DEC</button>
           </td>
 
           <td style="text-align:center color:black font-weight:bold;">
@@ -2076,7 +2077,7 @@ placeCaretAtEnd( c );
           </td>
 
           <td style="width:14.4px; text-align:left">
-            <button id="freq2UpButton" class="button" style="background-color:#EEE; width:100px; height:25px; font-size:20px color:Black; font-weight:bold; vertical-align:center;" onclick="incFreq2Click();">INC</button>
+            <button id="freq2UpButton" class="incbutton" onclick="incFreq2Click();">INC</button>
           </td>
         </tr>
       </table>
@@ -2102,7 +2103,7 @@ placeCaretAtEnd( c );
       <table>
         <tr>
           <td>
-            <button id="freq3DownButton" class="button" style="background-color:#EEE; width:100px; height:25px; font-size:20px color:Black; font-weight:bold; vertical-align:center;" onclick="decFreq3Click();">DEC</button>
+            <button id="freq3DownButton" class="decbutton" onclick="decFreq3Click();">DEC</button>
           </td>
 
           <td>
@@ -2110,7 +2111,7 @@ placeCaretAtEnd( c );
           </td>
 
           <td style="width:14.4px; text-align: left">
-            <button id="freq3UpButton" class="button" style="background-color:#EEE; width:100px; height:25px; font-size:20px color:Black; font-weight:bold; vertical-align:center;" onclick="incFreq3Click();">INC</button>
+            <button id="freq3UpButton" class="incbutton" onclick="incFreq3Click();">INC</button>
           </td>
         </tr>
       </table>
@@ -2136,7 +2137,7 @@ placeCaretAtEnd( c );
       <table>
         <tr>
           <td>
-            <button id="freq4DownButton" class="button" style="background-color:#EEE; width:100px; height:25px; font-size:20px color:Black; font-weight:bold; vertical-align:center;" onclick="decFreq4Click();">DEC</button>
+            <button id="freq4DownButton" class="decbutton" onclick="decFreq4Click();">DEC</button>
           </td>
 
           <td>
@@ -2144,7 +2145,7 @@ placeCaretAtEnd( c );
           </td>
 
           <td style="width:14.4px; text-align: left">
-            <button id="freq4UpButton" class="button" style="background-color:#EEE; width:100px; height:25px; font-size:20px color:Black; font-weight:bold; vertical-align:center;" onclick="incFreq4Click();">INC</button>
+            <button id="freq4UpButton" class="incbutton" onclick="incFreq4Click();">INC</button>
           </td>
         </tr>
       </table>
