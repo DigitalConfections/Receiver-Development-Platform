@@ -1288,6 +1288,181 @@ void httpWebServerLoop()
         case TX_READ_ALL_EVENTS_FILES:
           {
             populateEventFileList();
+            g_numberOfScheduledEvents = numberOfEventsScheduled(g_timeOfDayFromTx);
+            g_ESP_ATMEGA_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
+          }
+          break;
+
+        case TX_HTML_SAVE_CHANGES:
+        {
+            if (g_activeEvent != NULL) g_activeEvent->writeEventFile(); /* save any changes made to the active event */
+            g_ESP_ATMEGA_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
+        }
+        break;
+        
+        case TX_HTML_REFRESH_EVENTS:
+          {
+            if (g_activeEvent != NULL) g_activeEvent->writeEventFile(); /* save any changes made to the active event */
+            populateEventFileList(); /* read any values that might have changed into the event list */
+            g_numberOfScheduledEvents = numberOfEventsScheduled(g_timeOfDayFromTx);
+            /* order the list appropriately */
+
+            if (g_eventsRead) {
+              if (g_activeEvent == NULL)
+              {
+                g_activeEvent = new Event(g_debug_prints_enabled);
+                g_activeEventIndex = 0;
+                g_activeEvent->readEventFile(g_eventList[0].path);
+              }
+
+              /* Send commands to refresh the HTML table of events */
+              /* Send a command to reselect the appropriate event table row */
+
+              if (g_eventsRead)
+              {
+                if ((g_selectedEventName != "") && (g_activeEvent != NULL))
+                {
+                  bool found = false;
+
+                  for (int i = 0; i < g_eventsRead; i++)
+                  {
+                    if (g_selectedEventName.equals(g_eventList[i].ename))
+                    {
+                      g_activeEventIndex = i;
+                      found = true;
+                      break;
+                    }
+                  }
+
+                  if (!found) g_activeEventIndex = (g_activeEventIndex + 1) % g_eventsRead;
+
+                  g_activeEvent->readEventFile(g_eventList[g_activeEventIndex].path);
+                }
+                else
+                {
+                  if (g_activeEvent == NULL)
+                  {
+                    g_activeEventIndex = 0;
+                    g_activeEvent = new Event(g_debug_prints_enabled);
+                    g_activeEvent->readEventFile(g_eventList[0].path);
+                  }
+                  else if (!firstPageLoad)
+                  {
+                    g_activeEventIndex = (g_activeEventIndex + 1) % g_eventsRead;
+                    g_activeEvent->readEventFile(g_eventList[g_activeEventIndex].path);
+                  }
+                  else
+                  {
+                    firstPageLoad = false;
+                  }
+                }
+
+                String msg;
+//                String msg = String(String(SOCK_COMMAND_EVENT_NAME) + "," + g_activeEvent->getEventName() );
+//                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+//                if (g_debug_prints_enabled)
+//                {
+//                  Serial.println(msg);
+//                }
+
+//                g_http_server.handleClient();
+//                g_webSocketServer.loop();
+
+                for (int i = 0; i < g_eventsRead; i++)
+                {
+                  msg = String(String(SOCK_COMMAND_REFRESH) + "," + g_eventList[i].ename + "," + g_eventList[i].vers + "," +  g_eventList[i].startDateTimeEpoch + "," +  g_eventList[i].finishDateTimeEpoch + "," + g_eventList[i].role + "," + g_eventList[i].callsign + "," + g_eventList[i].freq);
+                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+                }
+
+                msg = String(String(SOCK_COMMAND_REFRESH) + ",Done");
+                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+
+                g_http_server.handleClient();
+                g_webSocketServer.loop();
+
+//                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
+//                {
+//                  for (int j = 0; j < g_activeEvent->getNumberOfTxsForRole(i); j++)
+//                  {
+//                    String role_tx = String(String(i) + ":" + String(j));
+//                    msg = String(String(SOCK_COMMAND_TYPE_NAME) + "," + g_activeEvent->getTxDescriptiveName(role_tx) + "," + role_tx);
+//                    g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+//                    g_webSocketServer.loop();
+//                    g_http_server.handleClient();
+//                  }
+//                }
+
+//                msg = String(String(SOCK_COMMAND_TYPE_NAME) + ",Done,Done");
+//                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+//                g_webSocketServer.loop();
+//                g_http_server.handleClient();
+
+//                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
+//                {
+//                  msg = String(String(SOCK_COMMAND_TYPE_TX_COUNT) + "," + String(g_activeEvent->getNumberOfTxsForRole(i)));
+//                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+//                  g_webSocketServer.loop();
+//                }
+
+//                g_http_server.handleClient();
+
+                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
+                {
+                  msg = String(String(SOCK_COMMAND_TYPE_FREQ) + "," + String(g_activeEvent->getFrequencyForRole(i)) + "," + g_activeEvent->getRolename(i));
+                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+                  g_webSocketServer.loop();
+                }
+
+                g_http_server.handleClient();
+
+//                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
+//                {
+//                  msg = String(String(SOCK_COMMANT_TYPE_PWR) + "," + String(g_activeEvent->getPowerlevelForRole(i)));
+//                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+//                  g_webSocketServer.loop();
+//                }
+
+//                g_http_server.handleClient();
+
+//                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
+//                {
+//                  msg = String(String(SOCK_COMMAND_TYPE_WPM) + "," + String(g_activeEvent->getCodeSpeedForRole(i)));
+//                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+//                  if (g_debug_prints_enabled)
+//                  {
+//                    Serial.println(msg);
+//                  }
+//                }
+
+//                g_http_server.handleClient();
+//                g_webSocketServer.loop();
+
+//                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
+//                {
+//                  msg = String(String(SOCK_COMMAND_TYPE_ID_INTERVAL) + "," + String(g_activeEvent->getIDIntervalForRole(i)));
+//                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+//                  if (g_debug_prints_enabled)
+//                  {
+//                    Serial.println(msg);
+//                  }
+//                }
+
+//                g_http_server.handleClient();
+//                g_webSocketServer.loop();
+
+                msg = String(String(SOCK_COMMAND_TX_ROLE) + "," + g_activeEvent->getTxAssignment());
+                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+                if (g_debug_prints_enabled)
+                {
+                  Serial.println(msg);
+                }
+              }
+              else if (g_debug_prints_enabled)
+              {
+                Serial.println("No events found!");
+              }
+            }
+
             g_ESP_ATMEGA_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
           }
           break;
@@ -1295,6 +1470,9 @@ void httpWebServerLoop()
         case TX_HTML_PAGE_SERVED:
           {
             firstPageLoad = true;
+
+            populateEventFileList();
+            g_numberOfScheduledEvents = numberOfEventsScheduled(g_timeOfDayFromTx);
 
             if (g_eventsRead) {
               if (g_activeEvent == NULL) g_activeEvent = new Event(g_debug_prints_enabled);
@@ -1307,7 +1485,9 @@ void httpWebServerLoop()
 
         case TX_HTML_NEXT_EVENT:
           {
-            if (g_activeEvent != NULL) g_activeEvent->writeEventFile(); /* save any changes */
+            if (g_activeEvent != NULL) g_activeEvent->writeEventFile(); /* save any changes made to the active event */
+            populateEventFileList(); /* read any values that might have changed into the event list */
+            g_numberOfScheduledEvents = numberOfEventsScheduled(g_timeOfDayFromTx);
 
             if (g_numberOfSocketClients) {
               String msg;
@@ -1349,10 +1529,10 @@ void httpWebServerLoop()
                 if ((g_selectedEventName != "") && (g_activeEvent != NULL))
                 {
                   bool found = false;
-                  
-                  for(int i=0; i<g_eventsRead; i++)
+
+                  for (int i = 0; i < g_eventsRead; i++)
                   {
-                    if(g_selectedEventName.equals(g_eventList[i].ename))
+                    if (g_selectedEventName.equals(g_eventList[i].ename))
                     {
                       g_activeEventIndex = i;
                       found = true;
@@ -1360,8 +1540,8 @@ void httpWebServerLoop()
                     }
                   }
 
-                  if(!found) g_activeEventIndex = (g_activeEventIndex + 1) % g_eventsRead;
-                  
+                  if (!found) g_activeEventIndex = (g_activeEventIndex + 1) % g_eventsRead;
+
                   g_activeEvent->readEventFile(g_eventList[g_activeEventIndex].path);
                 }
                 else
@@ -1395,127 +1575,120 @@ void httpWebServerLoop()
 
                 for (int i = 0; i < g_eventsRead; i++)
                 {
-                  msg = String(String(SOCK_COMMAND_EVENT_DATA) + "," + g_eventList[i].ename + "," + g_eventList[i].vers + "," +  g_eventList[i].startDateTimeEpoch + "," +  g_eventList[i].finishDateTimeEpoch + "," + g_eventList[i].role);
+                  msg = String(String(SOCK_COMMAND_EVENT_DATA) + "," + g_eventList[i].ename + "," + g_eventList[i].vers + "," +  g_eventList[i].startDateTimeEpoch + "," +  g_eventList[i].finishDateTimeEpoch + "," + g_eventList[i].role + "," + g_eventList[i].callsign + "," + g_eventList[i].freq);
                   g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
                 }
 
-                msg = String(String(SOCK_COMMAND_EVENT_FILE_VERSION) + "," + g_activeEvent->getEventFileVersion() );
+                //                msg = String(String(SOCK_COMMAND_EVENT_FILE_VERSION) + "," + g_activeEvent->getEventFileVersion() );
+                //                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+                //                if (g_debug_prints_enabled)
+                //                {
+                //                  Serial.println(msg);
+                //                }
+                //
+
+                //                g_http_server.handleClient();
+                //                g_webSocketServer.loop();
+
+                //                msg = String(String(SOCK_COMMAND_CALLSIGN) + "," + g_activeEvent->getCallsign());
+                //                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+                //                if (g_debug_prints_enabled)
+                //                {
+                //                  Serial.println(msg);
+                //                }
+
+                //                g_http_server.handleClient();
+                //                g_webSocketServer.loop();
+
+                //                msg = String(String(SOCK_COMMAND_START_TIME) + "," + g_activeEvent->getEventStartDateTime());
+                //                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+                //                if (g_debug_prints_enabled)
+                //                {
+                //                  Serial.println(msg);
+                //                }
+
+                //                g_http_server.handleClient();
+                //                g_webSocketServer.loop();
+
+                //                msg = String(String(SOCK_COMMAND_FINISH_TIME) + "," + g_activeEvent->getEventFinishDateTime());
+                //                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+                //                if (g_debug_prints_enabled)
+                //                {
+                //                  Serial.println(msg);
+                //                }
+
+                g_http_server.handleClient();
+                g_webSocketServer.loop();
+
+                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
+                {
+                  for (int j = 0; j < g_activeEvent->getNumberOfTxsForRole(i); j++)
+                  {
+                    String role_tx = String(String(i) + ":" + String(j));
+                    msg = String(String(SOCK_COMMAND_TYPE_NAME) + "," + g_activeEvent->getTxDescriptiveName(role_tx) + "," + role_tx);
+                    g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+                    g_webSocketServer.loop();
+                    g_http_server.handleClient();
+                  }
+                }
+
+                msg = String(String(SOCK_COMMAND_TYPE_NAME) + ",Done,Done");
                 g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                if (g_debug_prints_enabled)
-                {
-                  Serial.println(msg);
-                }
-
-                g_http_server.handleClient();
                 g_webSocketServer.loop();
-
-                msg = String(String(SOCK_COMMAND_CALLSIGN) + "," + g_activeEvent->getCallsign());
-                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                if (g_debug_prints_enabled)
-                {
-                  Serial.println(msg);
-                }
-
                 g_http_server.handleClient();
-                g_webSocketServer.loop();
 
-                msg = String(String(SOCK_COMMAND_START_TIME) + "," + g_activeEvent->getEventStartDateTime());
-                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                if (g_debug_prints_enabled)
-                {
-                  Serial.println(msg);
-                }
+//                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
+//                {
+//                  msg = String(String(SOCK_COMMAND_TYPE_TX_COUNT) + "," + String(g_activeEvent->getNumberOfTxsForRole(i)));
+//                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+//                  g_webSocketServer.loop();
+//                }
 
-                g_http_server.handleClient();
-                g_webSocketServer.loop();
-
-                msg = String(String(SOCK_COMMAND_FINISH_TIME) + "," + g_activeEvent->getEventFinishDateTime());
-                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                if (g_debug_prints_enabled)
-                {
-                  Serial.println(msg);
-                }
-
-                g_http_server.handleClient();
-                g_webSocketServer.loop();
+//                g_http_server.handleClient();
 
                 for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
                 {
-                  msg = String(String(SOCK_COMMAND_TYPE_NAME) + "," + g_activeEvent->getRolename(i));
+                  msg = String(String(SOCK_COMMAND_TYPE_FREQ) + "," + String(g_activeEvent->getFrequencyForRole(i)) + "," + g_activeEvent->getRolename(i));
                   g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                  if (g_debug_prints_enabled)
-                  {
-                    Serial.println(msg);
-                  }
+                  g_webSocketServer.loop();
                 }
 
                 g_http_server.handleClient();
-                g_webSocketServer.loop();
 
-                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
-                {
-                  msg = String(String(SOCK_COMMAND_TYPE_TX_COUNT) + "," + String(g_activeEvent->getNumberOfTxsForRole(i)));
-                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                  if (g_debug_prints_enabled)
-                  {
-                    Serial.println(msg);
-                  }
-                }
+//                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
+//                {
+//                  msg = String(String(SOCK_COMMANT_TYPE_PWR) + "," + String(g_activeEvent->getPowerlevelForRole(i)));
+//                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+//                  g_webSocketServer.loop();
+//                }
 
-                g_http_server.handleClient();
-                g_webSocketServer.loop();
+//                g_http_server.handleClient();
 
-                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
-                {
-                  msg = String(String(SOCK_COMMAND_TYPE_FREQ) + "," + String(g_activeEvent->getFrequencyForRole(i)));
-                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                  if (g_debug_prints_enabled)
-                  {
-                    Serial.println(msg);
-                  }
-                }
+//                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
+//                {
+//                  msg = String(String(SOCK_COMMAND_TYPE_WPM) + "," + String(g_activeEvent->getCodeSpeedForRole(i)));
+//                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+//                  if (g_debug_prints_enabled)
+//                  {
+//                    Serial.println(msg);
+//                  }
+//                }
 
-                g_http_server.handleClient();
-                g_webSocketServer.loop();
+//                g_http_server.handleClient();
+//                g_webSocketServer.loop();
 
-                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
-                {
-                  msg = String(String(SOCK_COMMANT_TYPE_PWR) + "," + String(g_activeEvent->getPowerlevelForRole(i)));
-                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                  if (g_debug_prints_enabled)
-                  {
-                    Serial.println(msg);
-                  }
-                }
+//                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
+//                {
+//                  msg = String(String(SOCK_COMMAND_TYPE_ID_INTERVAL) + "," + String(g_activeEvent->getIDIntervalForRole(i)));
+//                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+//                  if (g_debug_prints_enabled)
+//                  {
+//                    Serial.println(msg);
+//                  }
+//                }
 
-                g_http_server.handleClient();
-                g_webSocketServer.loop();
-
-                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
-                {
-                  msg = String(String(SOCK_COMMAND_TYPE_WPM) + "," + String(g_activeEvent->getCodeSpeedForRole(i)));
-                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                  if (g_debug_prints_enabled)
-                  {
-                    Serial.println(msg);
-                  }
-                }
-
-                g_http_server.handleClient();
-                g_webSocketServer.loop();
-
-                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
-                {
-                  msg = String(String(SOCK_COMMAND_TYPE_ID_INTERVAL) + "," + String(g_activeEvent->getIDIntervalForRole(i)));
-                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                  if (g_debug_prints_enabled)
-                  {
-                    Serial.println(msg);
-                  }
-                }
-
-                g_http_server.handleClient();
-                g_webSocketServer.loop();
+//                g_http_server.handleClient();
+//                g_webSocketServer.loop();
 
                 msg = String(String(SOCK_COMMAND_TX_ROLE) + "," + g_activeEvent->getTxAssignment());
                 g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
@@ -1524,16 +1697,12 @@ void httpWebServerLoop()
                   Serial.println(msg);
                 }
               }
+              else if (g_debug_prints_enabled)
+              {
+                Serial.println("No events found!");
+              }
             }
             g_ESP_ATMEGA_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
-          }
-          break;
-
-        case TX_RECD_EVENTS_QUERY:
-          {
-            /* Update event file list ? */
-            /* check for a scheduled event with the requested antenna setting ? */
-            g_ESP_ATMEGA_Comm_State = TX_WAKE_UP;
           }
           break;
 
@@ -1809,19 +1978,22 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           int c = p.indexOf(':');
           p = p.substring(c - 1, c + 2);
 
-          String msg = String(String(SOCK_COMMAND_TX_ROLE) + "," + g_activeEvent->getTxDescriptiveName(p));
-          g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+//          String msg = String(String(SOCK_COMMAND_TX_ROLE) + "," + g_activeEvent->getTxDescriptiveName(p));
+//          g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
 
           g_activeEvent->setTxAssignment(p);
+          g_ESP_ATMEGA_Comm_State = TX_HTML_SAVE_CHANGES;
 
-          if (g_debug_prints_enabled)
-          {
-            Serial.println(msg);
-          }
+//          g_ESP_ATMEGA_Comm_State = TX_HTML_NEXT_EVENT;
+
+//          if (g_debug_prints_enabled)
+//          {
+//            Serial.println(msg);
+//          }
         }
         else if (msgHeader == SOCK_COMMAND_EVENT_NAME)
         {
-           if (p.indexOf("NEW!") >= 0)
+          if (p.indexOf("NEW!") >= 0)
           {
             g_selectedEventName = "";
             g_ESP_ATMEGA_Comm_State = TX_HTML_PAGE_SERVED;
@@ -1849,7 +2021,6 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           String msg = String(String(SOCK_COMMAND_CALLSIGN) + "," + p);
 
           g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-
           g_activeEvent->setCallsign(p);
         }
         else if (msgHeader.startsWith(SOCK_COMMAND_START_TIME))
@@ -1865,7 +2036,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           //          Serial.printf(stringObjToConstCharString(&lbMsg)); // Send to Transmitter
 
           g_activeEvent->setEventStartDateTime(p);
-          g_numberOfScheduledEvents = numberOfEventsScheduled(g_timeOfDayFromTx);
+          g_ESP_ATMEGA_Comm_State = TX_HTML_REFRESH_EVENTS;
         }
         else if (msgHeader.startsWith(SOCK_COMMAND_FINISH_TIME))
         {
@@ -1880,6 +2051,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 
           g_activeEvent->setEventFinishDateTime(p);
           g_numberOfScheduledEvents = numberOfEventsScheduled(g_timeOfDayFromTx);
+          g_ESP_ATMEGA_Comm_State = TX_HTML_REFRESH_EVENTS;
         }
         else if (msgHeader == SOCK_COMMAND_TYPE_FREQ)
         {
@@ -1898,6 +2070,10 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           {
             Serial.println("Freq" + String(typeIndex) + ": " + String(freq));
           }
+        }
+        else if (msgHeader == SOCK_COMMAND_REFRESH)
+        {
+          g_ESP_ATMEGA_Comm_State = TX_HTML_REFRESH_EVENTS;
         }
         else if (msgHeader == SOCK_COMMAND_TEST)
         {
@@ -2033,7 +2209,7 @@ bool readEventTimes(String path, EventFileRef* fileRef)
     String s = file.readStringUntil('\n');
     int count = 0;
 
-    while (s.length() && (count++ < MAXIMUM_NUMBER_OF_EVENT_FILE_LINES) && (data_count < 4))
+    while (s.length() && (count++ < MAXIMUM_NUMBER_OF_EVENT_FILE_LINES) && (data_count < 5))
     {
       if (s.indexOf("EVENT_START_DATE_TIME") >= 0)
       {
@@ -2084,6 +2260,18 @@ bool readEventTimes(String path, EventFileRef* fileRef)
           Serial.println("File version: " + fileRef->vers);
         }
       }
+      else if (s.indexOf(EVENT_CALLSIGN) >= 0)
+      {
+        EventLineData data;
+        Event::extractLineData(s, &data);
+        fileRef->callsign = data.value;
+        data_count++;
+
+        if ( g_debug_prints_enabled )
+        {
+          Serial.println("Callsign: " + fileRef->callsign);
+        }
+      }
 
       s = file.readStringUntil('\n');
     }
@@ -2094,17 +2282,15 @@ bool readEventTimes(String path, EventFileRef* fileRef)
 
     if (g_debug_prints_enabled)
     {
-      Serial.println(String("Read file: ") + path);
+      Serial.println(String("Read times: ") + path);
     }
   }
 
-  return (data_count != 4);
+  return (data_count != 5);
 }
 
 bool populateEventFileList(void)
 {
-  String path = "/defaults.txt";
-
   if ( g_debug_prints_enabled ) Serial.println("Reading events...");
 
   g_eventsRead = 0;
@@ -2140,7 +2326,8 @@ bool populateEventFileList(void)
       Serial.println( "    " + String(g_eventList[i].vers));
       Serial.println( "    " + String(g_eventList[i].ename));
       Serial.println( "    " + String(g_eventList[i].role));
-
+      Serial.println( "    " + String(g_eventList[i].callsign));
+      Serial.println( "    " + String(g_eventList[i].freq));
     }
     Serial.printf("\n");
   }

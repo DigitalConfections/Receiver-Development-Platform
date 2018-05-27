@@ -7,7 +7,7 @@
 
 #define MAXIMUM_NUMBER_OF_EVENTS 20
 #define MAXIMUM_NUMBER_OF_EVENT_FILE_LINES 200
-#define MAXIMUM_NUMBER_OF_ME_FILE_LINES 3
+#define MAXIMUM_NUMBER_OF_ME_FILE_LINES 4
 #define MAXIMUM_NUMBER_OF_EVENT_TX_TYPES 4
 #define MAXIMUM_NUMBER_OF_TXs_OF_A_TYPE 10
 
@@ -16,7 +16,7 @@
 #define EVENT_BAND "EVENT_BAND" /* Band that is used: 80M or 2M - used to restrict frequency choices */
 #define EVENT_ANTENNA_PORT "EVENT_ANT_PORT" /* Used to determine whether the correct antenna is attached: ANT_80M_1, ANT_80M_2, ANT_80M_3, ANT_2M */
 #define EVENT_CALLSIGN "EVENT_CALLSIGN" /* For station ID */
-#define EVENT_CALLSIGN_SPEED "EVENT_CALLSIGN_SPEED" /* CW speed (WPM) at which ID is sent */
+#define EVENT_CALLSIGN_SPEED "EVENT_SPEED_CALLSIGN" /* CW speed (WPM) at which ID is sent */
 #define EVENT_START_DATE_TIME "EVENT_START_DATE_TIME" /* Start date and time in yyyy-mm-ddThh:mm:ssZ format */
 #define EVENT_FINISH_DATE_TIME "EVENT_FINISH_DATE_TIME" /* Finish date and time in yyyy-mm-ddThh:mm:ssZ format */
 #define EVENT_MODULATION "EVENT_MODULATION" /* AM or CW for 2m events, only CW for 80m events */
@@ -33,6 +33,7 @@
 #define TYPE_TX_DELAY_TIME "_DELAY_TIME" /* For what period of time (seconds) should a transmitter wait prior to beginning to send its first transmission */
 #define TX_ASSIGNMENT "TX_ASSIGNMENT" /* Which role and time slot is assigned to this transmitter: "r:t" */
 #define TX_DESCRIPTIVE_NAME "TX_ROLE_NAME" /* Descriptive name of role assignment */
+#define TX_ROLE_FREQ "TX_ROLE_FREQ" /* Frequency of role assignment */
 #define TX_ASSIGNMENT_IS_DEFAULT "TX_DEFAULT" /* Identifies the assignment as the default assignment */
 typedef struct {
   String path;
@@ -41,6 +42,8 @@ typedef struct {
   String vers;
   String ename;
   String role;
+  String callsign;
+  String freq;
 } EventFileRef;
 
 typedef struct {
@@ -67,7 +70,8 @@ typedef struct RoleDataStruct {
 
 typedef struct EventDataStruct {
   String tx_assignment; // <- Role and time slot assigned to this tx: "r:t" 
-  String tx_role_name; // <- Descriptive name of Role
+  String tx_role_name; // <- Descriptive name ofassigned Role
+  String tx_role_freq; // <- Frequency of the assigned Role
   bool   tx_assignment_is_default; // <- Indicates that the transmitter has never receieved a specific role assignment
   String event_name; // "Classic 2m"      <- Human-readable event name
   String event_file_version; // <- Free-form text for tracking event revisions
@@ -97,7 +101,7 @@ class Event {
     ~Event();
 
     String readMeFile(String path);
-    void saveTxAssignment(String newAssignment);
+    void saveMeData(String newAssignment);
     bool setTxAssignment(String role_slot);
     String getTxAssignment(void);
 

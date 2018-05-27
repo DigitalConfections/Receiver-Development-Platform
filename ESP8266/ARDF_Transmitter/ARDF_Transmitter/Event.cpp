@@ -125,12 +125,13 @@ bool Event::isSoonerEvent(EventFileRef a, EventFileRef b, unsigned long currentE
   }
 }
 
+
 String Event::getTxDescriptiveName(String role_tx) // role_tx = "r:t"
 {
   String theName = "";
   int i = role_tx.indexOf(":");
 
-  if (i < 1) return String("Error");
+  if (i < 1) return String("Error(:)");
 
   int roleIndex = (role_tx.substring(0, i)).toInt(); // r
   int txIndex = (role_tx.substring(i + 1)).toInt(); // t
@@ -140,16 +141,6 @@ String Event::getTxDescriptiveName(String role_tx) // role_tx = "r:t"
   if (((roleIndex >= 0) && (roleIndex < this->eventData->event_number_of_tx_types)) && ((txIndex >= 0) && (txIndex < this->eventData->role[roleIndex]->numberOfTxs)))
   {
     int txsInRole = this->eventData->role[roleIndex]->numberOfTxs;
-    //  int rolesInEvent = this->eventData->event_number_of_tx_types;
-
-    //  txIndex++;
-    //  if (txIndex >= txsInRole)
-    //  {
-    //    txIndex = 0;
-    //
-    //    roleIndex++;
-    //    if (roleIndex >= rolesInEvent) roleIndex = 0;
-    //  }
 
     theName = this->eventData->role[roleIndex]->rolename;
 
@@ -198,6 +189,7 @@ String Event::readMeFile(String path)
 
     file.println(TX_ASSIGNMENT + String(",0:0"));
     file.println(String(TX_DESCRIPTIVE_NAME) + "," + getTxDescriptiveName("0:0"));
+    file.println(String(TX_ROLE_FREQ) + "," + String(this->getFrequencyForRole(0)));
     file.println(TX_ASSIGNMENT_IS_DEFAULT + String(",true"));
     file.close(); // Close the file
     if (debug_prints_enabled) Serial.println(String("\tWrote file: ") + path);
@@ -242,14 +234,17 @@ bool Event::extractMeFileData(String path, EventFileRef* eventRef)
       {
         eventRef->role = data.value;
         fail = false;
-        break;
       }
-      else
+      else if (data.id.equalsIgnoreCase(TX_ROLE_FREQ))
       {
-        s = file.readStringUntil('\n');
+        eventRef->freq = data.value;
+        fail = false;
       }
+      // ignore TX_ASSIGNMENT "TX_ASSIGNMENT" /* Which role and time slot is assigned to this transmitter: "r:t" */
+
+      s = file.readStringUntil('\n');
     }
-    
+
     file.close(); // Close the file
   }
   else
@@ -258,10 +253,12 @@ bool Event::extractMeFileData(String path, EventFileRef* eventRef)
 
     file.println(TX_ASSIGNMENT + String(",0:0"));
     file.println(String(TX_DESCRIPTIVE_NAME) + ",?");
+    file.println(String(TX_ROLE_FREQ) + ",?");
     file.println(TX_ASSIGNMENT_IS_DEFAULT + String(",true"));
     file.close(); // Close the file
 
     eventRef->role = "?";
+    eventRef->freq = "?";
     fail = false;
   }
 
@@ -311,7 +308,7 @@ bool Event::readEventFile(String path)
 
   if (debug_prints_enabled)
   {
-    Serial.println(String("\tRead file: ") + path);
+    Serial.println(String("\tRead event: ") + path);
   }
 
   return false;
@@ -438,42 +435,47 @@ bool Event::writeEventFile(String path)
     return true;
   }
 
-  saveTxAssignment("");
+  saveMeData("");
 
   return false;
 }
 
-void Event::saveTxAssignment(String newAssignment)
+void Event::saveMeData(String newAssignment)
 {
   if (this->eventData == NULL) return;
   if ((this->eventData->tx_assignment.length() < 3) || (this->eventData->tx_assignment.indexOf(":") < 1)) return;
   if (this->myPath.length() < 7) return;
 
-  String hold;
+  String holdTxAssignment;
+  String holdRoleName = this->eventData->tx_role_name;
+  String holdRoleFrequency = this->eventData->tx_role_freq;
 
   if (newAssignment.indexOf(":") < 1)
   {
-    hold = this->eventData->tx_assignment;
+    holdTxAssignment = this->eventData->tx_assignment;
   }
   else
   {
-    hold = newAssignment;
+    holdTxAssignment = newAssignment;
   }
+
 
   String path = readMeFile(this->myPath); // assigns file value to this->eventData->tx_assignment
 
-  if (!hold.equals(this->eventData->tx_assignment))
+  if ((!holdTxAssignment.equals(this->eventData->tx_assignment)) || (!holdRoleName.equals(this->eventData->tx_role_name)) || (!holdRoleFrequency.equals(this->eventData->tx_role_freq)))
   {
+    String role = holdTxAssignment.substring(0, holdTxAssignment.indexOf(":"));
     File file = SPIFFS.open(path, "w"); // Open the file for writing
 
-    file.println(String(TX_ASSIGNMENT) + "," + hold);
-    file.println(String(TX_DESCRIPTIVE_NAME) + "," + getTxDescriptiveName(hold));
+    file.println(String(TX_ASSIGNMENT) + "," + holdTxAssignment);
+    file.println(String(TX_DESCRIPTIVE_NAME) + "," + getTxDescriptiveName(holdTxAssignment));
+    file.println(String(TX_ROLE_FREQ) + "," + String(this->getFrequencyForRole(role.toInt())));
     file.println(String(TX_ASSIGNMENT_IS_DEFAULT) + ",false");
     file.close(); // Close the file
     if (debug_prints_enabled) Serial.println(String("\tWrote file: ") + path);
   }
 
-  this->eventData->tx_assignment = hold; // set tx_assignment to the latest value
+  this->eventData->tx_assignment = holdTxAssignment; // set tx_assignment to the latest value
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -482,11 +484,15 @@ bool Event::setTxAssignment(String role_slot)
 {
   if (this->eventData == NULL) return true;
   role_slot.trim();
-  if (role_slot.indexOf(":") < 1) return true;
+  int c = role_slot.indexOf(':');
+  if (c < 1) return true;
 
   if (this->eventData->tx_assignment != role_slot)
   {
+    String r = role_slot.substring(0, c - 1);
     this->eventData->tx_assignment = role_slot;
+    this->eventData->tx_role_name = Event::getTxDescriptiveName(role_slot);
+    this->eventData->tx_role_freq = Event::getFrequencyForRole(r.toInt());
     this->values_did_change = true;
     Serial.println("Set role: " + this->eventData->tx_assignment);
   }
@@ -898,6 +904,10 @@ bool Event::setEventData(String id, String value) {
   else if (id.equalsIgnoreCase(TX_DESCRIPTIVE_NAME))
   {
     this->eventData->tx_role_name = value;
+  }
+  else if (id.equalsIgnoreCase(TX_ROLE_FREQ))
+  {
+    this->eventData->tx_role_freq = value;
   }
   else if (id.equalsIgnoreCase(TX_ASSIGNMENT_IS_DEFAULT))
   {

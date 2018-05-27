@@ -210,29 +210,15 @@
     var webSocketTxTimer = 0;
     var lastSocketTxMessage;
     var transmitterTimeMs = 0;
-
+    var g_websock = null;
     var g_timesync_rcvd = 0;
 
     ///////////////////////////////
     // Settings
-    var masterCloneSetting;
-    var eventName = ""; /* Human readable event name. Should contain band that is used: 80M or 2M */
-    var g_eventCallsign = "Callsign"; /* Callsign for use in the selected event */
-    var eventStartDateTime = "2018-01-01T00:00:00"; /* Start date and time in yyyy-mm-ddThh:mm:ssZ format */
-    var eventFinishDateTime = "2018-01-01T00:00:00"; /* Finish date and time in yyyy-mm-ddThh:mm:ssZ format */
-    var eventNumberOfTxTypes = 2; /* Quantity of different "roles": Home, Foxes, Fast Foxes, Slow Foxes, etc. */
+    var eventNumberOfTxTypes = 0; /* Quantity of different "roles": Home, Foxes, Fast Foxes, Slow Foxes, etc. */
     var g_typeTxName = [{name:"Name", indices:"0:0"}]; /* Human readable "role" name: "Home", and indices: "0:1" */
     var g_selectedTxType;
-    var typeTxCount = []; /* Number of transmitters in a particular "role" */
-    var typeFrequency = [3510000, 3600000]; /* Frequency used by transmitters in that "role" */
-    var typePower = [1000, 1000]; /* Transmit power in mW for transmitters in that "role" */
-    var typeWPM = []; /* Morse code speed for transmitters in that "role" */
-    var typeIDinterval = [60, 60]; /* Period for sending station ID for transmitters in that "role" */
-    var txDesignation = {
-      typeIndex: 0,
-      subIndex: 0,
-      pattern: "MO"
-    }; /* What role is assigned to this transmitter for this event */
+    var g_typeFrequency = [{frequency:3510000, role:"Role"}]; /* Frequency used by transmitters in that "role" */
 
     var g_eventTableData = [{
       name: "Event",
@@ -240,8 +226,10 @@
       start: "Start",
       finish: "Finish",
       role: "Fox",
-      callsign: "Call"
+      callsign: "Call",
+      frequency: "Freq"
     }]; /* Event data to display in a table header */
+
     var g_selectedEvent = "";
 
     ///////////////////////////////
@@ -257,7 +245,7 @@
       return -1;
     }
 
-    function displayEvents() {
+    function displayEvents(erase) {
       var eventNum = g_eventTableData.length;
       var eventTable = document.getElementById("demo");
 
@@ -266,14 +254,27 @@
 
       console.log("rowCount = ", rowCount);
 
-      for (var x = rowCount - 1; x >= 0; x--) {
-        eventTable.removeChild(tableRows[x]);
+      if(erase == true)
+      {
+        for (var x = rowCount - 1; x >= 0; x--) {
+          eventTable.removeChild(tableRows[x]);
+        }
+
+        eventTable.appendChild(eventRow(g_eventTableData[0], true));
+
+        for (var i = 1; i < eventNum; i++) {
+          eventTable.appendChild(eventRow(g_eventTableData[i], false));
+        }
       }
-
-      eventTable.appendChild(eventRow(g_eventTableData[0], true));
-
-      for (var i = 1; i < eventNum; i++) {
-        eventTable.appendChild(eventRow(g_eventTableData[i], false));
+      else
+      {
+console.log("Refreshing table cells");
+        for (var i = 1, row; row = eventTable.rows[i]; i++) {
+          var rowData = g_eventTableData[i];
+          for (var j = 0, col; col = row.cells[j]; j++) {
+            col = rowData[j];
+          }  
+        }
       }
     }
 
@@ -523,17 +524,21 @@ console.log("TxType name:", g_typeTxName[i].name);
           entry = rowData.name;
           b.setAttribute("type", "button");
           b.setAttribute("class", "incbutton");
-          b.setAttribute("value", "Set Freq");
+          b.setAttribute("value", freqDotFormat(rowData.freq));
           b.setAttribute("onclick", "toggleFreqSettings();");
           cell8.appendChild(b);
+        }
+        else
+        {
+          cellText = document.createTextNode(freqDotFormat(rowData.freq));
+          cell8.appendChild(cellText);
         }
  
         row.appendChild(cell8);
       }
+
       return row;
     }
-
-    var websock = null;
 
     timeUpdateTimer = setInterval(function() {
       if (stillConnected) {
@@ -542,7 +547,7 @@ console.log("TxType name:", g_typeTxName[i].name);
           stillConnected--;
           if (stillConnected == 0) {
             setOverlay("Disconnected");
-            websock = null;
+console.log("stillConnected timeout!!");
             timedOut = true;
             stillDisconnected = 20;
           }
@@ -567,15 +572,15 @@ console.log("TxType name:", g_typeTxName[i].name);
       console.log("Host: " + host);
 
       if (host.length > 0) {
-        if (websock != null) // socket already exists
+        if (g_websock != null) // socket already exists
         {
-          websock.close();
-          websock = null;
+          g_websock.close();
+          g_websock = null;
         }
 
         try {
           numberOfOpenWebSockets++;
-          websock = new WebSocket("ws://" + window.location.hostname + ":81/");
+          g_websock = new WebSocket("ws://" + window.location.hostname + ":81/");
         } catch (err) {
           document.getElementById("xmtrTime").innerHTML = "Disconnected";
           console.log("Unable to create web socket");
@@ -587,7 +592,7 @@ console.log("TxType name:", g_typeTxName[i].name);
         document.getElementById("xmtrTime").innerHTML = "Disconnected";
         console.log("No websocket host available.");
         websocketcreated = false;
-        websock = null;
+        g_websock = null;
         setOverlay("Disconnected");
       }
 
@@ -595,13 +600,13 @@ console.log("TxType name:", g_typeTxName[i].name);
         document.getElementById("xmtrTime").innerHTML = "Connected";
         sendToSocket("EVENT_NAME,NEW!");
 
-        websock.onopen = function(evt) {
+        g_websock.onopen = function(evt) {
           console.log("websock open");
           websocketcreated = true;
           stillConnected = 5;
         };
 
-        websock.onclose = function(evt) {
+        g_websock.onclose = function(evt) {
           if (numberOfOpenWebSockets) numberOfOpenWebSockets--;
 
           if (numberOfOpenWebSockets == 0) {
@@ -610,18 +615,18 @@ console.log("TxType name:", g_typeTxName[i].name);
               setOverlay("Disconnected");
             }
             websocketcreated = false;
-            websock = null;
+            g_websock = null;
             stillConnected = 0;
           } else {
             console.log("old websock closed");
           }
         };
 
-        websock.onerror = function(evt) {
+        g_websock.onerror = function(evt) {
           console.log("Websock error: " + evt);
         };
 
-        websock.onmessage = function(evt) {
+        g_websock.onmessage = function(evt) {
           var str = evt.data;
           var arr = str.split(",");
 
@@ -638,19 +643,10 @@ console.log("TxType name:", g_typeTxName[i].name);
                 setOverlay(null);
                 g_selectedEvent = arr[1];
                 g_typeTxName = [];
-                typeTxCount = [];
-                typeFrequency = [];
-                typeWPM = [];
-                typeIDinterval = [];
-                typePower = []; /* Transmit power in mW for transmitters in that "role" */
+                g_typeFrequency = [];
                 g_selectedTxType = "";
                 hideFreqSettings();
 
-                txDesignation = {
-                  typeIndex: 0,
-                  subIndex: 0,
-                  pattern: "MO"
-                };
                 eventNumberOfTxTypes = 0;
                 hideFreqSet1();
                 hideFreqSet2();
@@ -664,19 +660,55 @@ console.log("TxType name:", g_typeTxName[i].name);
                   finish: "Finish",
                   role: "Fox"
                 }];
-                displayEvents();
+                displayEvents(true);
+              }
+              break;
+
+            case "REFRESH":
+              {
+                console.log("Refresh: " + str);
+                console.log("Parsed data: " + arr[1] + "; " + arr[2] + "; " + arr[3] + "; " + arr[4] + "; " + arr[5] + "; " + arr[6] + "; " + arr[7] +";");
+                if (typeof arr[1] == 'undefined') arr[1] = '?';
+                if (typeof arr[2] == 'undefined') arr[2] = '?';
+                if (typeof arr[3] == 'undefined') arr[3] = '0';
+                if (typeof arr[4] == 'undefined') arr[4] = '0';
+                if (typeof arr[5] == 'undefined') arr[5] = '?';
+                if (typeof arr[6] == 'undefined') arr[6] = '?';
+                if (typeof arr[7] == 'undefined') arr[7] = '?';
+
+                if(arr[1] == "Done")
+                {
+                  displayEvents(false);
+                }
+                else
+                {
+                  var eventLine = {
+                    name: arr[1],
+                    version: arr[2],
+                    start: 1000 * Number(arr[3]),
+                    finish: 1000 * Number(arr[4]),
+                    role: arr[5],
+                    callsign: arr[6],
+                    freq: arr[7]
+                  };
+
+                  var theEvent = g_eventTableData.find(g_eventTableData => g_eventTableData.name == g_selectedEvent);
+                  theEvent.role = g_selectedTxType;
+                }
               }
               break;
 
             case "EVENT_DATA":
               {
                 console.log("Data: " + str);
-                console.log("Parsed data: " + arr[1] + "; " + arr[2] + "; " + arr[3] + "; " + arr[4] + "; " + arr[5] + ";");
+                console.log("Parsed data: " + arr[1] + "; " + arr[2] + "; " + arr[3] + "; " + arr[4] + "; " + arr[5] + "; " + arr[6] + "; " + arr[7] +";");
                 if (typeof arr[1] == 'undefined') arr[1] = '?';
                 if (typeof arr[2] == 'undefined') arr[2] = '?';
                 if (typeof arr[3] == 'undefined') arr[3] = '0';
                 if (typeof arr[4] == 'undefined') arr[4] = '0';
                 if (typeof arr[5] == 'undefined') arr[5] = '?';
+                if (typeof arr[6] == 'undefined') arr[6] = '?';
+                if (typeof arr[7] == 'undefined') arr[7] = '?';
 
                 var eventLine = {
                   name: arr[1],
@@ -684,7 +716,8 @@ console.log("TxType name:", g_typeTxName[i].name);
                   start: 1000 * Number(arr[3]),
                   finish: 1000 * Number(arr[4]),
                   role: arr[5],
-                  callsign: arr[6]
+                  callsign: arr[6],
+                  freq: arr[7]
                 };
                 g_eventTableData.push(eventLine);
               }
@@ -693,7 +726,7 @@ console.log("TxType name:", g_typeTxName[i].name);
             case "TYPE_NAME":
               if((arr[1] == "Done") && (arr[2] == "Done"))
               {
-                displayEvents();
+                displayEvents(true);
               }
               else
               {
@@ -744,8 +777,8 @@ console.log("TxType name:", g_typeTxName[i].name);
               break;
 
             case "SSID":
-              var t = "SSID: " + arr[1];
-              document.getElementById("ssid").innerHTML = t;
+              var t = arr[1] +": Settings";
+              document.getElementById("mainHeading").innerHTML = t;
               console.log(t);
               break;
 
@@ -754,7 +787,6 @@ console.log("TxType name:", g_typeTxName[i].name);
               if (c != null) {
                 c.value = arr[1];
               }
-              g_eventCallsign = arr[1];
               break;
 
             case "BAND":
@@ -774,20 +806,10 @@ console.log("TxType name:", g_typeTxName[i].name);
               applyNewFinishTime(arr[1]);
               break;
 
-            case "TX_COUNT":
-              var typeCount = typeTxCount.length + 1;
-              var numTxs = arr[1];
-              typeTxCount.push(numTxs);
-              break;
-
-            case "POWER":
-              typePower.push(arr[1]);
-              break;
-
             case "FREQ":
-              var freqStr = arr[1];
-              typeFrequency.push(freqStr);
-              var freq = Number(freqStr);
+              var freqStr = {frequency:arr[1], role:arr[2]};
+              g_typeFrequency.push(freqStr);
+              var freq = Number(arr[1]);
 
               if ((freq < Number("4000000")) && (freq > Number("3500000"))) {
                 eventRadioBand = "80m";
@@ -795,14 +817,8 @@ console.log("TxType name:", g_typeTxName[i].name);
                 eventRadioBand = "2m";
               }
 
-              break;
+console.log("Freq: ", freqStr);
 
-            case "CODE_SPEED":
-              typeWPM.push(arr[1]);
-              break;
-
-            case "ID_INT":
-              typeIDinterval.push(arr[1]);
               break;
 
             case "TX_ROLE":
@@ -813,23 +829,9 @@ console.log("TxType name:", g_typeTxName[i].name);
                   var colon = text.indexOf(":");
                   var newTypeIndex = parseInt(text.substring(0, colon), 10);
                   var newSubIndex = parseInt(text.substring(colon + 1), 10);
-                  txDesignation.typeIndex = newTypeIndex;
-                  txDesignation.subIndex = newSubIndex;
-
-                  console.log("typeIndex = " + txDesignation.typeIndex);
-                  console.log("subIndex = " + txDesignation.subIndex);
-
-                  msgText = "TX_ROLE," + newTypeIndex + ":" + newSubIndex;
-
-                  sendToSocket(msgText);
                   console.log("role code: ", arr[1]);
                 } else {
-                  //                      var foxtext = document.getElementById("txIDText");
-                  //                      foxtext.value = arr[1];
                   console.log("role name: ", arr[1]);
-
-//                  var rolecell = document.getElementById("selectedRoleCell");
-//                  rolecell.innerHTML = arr[1];
                 }
               }
               break;
@@ -839,6 +841,7 @@ console.log("TxType name:", g_typeTxName[i].name);
               break;
 
             default:
+console.log("Unused message: ", str);
               break;
           }
         }
@@ -871,15 +874,21 @@ console.log("TxType name:", g_typeTxName[i].name);
         webSocketTxTimer = 0;
       }
 
-      if ((websock == null) || (websock.readyState != websock.OPEN)) // wait 5 seconds and try again
+      if ((g_websock == null) || (g_websock.readyState != g_websock.OPEN)) // wait 5 seconds and try again
       {
+        if(g_websock != null) {
+          console.log("Socket not ready. Command delayed.", g_websock, g_websock.readyState);
+        } else {
+          console.log("Socket null. Command delayed.");
+        }
+
         webSocketTxTimer = setInterval(function() {
-          console.log("Socket not ready. Command delayed.", websock, websock.readyState);
           sendToSocket(msg);
         }, 5000);
+
       } else {
         if (dif > 100) {
-          websock.send(msg);
+          g_websock.send(msg);
           lastPacketTime = now;
           lastSocketTxMessage = msg;
         } else {
@@ -917,6 +926,7 @@ console.log("TxType name:", g_typeTxName[i].name);
           if (stillConnected) {
             stillConnected--;
             if (stillConnected == 0) {
+console.log("stillConnected timeout!");
               setOverlay("Disconnected");
               timedOut = true;
             }
@@ -929,6 +939,11 @@ console.log("TxType name:", g_typeTxName[i].name);
       sendToSocket("TEST");
       console.log("Test message sent to socket.");
 
+    }
+
+    function sendRefresh() {
+      sendToSocket("REFRESH");
+      console.log("Refresh message sent to socket.");
     }
 
     function sendCall() {
@@ -1010,10 +1025,8 @@ console.log("TxType name:", g_typeTxName[i].name);
       theEvent.role = g_selectedTxType;
       console.log(msgText);
 
-      if (msgText.length > 0) {
-        sendToSocket(msgText);
-      }
-    }
+      sendToSocket(msgText);
+     }
 
     function setOverlay(msgTxt) {
       if (msgTxt != null) {
@@ -1749,34 +1762,32 @@ console.log("TxType name:", g_typeTxName[i].name);
 
     function freq1String(myString) {
       var f = document.getElementById("freq1Text");
-      var val = Number(myString);
-      var newString = String(Math.floor(val / 1000000)) + "." + pad(Math.floor(((val % 1000000) / 1000)), 3) + "." + pad((val % 1000), 3);
       freq1FrequencyHz = myString;
-      if (f) f.value = newString;
+      if (f) f.value = freqDotFormat(myString);
     }
 
     function freq2String(myString) {
       var f = document.getElementById("freq2Text");
-      var val = Number(myString);
-      var newString = String(Math.floor(val / 1000000)) + "." + pad(Math.floor(((val % 1000000) / 1000)), 3) + "." + pad((val % 1000), 3);
       freq2FrequencyHz = myString;
-      if (f) f.value = newString;
+      if (f) f.value = freqDotFormat(myString);
     }
 
     function freq3String(myString) {
       var f = document.getElementById("freq3Text");
-      var val = Number(myString);
-      var newString = String(Math.floor(val / 1000000)) + "." + pad(Math.floor(((val % 1000000) / 1000)), 3) + "." + pad((val % 1000), 3);
       freq3FrequencyHz = myString;
-      if (f) f.value = newString;
+      if (f) f.value = freqDotFormat(myString);
     }
 
     function freq4String(myString) {
       var f = document.getElementById("freq4Text");
-      var val = Number(myString);
-      var newString = String(Math.floor(val / 1000000)) + "." + pad(Math.floor(((val % 1000000) / 1000)), 3) + "." + pad((val % 1000), 3);
       freq4FrequencyHz = myString;
-      if (f) f.value = newString;
+      if (f) f.value = freqDotFormat(myString);
+    }
+
+    function freqDotFormat(freqString) {
+      var val = Number(freqString);
+      var newString = String(Math.floor(val / 1000000)) + "." + pad(Math.floor(((val % 1000000) / 1000)), 3) + "." + pad((val % 1000), 3);
+      return newString;
     }
 
     ////////////////////////////////////////////////////////////
@@ -1797,34 +1808,34 @@ console.log("Toggle: ", x);
     }
 
     function showFreqSettings() {
-      var size = typeFrequency.length;
+      var size = g_typeFrequency.length;
 
 console.log("Show: ", size);
 
       switch (size) {
         case 4:
           showFreqSet4();
-          freqStr = typeFrequency[3];
+          freqStr = g_typeFrequency[3].frequency;
           freq1String(freqStr);
-          document.getElementById("freqSet4Heading").innerHTML = g_typeTxName[3] + " Frequency";
+          document.getElementById("freqSet4Heading").innerHTML = g_typeFrequency[3].role + " Frequency";
 
         case 3:
           showFreqSet3();
-          freqStr = typeFrequency[2];
+          freqStr = g_typeFrequency[2].frequency;
           freq2String(freqStr);
-          document.getElementById("freqSet3Heading").innerHTML = g_typeTxName[2] + " Frequency";
+          document.getElementById("freqSet3Heading").innerHTML = g_typeFrequency[2].role + " Frequency";
 
         case 2:
           showFreqSet2();
-          freqStr = typeFrequency[1];
+          freqStr = g_typeFrequency[1].frequency;
           freq3String(freqStr);
-          document.getElementById("freqSet2Heading").innerHTML = g_typeTxName[1] + " Frequency";
+          document.getElementById("freqSet2Heading").innerHTML = g_typeFrequency[1].role + " Frequency";
 
         case 1:
           showFreqSet1();
-          freqStr = typeFrequency[0];
+          freqStr = g_typeFrequency[0].frequency;
           freq4String(freqStr);
-          document.getElementById("freqSet1Heading").innerHTML = g_typeTxName[0] + " Frequency";
+          document.getElementById("freqSet1Heading").innerHTML = g_typeFrequency[0].role + " Frequency";
           break;
 
         default:
@@ -1979,7 +1990,7 @@ console.log("Show: ", size);
   </div>
 
   <center>
-    <h1 style="font-family:verdana; font-size:30px; color:Black; text-align:center;">Transmitter Settings</h1>
+    <h1 id="mainHeading" style="font-family:verdana; font-size:30px; color:Black; text-align:center;">Transmitter Settings</h1>
     <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">HTML Ver 0.1.6 - 8 Apr 2018</p>
 
     <div>
@@ -1990,9 +2001,6 @@ console.log("Show: ", size);
           </td>
           <td style="width:200px; height:50px; text-align:right; vertical-align:middle;">
             <p id="temperature" style="font-family:verdana; font-size:15px; color:Black; font-weight:bold; text-align:center;">Temp: ?</p>
-          </td>
-          <td style="width:200px; height:50px; text-align:right; vertical-align:middle;">
-            <p id="ssid" style="font-family:verdana; font-size:15px; color:Black; font-weight:bold; text-align:center;">SSID: ?</p>
           </td>
         </tr>
       </table>
@@ -2029,7 +2037,7 @@ console.log("Show: ", size);
   </center>
 
   <center>
-    <div id="freqSet1">
+    <div id="freqSet1" style="display:none;">
       <h4 id="freqSet1Heading" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center">Fox Frequency</h4>
 
       <table>
@@ -2063,7 +2071,7 @@ console.log("Show: ", size);
       </div>
     </div>
 
-    <div id="freqSet2">
+    <div id="freqSet2" style="display:none;">
       <h4 id="freqSet2Heading" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center">Finish Frequency</h4>
 
       <table>
@@ -2097,7 +2105,7 @@ console.log("Show: ", size);
       </div>
     </div>
 
-    <div id="freqSet3">
+    <div id="freqSet3" style="display:none;">
       <h4 id="freqSet3Heading" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center">Frequency3</h4>
 
       <table>
@@ -2131,7 +2139,7 @@ console.log("Show: ", size);
       </div>
     </div>
 
-    <div id="freqSet4">
+    <div id="freqSet4" style="display:none;">
       <h4 id="freqSet4Heading" style="font-family:verdana; font-size:20px; font-weight:bold; text-align:center">Frequency4</h4>
 
       <table>
