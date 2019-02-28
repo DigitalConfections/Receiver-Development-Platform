@@ -28,11 +28,49 @@
 #include <avr/io.h>
 #include <avr/sfr_defs.h>
 #include <util/delay.h>
+#include <util/atomic.h>
 
 #include "si5351.h"
 #include "i2c.h"
 
+/**
+Prototypes for local functions
+*/
+
+#ifdef I2C_TIMEOUT_SUPPORT
+/**
+ */
+	BOOL i2c_start(void);
+#else
+/**
+ */
+	void i2c_start(void);
+#endif // I2C_TIMEOUT_SUPPORT
+
+/**
+ */
+void i2c_stop(void);
+
+/**
+ */
+BOOL i2c_write_success(uint8_t, uint8_t);
+
+/**
+ */
+uint8_t i2c_read_ack(void);
+
+/**
+ */
+uint8_t i2c_read_nack(void);
+
+/**
+ */
+BOOL i2c_status(uint8_t);
+
+
+
 volatile BOOL g_i2c_not_timed_out = TRUE;
+static uint8_t g_i2c_access_semaphore = 1;
 
 /**
  * This routine turns off the I2C bus and clears it
@@ -132,6 +170,9 @@ volatile BOOL g_i2c_not_timed_out = TRUE;
 		_delay_ms(1);
 		DDRC &= ~I2C;                       /* tri-state SCL and SDA with pull-ups enabled */
 
+		g_i2c_not_timed_out = TRUE;
+		g_i2c_access_semaphore = 1;
+
 		return(0);                          /* all ok */
 	}
 #endif /* SUPPORT_I2C_CLEARBUS_FUNCTION */
@@ -146,6 +187,7 @@ void i2c_init(void)
 
 	/* enable I2C */
 	TWCR = _BV(TWEN);
+	g_i2c_access_semaphore = 1;
 	g_i2c_not_timed_out = TRUE;
 }
 
@@ -285,22 +327,35 @@ BOOL i2c_status(uint8_t status)
 	BOOL i2c_device_write(uint8_t slaveAddr, uint8_t addr, uint8_t data[], uint8_t bytes2write)
 #endif
 {
+		ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+		{
+			if(!g_i2c_access_semaphore)
+			{
+				return TRUE;
+			}
+		
+			g_i2c_access_semaphore = 0;
+		}
+	
 		#ifndef DEBUG_WITHOUT_I2C
 		uint8_t index = 0;
 
 		i2c_start();
 		if(i2c_status(TW_START))
 		{
+			g_i2c_access_semaphore = 1;
 			return(TRUE);
 		}
 
 		if(i2c_write_success(slaveAddr, TW_MT_SLA_ACK))
 		{
+			g_i2c_access_semaphore = 1;
 			return(TRUE);
 		}
 
 		if(i2c_write_success(addr, TW_MT_DATA_ACK))
 		{
+			g_i2c_access_semaphore = 1;
 			return(TRUE);
 		}
 
@@ -308,6 +363,7 @@ BOOL i2c_status(uint8_t status)
 		{
 			if(i2c_write_success(data[index++], TW_MT_DATA_ACK))
 			{
+				g_i2c_access_semaphore = 1;
 				return(TRUE);
 			}
 		}
@@ -316,6 +372,7 @@ BOOL i2c_status(uint8_t status)
 
 		#endif  /* #ifndef DEBUG_WITHOUT_I2C */
 
+	g_i2c_access_semaphore = 1;
 	return(FALSE);
 }
 
@@ -325,33 +382,48 @@ BOOL i2c_status(uint8_t status)
 	BOOL i2c_device_read(uint8_t slaveAddr, uint8_t addr, uint8_t data[], uint8_t bytes2read)
 #endif
 {
+		ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+		{
+			if(!g_i2c_access_semaphore)
+			{
+				return TRUE;
+			}
+		
+			g_i2c_access_semaphore = 0;
+		}
+	
 		#ifndef DEBUG_WITHOUT_I2C
 		uint8_t index = 0;
 
 		i2c_start();
 		if(i2c_status(TW_START))
 		{
+			g_i2c_access_semaphore = 1;
 			return(TRUE);
 		}
 
 		if(i2c_write_success(slaveAddr, TW_MT_SLA_ACK))
 		{
+			g_i2c_access_semaphore = 1;
 			return(TRUE);
 		}
 
 		if(i2c_write_success(addr, TW_MT_DATA_ACK))
 		{
+			g_i2c_access_semaphore = 1;
 			return(TRUE);
 		}
 
 		i2c_start();
 		if(i2c_status(TW_REP_START))
 		{
+			g_i2c_access_semaphore = 1;
 			return(TRUE);
 		}
 		
 		if(i2c_write_success((slaveAddr | TW_READ), TW_MR_SLA_ACK))
 		{
+			g_i2c_access_semaphore = 1;
 			return(TRUE);
 		}
 
@@ -362,6 +434,7 @@ BOOL i2c_status(uint8_t status)
 				data[index++] = i2c_read_ack();
 				if(i2c_status(TW_MR_DATA_ACK))
 				{
+					g_i2c_access_semaphore = 1;
 					return(TRUE);
 				}
 			}
@@ -370,6 +443,7 @@ BOOL i2c_status(uint8_t status)
 				data[index] = i2c_read_nack();
 				if(i2c_status(TW_MR_DATA_NACK))
 				{
+					g_i2c_access_semaphore = 1;
 					return(TRUE);
 				}
 			}
@@ -379,5 +453,89 @@ BOOL i2c_status(uint8_t status)
 
 		#endif  /* #ifndef DEBUG_WITHOUT_I2C */
 
+	g_i2c_access_semaphore = 1;
 	return(FALSE);
 }
+
+/************************************************************************/
+/* DAC081C085 Support                                                                              */
+/************************************************************************/
+
+
+BOOL dac081c_set_dac(uint8_t setting, uint8_t addr)
+{
+	BOOL result;
+	uint8_t byte1=0, byte2=0;
+
+	byte1 |= (setting >> 4);
+	byte2 |= (setting << 4);
+	result = i2c_device_write(addr, byte1, &byte2, 1);
+	
+	return result;
+}
+
+#ifdef SELECTIVELY_DISABLE_OPTIMIZATION
+BOOL __attribute__((optimize("O0"))) dac081c_read_dac(uint8_t *val, uint8_t addr)
+#else
+BOOL dac081c_read_dac(uint8_t *val, addr)
+#endif
+{
+	uint8_t bytes[2];
+	uint8_t bytes2read = 2;
+	uint8_t index = 0;
+
+	ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+	{
+		if(!g_i2c_access_semaphore)
+		{
+			return TRUE;
+		}
+		
+		g_i2c_access_semaphore = 0;
+	}
+	
+	i2c_start();
+	if(i2c_status(TW_START))
+	{
+		g_i2c_access_semaphore = 1;
+		return(TRUE);
+	}
+
+	if(i2c_write_success((addr | TW_READ), TW_MR_SLA_ACK))
+	{
+		g_i2c_access_semaphore = 1;
+		return(TRUE);
+	}
+
+	while(bytes2read--)
+	{
+		if(bytes2read)
+		{
+			bytes[index++] = i2c_read_ack();
+			if(i2c_status(TW_MR_DATA_ACK))
+			{
+				g_i2c_access_semaphore = 1;
+				return(TRUE);
+			}
+		}
+		else
+		{
+			bytes[index] = i2c_read_nack();
+			if(i2c_status(TW_MR_DATA_NACK))
+			{
+				g_i2c_access_semaphore = 1;
+				return(TRUE);
+			}
+		}
+	}
+
+	i2c_stop();
+	
+	bytes[0] = (bytes[0] << 4);
+	bytes[0] |= (bytes[1] >> 4);
+
+	g_i2c_access_semaphore = 1;
+	*val = bytes[0];
+	return(FALSE);
+}
+

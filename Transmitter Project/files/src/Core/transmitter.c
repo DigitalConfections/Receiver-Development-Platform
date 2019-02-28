@@ -29,7 +29,7 @@
 
 #include <stdlib.h>
 #include "transmitter.h"
-#include "dac081c085.h" /* DAC on 80m VGA of Rev X1 Receiver board */
+#include "i2c.h" /* DAC on 80m VGA of Rev X1 Receiver board */
 
 #ifdef INCLUDE_TRANSMITTER_SUPPORT
 
@@ -41,13 +41,14 @@
 	static volatile Frequency_Hz g_rtty_offset = DEFAULT_RTTY_OFFSET_FREQUENCY;
 	static volatile RadioBand g_activeBand = DEFAULT_TX_ACTIVE_BAND;
 	static volatile Modulation g_2m_modulationFormat = DEFAULT_TX_2M_MODULATION;
+	static volatile BOOL g_am_modulation_enabled = FALSE;
 	static volatile uint8_t g_am_drive_level = DEFAULT_AM_DRIVE_LEVEL;
 	static volatile uint8_t g_cw_drive_level = DEFAULT_CW_DRIVE_LEVEL;
 	
 	static volatile BOOL g_transmitter_keyed = FALSE;
 	
 /* EEPROM Defines */
-   #define EEPROM_BAND_DEFAULT BAND_2M
+#define EEPROM_BAND_DEFAULT BAND_80M
 
 	static BOOL EEMEM ee_eeprom_initialization_flag = EEPROM_INITIALIZED_FLAG;
 	static int32_t EEMEM ee_si5351_ref_correction = EEPROM_SI5351_CALIBRATION_DEFAULT;
@@ -128,8 +129,14 @@
 
 		return( FREQUENCY_NOT_SPECIFIED);
 	}
+	
+	void txGetModulationLevels(uint8_t *high, uint8_t *low)
+	{
+		*high = (uint8_t)g_am_drive_level;
+		*low = (uint8_t)(g_am_drive_level >> 1);
+	}
 
-	void __attribute__((optimize("O0"))) txSetBand(RadioBand band)
+	void __attribute__((optimize("O0"))) txSetBand(RadioBand band, BOOL enable)
 	{
 		keyTransmitter(OFF);
 		powerToTransmitter(OFF);
@@ -140,6 +147,8 @@
 			Frequency_Hz f = g_80m_frequency;
 			txSetFrequency(&f);
 			txSetPowerLevel(g_80m_power_level);
+			txSetModulation(MODE_CW);
+			powerToTransmitter(enable);
 		}
 		else if(band == BAND_2M)
 		{
@@ -148,6 +157,7 @@
 			txSetFrequency(&f);
 			txSetModulation(g_2m_modulationFormat);
 			txSetPowerLevel(g_2m_power_level);
+			powerToTransmitter(enable);
 		}
 	}
 
@@ -162,20 +172,18 @@
 		{
 			if(g_activeBand == BAND_80M)
 			{
-	//			mcp23017_set(MCP23017_PORTA, VHF_ENABLE, FALSE);
-				mcp23017_set(MCP23017_PORTA, VHF_ENABLE, TRUE); // temporary kluge to test 5V on 80m drivers
-				mcp23017_set(MCP23017_PORTA, HF_ENABLE, TRUE);
+				PORTB &= ~(1 << PORTB0); /* Turn VHF off */
+				PORTB |= (1 << PORTB1); /* Turn HF on */
 			}
 			else
 			{
-				mcp23017_set(MCP23017_PORTA, HF_ENABLE, FALSE);
-				mcp23017_set(MCP23017_PORTA, VHF_ENABLE, TRUE);
+				PORTB &= ~(1 << PORTB1); /* Turn HF off */
+				PORTB |= (1 << PORTB0); /* Turn VHF on */
 			}
 		}
 		else
 		{
-			mcp23017_set(MCP23017_PORTA, VHF_ENABLE, FALSE);
-			mcp23017_set(MCP23017_PORTA, HF_ENABLE, FALSE);
+			PORTB &= ~((1 << PORTB0) | (1 << PORTB1)); /* Turn off both bands */
 		}
 	}
 	
@@ -189,6 +197,7 @@
 				{
 					si5351_clock_enable(TX_CLOCK_HF_0, SI5351_CLK_ENABLED);
 					si5351_clock_enable(TX_CLOCK_HF_1, SI5351_CLK_ENABLED);
+					PORTD |= (1 << PORTD4);
 				}
 				else
 				{
@@ -202,6 +211,7 @@
 		{
 			if(g_activeBand == BAND_80M)
 			{
+				PORTD &= ~(1 << PORTD4);
 				si5351_clock_enable(TX_CLOCK_HF_0, SI5351_CLK_DISABLED);
 				si5351_clock_enable(TX_CLOCK_HF_1, SI5351_CLK_DISABLED);
 			}
@@ -220,14 +230,14 @@
 		
 		if(g_2m_modulationFormat == MODE_AM)
 		{
+			drive =  MIN(drive, MAX_2M_AM_DRIVE_LEVEL);
 			g_am_drive_level = drive;
 		}
 		else
 		{
+			drive = MIN(drive, MAX_2M_CW_DRIVE_LEVEL);
 			g_cw_drive_level = drive;
 		}
-		
-		OCR1B = drive;
 	}
 	
 	void txSetPowerLevel(uint8_t power)
@@ -236,13 +246,16 @@
 		if(g_activeBand == BAND_2M)
 		{
 			g_2m_power_level = MIN(power, MAX_2M_PWR_SETTING);
+			power = g_2m_power_level;
+			// TODO: Set modulation settings for appropriate power level
 		}
 		else
 		{
 			g_80m_power_level = MIN(power, MAX_80M_PWR_SETTING);
+			power = g_80m_power_level;
 		}
 		
-		dac081c_set_dac(power);
+		dac081c_set_dac(power, PA_DAC);
 						
 		if(power == 0)
 		{
@@ -256,33 +269,40 @@
 
 	uint8_t txGetPowerLevel(void)
 	{
-		uint8_t pwr = dac081c_read_dac();
+		uint8_t pwr;
+		while(dac081c_read_dac(&pwr, PA_DAC));
 		return pwr;
 	}
 	
 	void txSetModulation(Modulation mode)
 	{
-		if(g_activeBand == BAND_2M)
+		if((g_activeBand == BAND_2M) && (mode == MODE_AM))
 		{
-			if(mode == MODE_AM)
-			{
-				g_2m_modulationFormat = MODE_AM;
-				txSetDrive(g_am_drive_level);
-				DDRD |= (1 << PORTD5); // set clock pin to an output
-			}
-			else
-			{
-				g_2m_modulationFormat = MODE_CW;
-				txSetDrive(g_cw_drive_level);
-				DDRD  &= ~(1 << PORTD5); // set clock pin to an input
-				PORTD |= (1 << PORTD5); // enable pull-up
-			}
+			g_2m_modulationFormat = MODE_AM;
+			txSetDrive(g_am_drive_level);
+			g_am_modulation_enabled = TRUE;
+		}
+		else
+		{
+			g_am_modulation_enabled = FALSE;
+			if(g_activeBand == BAND_2M) g_2m_modulationFormat = MODE_CW;
+			txSetDrive(g_cw_drive_level);
 		}
 	}
 	
 	Modulation txGetModulation(void)
 	{
-		return g_2m_modulationFormat;
+		if (g_activeBand == BAND_2M)
+		{
+			return g_2m_modulationFormat;
+		}
+		
+		return MODE_INVALID;
+	}
+	
+	BOOL txAMModulationEnabled(void)
+	{
+		return g_am_modulation_enabled;
 	}
 	
 	BOOL init_transmitter(void)
@@ -291,7 +311,8 @@
 
 		initializeTransmitterEEPROMVars();
 
-		txSetBand(g_activeBand);    /* sets most tx settings */
+		txSetBand(g_activeBand, OFF);    /* sets most tx settings leaving power to transmitter OFF */
+		txSetPowerLevel(0);
 
 		si5351_drive_strength(TX_CLOCK_HF_0, SI5351_DRIVE_8MA);
 		si5351_clock_enable(TX_CLOCK_HF_0, SI5351_CLK_DISABLED);

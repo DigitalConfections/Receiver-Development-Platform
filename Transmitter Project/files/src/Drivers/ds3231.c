@@ -71,12 +71,15 @@ const uint8_t wd(int year, int month, int day)
 }
 #endif
 
-time_t ds3231_get_epoch(void)
+time_t ds3231_get_epoch(BOOL *result)
 {
 	time_t epoch = 0;
 	uint8_t data[7] = { 0, 0, 0, 0, 0, 0, 0 };
+	BOOL res;
 	
-	if(!i2c_device_read(DS3231_I2C_SLAVE_ADDR, RTC_SECONDS, data, 7))
+	res = i2c_device_read(DS3231_I2C_SLAVE_ADDR, RTC_SECONDS, data, 7);
+	
+	if(!res)
 	{
 		struct tm ltm = {0};
 		int16_t year = 100; // start at 100 years past 1900
@@ -137,7 +140,8 @@ time_t ds3231_get_epoch(void)
 		(ltm.tm_year-70)*31536000L + ((ltm.tm_year-69)/4)*86400L -
 		((ltm.tm_year-1)/100)*86400L + ((ltm.tm_year+299)/400)*86400L;
 	}
-	  
+	 
+	if(result) *result = res; 
 	return epoch;
 }
 	

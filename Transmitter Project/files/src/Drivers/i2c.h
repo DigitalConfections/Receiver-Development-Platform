@@ -57,40 +57,28 @@
  */
 	BOOL i2c_device_write(uint8_t slaveAddr, uint8_t addr, uint8_t data[], uint8_t bytes2write);
 
-#ifdef I2C_TIMEOUT_SUPPORT
-/**
- */
-	BOOL i2c_start(void);
-#else
-/**
- */
-	void i2c_start(void);
-#endif
-
-/**
- */
-void i2c_stop(void);
-
-/**
- */
-BOOL i2c_write_success(uint8_t, uint8_t);
-
-/**
- */
-uint8_t i2c_read_ack(void);
-
-/**
- */
-uint8_t i2c_read_nack(void);
-
-/**
- */
-BOOL i2c_status(uint8_t);
-
 #ifdef SUPPORT_I2C_CLEARBUS_FUNCTION
 /**
  */
 	BOOL i2c_clearBus(void);
 #endif  /* SUPPORT_I2C_CLEARBUS_FUNCTION */
+
+#ifdef INCLUDE_DAC081C085_SUPPORT
+
+	#define DAC081C_I2C_SLAVE_ADDR_A0 0x18
+	#define DAC081C_I2C_SLAVE_ADDR_A1 0x1A
+
+	/**
+	   Set the DAC to the value passed in setting.
+	*/
+	BOOL dac081c_set_dac(uint8_t setting, uint8_t addr);
+
+	/**
+	   Get the current DAC setting.
+	*/
+	BOOL dac081c_read_dac(uint8_t *val, uint8_t addr);
+
+
+#endif // INCLUDE_DAC081C085_SUPPORT
 
 #endif  /* I2C_H_ */

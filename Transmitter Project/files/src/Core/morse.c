@@ -58,77 +58,84 @@ BOOL makeMorse(char* s, BOOL* repeating, BOOL* finished)
 	}
 	else if(str)
 	{
-		if(repeating) *repeating = repeat;
-		if(completedString)
+		if(*str == '<') // constant tone
 		{
-			if(finished) *finished = TRUE;
-			return OFF;
+			carrierOn = TRUE;
 		}
-
-		if(elementIndex)
+		else
 		{
-			elementIndex--;
-		}
-		else if(carrierOn) /* carrier is on, so turn it off and wait appropriate amount of space */
-		{
-			carrierOn = FALSE;
-			/* wait one element = inter-symbol space */
-			if(addedSpace)
+			if(repeating) *repeating = repeat;
+			if(completedString)
 			{
-				elementIndex = addedSpace;
-				addedSpace = 0;
+				if(finished) *finished = TRUE;
+				return OFF;
 			}
-			/* wait inter-character space */
-		}
-		else /* carrier is off, so turn it on and get next symbol */
-		{
-			if(symbolIndex >= morseInProgress.lengthInSymbols)
+
+			if(elementIndex)
 			{
-				char c = (*(str + ++charIndex));
-			
-				if(!c) /* wrap to beginning of text */
+				elementIndex--;
+			}
+			else if(carrierOn) /* carrier is on, so turn it off and wait appropriate amount of space */
+			{
+				carrierOn = FALSE;
+				/* wait one element = inter-symbol space */
+				if(addedSpace)
 				{
-					if(repeat)
+					elementIndex = addedSpace;
+					addedSpace = 0;
+				}
+				/* wait inter-character space */
+			}
+			else /* carrier is off, so turn it on and get next symbol */
+			{
+				if(symbolIndex >= morseInProgress.lengthInSymbols)
+				{
+					char c = (*(str + ++charIndex));
+				
+					if(!c) /* wrap to beginning of text */
 					{
-						c = *str;
-						charIndex = 0;
+						if(repeat)
+						{
+							c = *str;
+							charIndex = 0;
+						}
+						else
+						{
+							str = NULL;
+							carrierOn = OFF;
+							completedString = TRUE;
+							if(finished) *finished = TRUE;
+							return OFF;
+						}
 					}
+			
+					morseInProgress = getMorseChar(c);
+					symbolIndex = 0;
+				}
+
+				if(morseInProgress.pattern < INTER_WORD_SPACE)
+				{
+					BOOL isDah = morseInProgress.pattern & (1 << symbolIndex++);
+				
+					if(isDah)
+					{
+						elementIndex = 2;
+					}		
 					else
 					{
-						str = NULL;
-						carrierOn = OFF;
-						completedString = TRUE;
-						if(finished) *finished = TRUE;
-						return OFF;
+						elementIndex = 0;
 					}
-				}
-			
-				morseInProgress = getMorseChar(c);
-				symbolIndex = 0;
-			}
-
-			if(morseInProgress.pattern < INTER_WORD_SPACE)
-			{
-				BOOL isDah = morseInProgress.pattern & (1 << symbolIndex++);
-			
-				if(isDah)
-				{
-					elementIndex = 2;
-				}		
+					
+					carrierOn = TRUE;
+				
+					if(symbolIndex >= morseInProgress.lengthInSymbols) addedSpace = 2;
+				} 
 				else
 				{
-					elementIndex = 0;
+					symbolIndex = 255; /* ensure the next character gets read */
+					carrierOn = FALSE;
+					elementIndex = morseInProgress.lengthInSymbols-4;
 				}
-				
-				carrierOn = TRUE;
-				
-				if(symbolIndex >= morseInProgress.lengthInSymbols) addedSpace = 2;
-			} 
-			else
-			{
-				symbolIndex = 255; /* ensure the next character gets read */
-				carrierOn = FALSE;
-				elementIndex = morseInProgress.lengthInSymbols-4;
 			}
 		}
 	}

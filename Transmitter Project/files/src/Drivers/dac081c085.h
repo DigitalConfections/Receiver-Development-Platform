@@ -30,21 +30,24 @@
  *
  */ 
 
+#define DAC081C_I2C_SLAVE_ADDR_A0 0x18
+#define DAC081C_I2C_SLAVE_ADDR_A1 0x1A
 
 #ifndef DAC081C085_H_
 #define DAC081C085_H_
 
+#include "i2c.h"
 #include "defs.h"
 
 /**
    Set the DAC to the value passed in setting.
 */
-void dac081c_set_dac(uint8_t setting);
+void dac081c_set_dac(uint8_t setting, uint8_t addr);
 
 /**
    Get the current DAC setting.
 */
-uint8_t dac081c_read_dac(void);
+uint8_t dac081c_read_dac(uint8_t addr);
 
 
 #endif /* DAC081C085_H_ */

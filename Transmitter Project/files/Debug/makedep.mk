@@ -14,15 +14,11 @@ src\Core\util.c
 
 src\Drivers\ad5245.c
 
-src\Drivers\dac081c085.c
-
 src\Drivers\ds3231.c
 
 src\Drivers\huzzah.c
 
 src\Drivers\i2c.c
-
-src\Drivers\mcp23017.c
 
 src\Drivers\si5351.c
 

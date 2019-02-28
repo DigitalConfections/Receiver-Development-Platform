@@ -62,7 +62,7 @@ void ds3231_read_date_time(int32_t* val, char* buffer, TimeFormat format);
 /**
  *  Reads time from the DS3231 and returns the epoch
  */
-time_t ds3231_get_epoch(void);
+time_t ds3231_get_epoch(BOOL *result);
 	
 
 /**

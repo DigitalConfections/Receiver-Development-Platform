@@ -91,8 +91,6 @@ typedef enum
 	MESSAGE_BAND = 'B' * 100 + 'N' * 10 + 'D',      /* $BND,; / $BND? / !BND,; // Set band; field1 = RadioBand */
 	MESSAGE_TTY = 'T' * 100 + 'T' * 10 + 'Y',       /* Adjust for PC communications interface (add crlf, etc.) */
 
-	/* CONTROL HEAD MESSAGE FAMILY */
-
 	/*	DUAL-BAND TX MESSAGE FAMILY (FUNCTIONAL MESSAGING) */
 	MESSAGE_SET_FREQ = 'F' * 100 + 'R' * 10 + 'E',  /* $FRE,Fhz; / $FRE,FHz? / !FRE,; // Set/request current frequency */
 	MESSAGE_CLOCK = 'T' * 100 + 'I' * 10 + 'M',		/* Sets/reads the real-time clock */
@@ -108,6 +106,7 @@ typedef enum
 	MESSAGE_CODE_SPEED = 'S' * 100 + 'P' * 10 + 'D', /* Sets id and pattern code speeds */
 	MESSAGE_TIME_INTERVAL = 'T',					/* Sets on-air, off-air, delay, and ID time intervals */
 	MESSAGE_ESP_COMM = 'E' * 100 + 'S' * 10 + 'P',  /* Communications with ESP8266 controller */
+	MESSAGE_GO = 'G' * 10 + 'O',					/* Start transmitting now without delay */
 
 	/* TTY USER MESSAGES */
 	MESSAGE_ALL_INFO = '?',                         /* Prints all receiver info */

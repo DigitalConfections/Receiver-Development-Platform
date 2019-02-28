@@ -39,16 +39,16 @@ static const char textPrompt[] = "TX> ";
 static const char textWDT[] = "*** WDT Reset! ***\n";
 
 
-static const char textHelp[][34] = { "\nCommands:\n",
+static const char textHelp[][35] = { "\nCommands:\n",
 " BAT   - Battery\n",
 " TIM [hh:mm:ss]- RTC Time\n",
-" BND [2|80] - Rx Band\n",
-" FRE [M<1:5>] [Hz] - Rx Freq\n",
-" DRI [0-255] - 2m Drive\n",
-" POW [0-255] - Tx PA Power\n",
+" BND [2|80] - Band\n",
+" FRE [M<1:5>] [Hz] - Freq\n",
+" DRI U|D 0-255 - 2m Drive\n",
+" POW [0-255] - PA Power\n",
 " ID [text]   - Station ID\n",
-" PA [text]   - Tx Pattern\n",
-" SPD [ID|PA] s - Code speed\n",
+" PA [text]   - Pattern\n",
+" SPD [ID|PA] s - Speed WPM\n",
 " T [0|1|D] s - On/Off/Dly times\n",
 " SF [S|F] [hh:mm:ss] - Start/Fin\n",
 " P             - Perm\n",

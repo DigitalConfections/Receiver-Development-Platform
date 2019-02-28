@@ -84,11 +84,9 @@ typedef enum
 } MemoryStore;
 
 #define DEFAULT_TX_2M_FREQUENCY 145566000
-#define DEFAULT_TX_2M_POWER 50
 #define DEFAULT_TX_80M_FREQUENCY 3550000
-#define DEFAULT_TX_80M_POWER 50
 #define DEFAULT_RTTY_OFFSET_FREQUENCY 170
-#define DEFAULT_TX_ACTIVE_BAND BAND_2M
+#define DEFAULT_TX_ACTIVE_BAND BAND_80M
 #define DEFAULT_TX_2M_MODULATION MODE_AM
 
 #define TX_MINIMUM_2M_FREQUENCY 144000000
@@ -96,11 +94,17 @@ typedef enum
 #define TX_MINIMUM_80M_FREQUENCY 3500000
 #define TX_MAXIMUM_80M_FREQUENCY 8000000
 
-#define MAX_2M_PWR_SETTING 80 /* maximum safe DAC setting */
-#define MAX_80M_PWR_SETTING 20 /* maximum safe DAC setting */
+#define DEFAULT_TX_2M_POWER 72 // 5V to all components
+#define DEFAULT_TX_80M_POWER 50
 
-#define DEFAULT_AM_DRIVE_LEVEL 180
-#define DEFAULT_CW_DRIVE_LEVEL 180
+#define MAX_2M_PWR_SETTING 120 /* maximum safe DAC setting = 5V*/
+#define MAX_80M_PWR_SETTING 255 /* maximum safe DAC setting */
+
+#define DEFAULT_AM_DRIVE_LEVEL 195
+#define DEFAULT_CW_DRIVE_LEVEL 195
+
+#define MAX_2M_AM_DRIVE_LEVEL 195
+#define MAX_2M_CW_DRIVE_LEVEL 195
 
 typedef struct
 {
@@ -154,7 +158,7 @@ typedef enum {
 	
 /**
  */
-	void txSetBand(RadioBand band);
+	void txSetBand(RadioBand band, BOOL enable);
 
 /**
  */
@@ -168,6 +172,9 @@ typedef enum {
  */
 	Modulation txGetModulation(void);
 
+/** 
+ */
+	BOOL txAMModulationEnabled(void);
 	
 /** 
  */
@@ -203,5 +210,9 @@ void keyTransmitter(BOOL on);
 /**
  */
 void powerToTransmitter(BOOL on);
+
+/**
+ */
+void txGetModulationLevels(uint8_t *high, uint8_t *low);
 
 #endif  /* TRANSMITTER_H_ */

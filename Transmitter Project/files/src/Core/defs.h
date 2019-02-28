@@ -32,7 +32,7 @@
 
 /******************************************************
  * Set the text that gets displayed to the user */
-#define SW_REVISION "X2.1.3"
+#define SW_REVISION "P1.0.0"
 
 //#define DEBUG_FUNCTIONS_ENABLE
 //#define TRANQUILIZE_WATCHDOG
@@ -46,12 +46,14 @@
  * Include only the necessary hardware support */
    #define INCLUDE_SI5351_SUPPORT // Silicon Labs Programmable Clock
    #define INCLUDE_DS3231_SUPPORT // Maxim RTC
-   #define INCLUDE_MCP23017_SUPPORT // Port expander
    #define INCLUDE_TRANSMITTER_SUPPORT
-//   #define INCLUDE_PCF8574_SUPPORT
-	/* TODO: Add DAC081C085 support
-	 * TODO: Add MAX5478EUD+ support
-	 * TODO: Add AT24CS01-STUM support */
+   #define INCLUDE_DAC081C085_SUPPORT
+
+#ifdef INCLUDE_DAC081C085_SUPPORT
+   #define PA_DAC DAC081C_I2C_SLAVE_ADDR_A0
+   #define AM_DAC DAC081C_I2C_SLAVE_ADDR_A1
+#endif
+
 /*******************************************************/
 
 /******************************************************
@@ -60,7 +62,29 @@
 
 /*******************************************************
 * ADC Scale Factors */
-#define PA_VOLTAGE_SCALE_FACTOR (3.85)
+/* Battery voltage should be read when +12V supply is enabled and all transmitters are fully powered off */
+#define ADC_REF_VOLTAGE_mV 1100UL
+
+#define BATTERY_VOLTAGE_MAX_MV 4200UL
+#define BATTERY_DROP 140UL
+#define VBAT(x) (BATTERY_DROP + (x * BATTERY_VOLTAGE_MAX_MV) / 1023)
+
+#define SUPPLY_VOLTAGE_MAX_MV 14100UL
+#define VSUPPLY(x)((x * SUPPLY_VOLTAGE_MAX_MV) / 1023)
+
+#define PA_VOLTAGE_MAX_MV 14100UL
+#define VPA(x)((x * PA_VOLTAGE_MAX_MV) / 1023)
+
+typedef uint16_t BatteryLevel;  /* in milliVolts */
+
+#define VOLTS_5 (((5000UL - BATTERY_DROP) * 1023UL) / BATTERY_VOLTAGE_MAX_MV)
+#define VOLTS_3_19 (((3190UL - BATTERY_DROP) * 1023UL) / BATTERY_VOLTAGE_MAX_MV)
+#define VOLTS_3_0 (((3000UL - BATTERY_DROP) * 1023UL) / BATTERY_VOLTAGE_MAX_MV)
+#define VOLTS_2_4 (((2400UL - BATTERY_DROP) * 1023UL) / BATTERY_VOLTAGE_MAX_MV)
+
+#define POWER_OFF_VOLT_THRESH_MV VOLTS_2_4 /* 2.4 V = 2400 mV */
+#define POWER_ON_VOLT_THRESH_MV VOLTS_3_0  /* 3.0 V = 3000 mV */
+
 
 /*******************************************************/
 
@@ -101,8 +125,6 @@
 
 /******************************************************
  * General definitions for making the code easier to understand */
-#define ROTARY_SYNC_DELAY 100
-
 #define         SDA_PIN (1 << PINC4)
 #define         SCL_PIN (1 << PINC5)
 #define         I2C_PINS (SCL_PIN | SDA_PIN)
@@ -130,8 +152,6 @@
 #define LOW				0
 #define UNDETERMINED	3
 
-#define ADC_REF_VOLTAGE_mV 3300UL
-
 #define MIN(A,B)    ({ __typeof__(A) __a = (A); __typeof__(B) __b = (B); __a < __b ? __a : __b; })
 #define MAX(A,B)    ({ __typeof__(A) __a = (A); __typeof__(B) __b = (B); __a < __b ? __b : __a; })
 
@@ -149,6 +169,12 @@ typedef enum
 	UP = 1,
 	SETTOVALUE
 } IncrType;
+
+typedef enum
+{
+	POWER_UP,
+	POWER_SLEEP
+} InitActionType;
 
 #define QUAD_MASK 0xC0
 #define QUAD_A 7
@@ -174,13 +200,6 @@ typedef enum
 #define TIMER2_20HZ 49
 #define TIMER2_5_8HZ 100
 #define TIMER2_0_5HZ 1000
-
-/*#define BATTERY_VOLTAGE_COEFFICIENT 332 */
-#define BATTERY_VOLTAGE_COEFFICIENT 223                                                                     /* R1 = 69.8k; R2 = 20k; volts x this = mV measured at ADC pin (minus losses) */
-#define POWER_SUPPLY_VOLTAGE_DROP_MV 218                                                                    /* This is the voltage drop in mV multiplied by voltage divider ratio */
-
-#define POWER_OFF_VOLT_THRESH_MV (((24 * BATTERY_VOLTAGE_COEFFICIENT) / 10) - POWER_SUPPLY_VOLTAGE_DROP_MV) /* 2.4 V = 2400 mV */
-#define POWER_ON_VOLT_THRESH_MV ((3 * BATTERY_VOLTAGE_COEFFICIENT) - POWER_SUPPLY_VOLTAGE_DROP_MV)          /* 3.0 V = 3000 mV */
 
 #define BEEP_SHORT 100
 #define BEEP_LONG 65535
@@ -285,12 +304,6 @@ typedef enum buttons
 	BUTTON4,
 	NUMBER_OF_BUTTONS
 } ButtonType;
-
-typedef uint16_t BatteryLevel;  /* in milliVolts */
-
-#define VOLTS_5 ((5 * BATTERY_VOLTAGE_COEFFICIENT) - POWER_SUPPLY_VOLTAGE_DROP_MV)
-#define VOLTS_3_19 (((319 * BATTERY_VOLTAGE_COEFFICIENT) / 100) - POWER_SUPPLY_VOLTAGE_DROP_MV)
-#define VOLTS_3_0 ((3 * BATTERY_VOLTAGE_COEFFICIENT) - POWER_SUPPLY_VOLTAGE_DROP_MV)
 
 typedef enum
 {
