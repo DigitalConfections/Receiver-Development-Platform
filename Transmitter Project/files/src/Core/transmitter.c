@@ -29,112 +29,66 @@
 
 #include <stdlib.h>
 #include "transmitter.h"
-#include "mcp23017.h"	/* Port expander on Rev X2 Digital Interface board */
-#include "max5478.h"	/* Potentiometer for receiver attenuation on Rev X.1 Receiver board */
-#include "dac081c085.h" /* DAC on 80m VGA of Rev X1 Receiver board */
+#include "i2c.h" /* DAC on 80m VGA of Rev X1 Receiver board */
 
-#ifdef INCLUDE_RECEIVER_SUPPORT
+#ifdef INCLUDE_TRANSMITTER_SUPPORT
 
-	static volatile BOOL g_rx_initialized = FALSE;
-	static volatile Frequency_Hz g_freq_2m = DEFAULT_RX_2M_FREQUENCY;
-	static volatile Frequency_Hz g_freq_80m = DEFAULT_RX_80M_FREQUENCY;
-	static volatile Frequency_Hz g_cw_offset = DEFAULT_RX_CW_OFFSET_FREQUENCY;
-	static volatile uint8_t g_preamp_80m = DEFAULT_PREAMP_80M;
-	static volatile uint8_t g_preamp_2m = DEFAULT_PREAMP_2M;
-	static volatile uint8_t g_attenuation_setting = DEFAULT_ATTENUATION;
-	static volatile Frequency_Hz g_freq_bfo = RADIO_IF_FREQUENCY;
-	static volatile RadioVFOConfig g_vfo_configuration = VFO_2M_LOW_80M_HIGH;
-	static volatile RadioBand g_activeBand = DEFAULT_RX_ACTIVE_BAND;
+	static volatile BOOL g_tx_initialized = FALSE;
+	static volatile Frequency_Hz g_2m_frequency = DEFAULT_TX_2M_FREQUENCY;
+	static volatile Frequency_Hz g_80m_frequency = DEFAULT_TX_80M_FREQUENCY;
+	static volatile uint8_t g_2m_power_level = DEFAULT_TX_2M_POWER;
+	static volatile uint8_t g_80m_power_level = DEFAULT_TX_80M_POWER;
+	static volatile Frequency_Hz g_rtty_offset = DEFAULT_RTTY_OFFSET_FREQUENCY;
+	static volatile RadioBand g_activeBand = DEFAULT_TX_ACTIVE_BAND;
+	static volatile Modulation g_2m_modulationFormat = DEFAULT_TX_2M_MODULATION;
+	static volatile BOOL g_am_modulation_enabled = FALSE;
+	static volatile uint8_t g_am_drive_level = DEFAULT_AM_DRIVE_LEVEL;
+	static volatile uint8_t g_cw_drive_level = DEFAULT_CW_DRIVE_LEVEL;
 	
-	static volatile uint8_t g_receiver_port_shadow = 0x00; // keep track of port value to avoid unnecessary reads
+	static volatile BOOL g_transmitter_keyed = FALSE;
 	
 /* EEPROM Defines */
-   #define EEPROM_BAND_DEFAULT BAND_2M
+#define EEPROM_BAND_DEFAULT BAND_80M
 
-	static BOOL EEMEM ee_receiver_eeprom_initialization_flag = EEPROM_INITIALIZED_FLAG;
+	static BOOL EEMEM ee_eeprom_initialization_flag = EEPROM_INITIALIZED_FLAG;
 	static int32_t EEMEM ee_si5351_ref_correction = EEPROM_SI5351_CALIBRATION_DEFAULT;
 
 	static uint8_t EEMEM ee_active_band = EEPROM_BAND_DEFAULT;
-	static uint32_t EEMEM ee_active_2m_frequency = DEFAULT_RX_2M_FREQUENCY;
-	static uint32_t EEMEM ee_active_80m_frequency = DEFAULT_RX_80M_FREQUENCY;
-	static uint32_t EEMEM ee_cw_offset_frequency = DEFAULT_RX_CW_OFFSET_FREQUENCY;
-	static uint8_t EEMEM ee_preamp_80m = DEFAULT_PREAMP_80M;
-	static uint8_t EEMEM ee_preamp_2m = DEFAULT_PREAMP_2M;
-	static uint8_t EEMEM ee_attenuation_setting = DEFAULT_ATTENUATION;
-
-	uint32_t EEMEM ee_receiver_2m_mem1_freq = EEPROM_2M_MEM1_DEFAULT;
-	uint32_t EEMEM ee_receiver_2m_mem2_freq = EEPROM_2M_MEM2_DEFAULT;
-	uint32_t EEMEM ee_receiver_2m_mem3_freq = EEPROM_2M_MEM3_DEFAULT;
-	uint32_t EEMEM ee_receiver_2m_mem4_freq = EEPROM_2M_MEM4_DEFAULT;
-	uint32_t EEMEM ee_receiver_2m_mem5_freq = EEPROM_2M_MEM5_DEFAULT;
-	uint32_t EEMEM ee_receiver_80m_mem1_freq = EEPROM_80M_MEM1_DEFAULT;
-	uint32_t EEMEM ee_receiver_80m_mem2_freq = EEPROM_80M_MEM2_DEFAULT;
-	uint32_t EEMEM ee_receiver_80m_mem3_freq = EEPROM_80M_MEM3_DEFAULT;
-	uint32_t EEMEM ee_receiver_80m_mem4_freq = EEPROM_80M_MEM4_DEFAULT;
-	uint32_t EEMEM ee_receiver_80m_mem5_freq = EEPROM_80M_MEM5_DEFAULT;
+	static uint32_t EEMEM ee_active_2m_frequency = DEFAULT_TX_2M_FREQUENCY;
+	static uint8_t EEMEM ee_2m_power_level = DEFAULT_TX_2M_POWER;
+	static uint32_t EEMEM ee_active_80m_frequency = DEFAULT_TX_80M_FREQUENCY;
+	static uint8_t EEMEM ee_80m_power_level = DEFAULT_TX_80M_POWER;
+	static uint32_t EEMEM ee_cw_offset_frequency = DEFAULT_RTTY_OFFSET_FREQUENCY;
+	static uint8_t EEMEM ee_am_drive_level = DEFAULT_AM_DRIVE_LEVEL;
+	static uint8_t EEMEM ee_cw_drive_level = DEFAULT_CW_DRIVE_LEVEL;
+	static uint8_t EEMEM ee_active_2m_modulation = DEFAULT_TX_2M_MODULATION;
 
 /*
  *       Local Function Prototypes
  *
  */
 
-	void saveAllReceiverEEPROM(void);
-	void initializeReceiverEEPROMVars(void);
-	uint16_t potValFromAtten(uint16_t atten);
+	void saveAllTransmitterEEPROM(void);
+	void initializeTransmitterEEPROMVars(void);
 
 /*
  *       This function sets the VFO frequency (CLK0 of the Si5351) based on the intended receive frequency passed in by the parameter (freq),
  *       and the VFO configuration in effect. The VFO  frequency might be above or below the intended receive frequency, depending on the VFO
  *       configuration setting in effect for the radio band of the receive frequency.
  */
-	BOOL rxSetFrequency(Frequency_Hz *freq)
+	BOOL txSetFrequency(Frequency_Hz *freq)
 	{
 		BOOL activeBandSet = FALSE;
-		Frequency_Hz vfo;
 		RadioBand bandSet = BAND_INVALID;
 
-		if((*freq < RX_MAXIMUM_80M_FREQUENCY) && (*freq > RX_MINIMUM_80M_FREQUENCY))    /* 80m */
+		if((*freq < TX_MAXIMUM_80M_FREQUENCY) && (*freq > TX_MINIMUM_80M_FREQUENCY))    /* 80m */
 		{
-			g_freq_80m = *freq;
-
-			if(g_vfo_configuration & VFO_2M_LOW_80M_HIGH)
-			{
-				vfo = RADIO_IF_FREQUENCY + *freq;
-			}
-			else
-			{
-				if(*freq > RADIO_IF_FREQUENCY)
-				{
-					vfo = *freq - RADIO_IF_FREQUENCY;
-				}
-				else
-				{
-					vfo = RADIO_IF_FREQUENCY - *freq;
-				}
-			}
-			
+			g_80m_frequency = *freq;
 			bandSet = BAND_80M;
 		}
-		else if((*freq < RX_MAXIMUM_2M_FREQUENCY) && (*freq > RX_MINIMUM_2M_FREQUENCY))
+		else if((*freq < TX_MAXIMUM_2M_FREQUENCY) && (*freq > TX_MINIMUM_2M_FREQUENCY)) /* 2m */
 		{
-			g_freq_2m = *freq;
-
-			if(g_vfo_configuration & VFO_2M_HIGH_80M_LOW)
-			{
-				vfo = RADIO_IF_FREQUENCY + *freq;
-			}
-			else
-			{
-				if(*freq > RADIO_IF_FREQUENCY)
-				{
-					vfo = *freq - RADIO_IF_FREQUENCY;
-				}
-				else
-				{
-					vfo = RADIO_IF_FREQUENCY - *freq;
-				}
-			}
-
+			g_2m_frequency = *freq;
 			bandSet = BAND_2M;
 		}
 
@@ -144,288 +98,303 @@
 		}
 		else if(g_activeBand == bandSet)
 		{
-			vfo -= g_cw_offset; // apply CW offset
-			si5351_set_freq(vfo, RX_CLOCK_VFO);
+			if(bandSet == BAND_2M)
+			{
+				si5351_set_freq(*freq, TX_CLOCK_VHF, TRUE);
+			}
+			else
+			{
+				si5351_set_freq(*freq, TX_CLOCK_HF_0, TRUE);
+			}
+
 			activeBandSet = TRUE;
 		}
 
 		return( activeBandSet);
 	}
 
-	Frequency_Hz rxGetFrequency(void)
+	Frequency_Hz txGetFrequency(void)
 	{
-		if(g_rx_initialized)
+		if(g_tx_initialized)
 		{
 			if(g_activeBand == BAND_2M)
 			{
-				return( g_freq_2m);
+				return( g_2m_frequency);
 			}
 			else if(g_activeBand == BAND_80M)
 			{
-				return( g_freq_80m);
+				return( g_80m_frequency);
 			}
 		}
 
 		return( FREQUENCY_NOT_SPECIFIED);
 	}
-
-	void rxSetVFOConfiguration(RadioVFOConfig config)
+	
+	void txGetModulationLevels(uint8_t *high, uint8_t *low)
 	{
-		g_vfo_configuration = config;
+		*high = (uint8_t)g_am_drive_level;
+		*low = (uint8_t)(g_am_drive_level >> 1);
 	}
 
-	void __attribute__((optimize("O0"))) rxSetBand(RadioBand band) 
+	void __attribute__((optimize("O0"))) txSetBand(RadioBand band, BOOL enable)
 	{
+		keyTransmitter(OFF);
+		powerToTransmitter(OFF);
+	
 		if(band == BAND_80M)
 		{
 			g_activeBand = band;
-			Frequency_Hz f = g_freq_80m;
-			rxSetFrequency(&f);
+			Frequency_Hz f = g_80m_frequency;
+			txSetFrequency(&f);
+			txSetPowerLevel(g_80m_power_level);
+			txSetModulation(MODE_CW);
+			powerToTransmitter(enable);
 		}
 		else if(band == BAND_2M)
 		{
 			g_activeBand = band;
-			Frequency_Hz f = g_freq_2m;
-			rxSetFrequency(&f);
+			Frequency_Hz f = g_2m_frequency;
+			txSetFrequency(&f);
+			txSetModulation(g_2m_modulationFormat);
+			txSetPowerLevel(g_2m_power_level);
+			powerToTransmitter(enable);
 		}
 	}
 
-	RadioBand rxGetBand(void)
+	RadioBand txGetBand(void)
 	{
 		return(g_activeBand);
 	}
+	
+	void powerToTransmitter(BOOL on)
+	{
+		if(on)
+		{
+			if(g_activeBand == BAND_80M)
+			{
+				PORTB &= ~(1 << PORTB0); /* Turn VHF off */
+				PORTB |= (1 << PORTB1); /* Turn HF on */
+			}
+			else
+			{
+				PORTB &= ~(1 << PORTB1); /* Turn HF off */
+				PORTB |= (1 << PORTB0); /* Turn VHF on */
+			}
+		}
+		else
+		{
+			PORTB &= ~((1 << PORTB0) | (1 << PORTB1)); /* Turn off both bands */
+		}
+	}
+	
+	void keyTransmitter(BOOL on)
+	{
+		if(on)
+		{
+			if(!g_transmitter_keyed)
+			{
+				if(g_activeBand == BAND_80M)
+				{
+					si5351_clock_enable(TX_CLOCK_HF_0, SI5351_CLK_ENABLED);
+					si5351_clock_enable(TX_CLOCK_HF_1, SI5351_CLK_ENABLED);
+					PORTD |= (1 << PORTD4);
+				}
+				else
+				{
+					si5351_clock_enable(TX_CLOCK_VHF, SI5351_CLK_ENABLED);
+				}
+			
+				g_transmitter_keyed = TRUE;
+			}
+		}
+		else if(g_transmitter_keyed)
+		{
+			if(g_activeBand == BAND_80M)
+			{
+				PORTD &= ~(1 << PORTD4);
+				si5351_clock_enable(TX_CLOCK_HF_0, SI5351_CLK_DISABLED);
+				si5351_clock_enable(TX_CLOCK_HF_1, SI5351_CLK_DISABLED);
+			}
+			else
+			{
+				si5351_clock_enable(TX_CLOCK_VHF, SI5351_CLK_DISABLED);
+			}
 
+			g_transmitter_keyed = FALSE;
+		}
+	}
+	
+	void txSetDrive(uint8_t drive)
+	{
+		if(g_activeBand != BAND_2M) return;
+		
+		if(g_2m_modulationFormat == MODE_AM)
+		{
+			drive =  MIN(drive, MAX_2M_AM_DRIVE_LEVEL);
+			g_am_drive_level = drive;
+		}
+		else
+		{
+			drive = MIN(drive, MAX_2M_CW_DRIVE_LEVEL);
+			g_cw_drive_level = drive;
+		}
+	}
+	
+	void txSetPowerLevel(uint8_t power)
+	{
+		// Prevent possible damage to transmitter
+		if(g_activeBand == BAND_2M)
+		{
+			g_2m_power_level = MIN(power, MAX_2M_PWR_SETTING);
+			power = g_2m_power_level;
+			// TODO: Set modulation settings for appropriate power level
+		}
+		else
+		{
+			g_80m_power_level = MIN(power, MAX_80M_PWR_SETTING);
+			power = g_80m_power_level;
+		}
+		
+		dac081c_set_dac(power, PA_DAC);
+						
+		if(power == 0)
+		{
+			PORTB &= ~(1 << PORTB6); /* Turn off Tx power */
+		}
+		else
+		{
+			PORTB |= (1 << PORTB6); /* Turn on Tx power */
+		}
+	}
+
+	uint8_t txGetPowerLevel(void)
+	{
+		uint8_t pwr;
+		while(dac081c_read_dac(&pwr, PA_DAC));
+		return pwr;
+	}
+	
+	void txSetModulation(Modulation mode)
+	{
+		if((g_activeBand == BAND_2M) && (mode == MODE_AM))
+		{
+			g_2m_modulationFormat = MODE_AM;
+			txSetDrive(g_am_drive_level);
+			g_am_modulation_enabled = TRUE;
+		}
+		else
+		{
+			g_am_modulation_enabled = FALSE;
+			if(g_activeBand == BAND_2M) g_2m_modulationFormat = MODE_CW;
+			txSetDrive(g_cw_drive_level);
+		}
+	}
+	
+	Modulation txGetModulation(void)
+	{
+		if (g_activeBand == BAND_2M)
+		{
+			return g_2m_modulationFormat;
+		}
+		
+		return MODE_INVALID;
+	}
+	
+	BOOL txAMModulationEnabled(void)
+	{
+		return g_am_modulation_enabled;
+	}
+	
 	BOOL init_transmitter(void)
 	{
 		if(si5351_init(SI5351_CRYSTAL_LOAD_6PF, 0)) return TRUE;
 
-//		g_freq_2m = DEFAULT_RX_2M_FREQUENCY;
-//		g_freq_80m = DEFAULT_RX_80M_FREQUENCY;
-//		g_activeBand = DEFAULT_RX_ACTIVE_BAND;
-		
-		initializeReceiverEEPROMVars();
+		initializeTransmitterEEPROMVars();
 
-		g_freq_bfo = RADIO_IF_FREQUENCY;
-		rxSetBand(g_activeBand);    /* also sets RX_CLOCK_VFO to VFO frequency */
+		txSetBand(g_activeBand, OFF);    /* sets most tx settings leaving power to transmitter OFF */
+		txSetPowerLevel(0);
 
-		si5351_set_freq(g_freq_bfo, RX_CLOCK_BFO);
-		si5351_drive_strength(RX_CLOCK_BFO, SI5351_DRIVE_2MA);
-		si5351_clock_enable(RX_CLOCK_BFO, TRUE);
-		
-		si5351_drive_strength(RX_CLOCK_VFO, SI5351_DRIVE_2MA);
-		si5351_clock_enable(RX_CLOCK_VFO, TRUE);
-		
-		/**
-		 * Initialize port expander on receiver board */
-		g_receiver_port_shadow = 0;
-//		mcp23017_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
-		
-//		rxSetAttenuation(g_attenuation_setting);
-		if(g_activeBand == BAND_2M)
-		{
-//			rxSetPreamp(g_preamp_2m);
-		}
-		else
-		{
-//			rxSetPreamp(g_preamp_80m);
-		}
+		si5351_drive_strength(TX_CLOCK_HF_0, SI5351_DRIVE_8MA);
+		si5351_clock_enable(TX_CLOCK_HF_0, SI5351_CLK_DISABLED);
 
-		g_rx_initialized = TRUE;
+		si5351_drive_strength(TX_CLOCK_HF_1, SI5351_DRIVE_8MA);
+		si5351_clock_enable(TX_CLOCK_HF_1, SI5351_CLK_DISABLED);
+		
+		si5351_drive_strength(TX_CLOCK_VHF, SI5351_DRIVE_8MA);
+		si5351_clock_enable(TX_CLOCK_VHF, SI5351_CLK_DISABLED);
+		
+		g_tx_initialized = TRUE;
 		
 		return FALSE;
 	}
 	
-	void store_receiver_values(void)
+	void storeTtransmitterValues(void)
 	{
-		saveAllReceiverEEPROM();
+		saveAllTransmitterEEPROM();
 	}
 
 
-	void initializeReceiverEEPROMVars(void)
+	void initializeTransmitterEEPROMVars(void)
 	{
-		if(eeprom_read_byte(&ee_receiver_eeprom_initialization_flag) == EEPROM_INITIALIZED_FLAG)
+		if(eeprom_read_byte(&ee_eeprom_initialization_flag) == EEPROM_INITIALIZED_FLAG)
 		{
 			g_activeBand = eeprom_read_byte(&ee_active_band);
-			g_freq_2m = eeprom_read_dword(&ee_active_2m_frequency);
-			g_freq_80m = eeprom_read_dword(&ee_active_80m_frequency);
-			g_cw_offset = eeprom_read_dword(&ee_cw_offset_frequency);
-			g_preamp_80m = eeprom_read_byte(&ee_preamp_80m);
-			g_preamp_2m = eeprom_read_byte(&ee_preamp_2m);
-			g_attenuation_setting = eeprom_read_byte(&ee_attenuation_setting);
+			g_2m_frequency = eeprom_read_dword(&ee_active_2m_frequency);
+			g_2m_power_level = eeprom_read_byte(&ee_2m_power_level);
+			g_80m_frequency = eeprom_read_dword(&ee_active_80m_frequency);
+			g_80m_power_level = eeprom_read_byte(&ee_80m_power_level);
+			g_rtty_offset = eeprom_read_dword(&ee_cw_offset_frequency);
+			g_am_drive_level = eeprom_read_byte(&ee_am_drive_level);
+			g_cw_drive_level = eeprom_read_byte(&ee_cw_drive_level);
+			g_2m_modulationFormat = eeprom_read_byte(&ee_active_2m_modulation);
 		}
 		else
 		{
-			eeprom_write_dword(&ee_receiver_2m_mem1_freq, EEPROM_2M_MEM1_DEFAULT);
-			eeprom_write_dword(&ee_receiver_2m_mem2_freq, EEPROM_2M_MEM2_DEFAULT);
-			eeprom_write_dword(&ee_receiver_2m_mem3_freq, EEPROM_2M_MEM3_DEFAULT);
-			eeprom_write_dword(&ee_receiver_2m_mem4_freq, EEPROM_2M_MEM4_DEFAULT);
-			eeprom_write_dword(&ee_receiver_2m_mem5_freq, EEPROM_2M_MEM5_DEFAULT);
-			eeprom_write_dword(&ee_receiver_80m_mem1_freq, EEPROM_80M_MEM1_DEFAULT);
-			eeprom_write_dword(&ee_receiver_80m_mem2_freq, EEPROM_80M_MEM2_DEFAULT);
-			eeprom_write_dword(&ee_receiver_80m_mem3_freq, EEPROM_80M_MEM3_DEFAULT);
-			eeprom_write_dword(&ee_receiver_80m_mem4_freq, EEPROM_80M_MEM4_DEFAULT);
-			eeprom_write_dword(&ee_receiver_80m_mem5_freq, EEPROM_80M_MEM5_DEFAULT);
-			eeprom_write_byte(&ee_receiver_eeprom_initialization_flag, EEPROM_INITIALIZED_FLAG);
+			eeprom_write_byte(&ee_eeprom_initialization_flag, EEPROM_INITIALIZED_FLAG);
 
 			g_activeBand = EEPROM_BAND_DEFAULT;
-			g_freq_2m = DEFAULT_RX_2M_FREQUENCY;
-			g_freq_80m = DEFAULT_RX_80M_FREQUENCY;
-			g_cw_offset = DEFAULT_RX_CW_OFFSET_FREQUENCY;
-			g_preamp_80m = DEFAULT_PREAMP_80M;
-			g_preamp_2m = DEFAULT_PREAMP_2M;
-			g_attenuation_setting = DEFAULT_ATTENUATION;
+			g_2m_frequency = DEFAULT_TX_2M_FREQUENCY;
+			g_2m_power_level = DEFAULT_TX_2M_POWER;
+			g_80m_frequency = DEFAULT_TX_80M_FREQUENCY;
+			g_80m_power_level = DEFAULT_TX_80M_POWER;
+			g_rtty_offset = DEFAULT_RTTY_OFFSET_FREQUENCY;
+			g_am_drive_level = DEFAULT_AM_DRIVE_LEVEL;
+			g_cw_drive_level = DEFAULT_CW_DRIVE_LEVEL;
+			g_2m_modulationFormat = DEFAULT_TX_2M_MODULATION;
 
-			saveAllReceiverEEPROM();
+			saveAllTransmitterEEPROM();
 		}
 	}
 
-	void saveAllReceiverEEPROM(void)
+	void saveAllTransmitterEEPROM(void)
 	{
 		storeEEbyteIfChanged(&ee_active_band, g_activeBand);
-		storeEEdwordIfChanged((uint32_t*)&ee_active_2m_frequency, g_freq_2m);
-		storeEEdwordIfChanged((uint32_t*)&ee_active_80m_frequency, g_freq_80m);
-		storeEEdwordIfChanged((uint32_t*)&ee_cw_offset_frequency, g_cw_offset);
+		storeEEdwordIfChanged((uint32_t*)&ee_active_2m_frequency, g_2m_frequency);
+		storeEEbyteIfChanged(&ee_2m_power_level, g_2m_power_level);
+		storeEEdwordIfChanged((uint32_t*)&ee_active_80m_frequency, g_80m_frequency);
+		storeEEbyteIfChanged(&ee_80m_power_level, g_80m_power_level);
+		storeEEdwordIfChanged((uint32_t*)&ee_cw_offset_frequency, g_rtty_offset);
 		storeEEdwordIfChanged((uint32_t*)&ee_si5351_ref_correction, si5351_get_correction());
-		storeEEbyteIfChanged(&ee_preamp_80m, g_preamp_80m);
-		storeEEbyteIfChanged(&ee_preamp_2m, g_preamp_2m);
-		storeEEbyteIfChanged(&ee_attenuation_setting, g_attenuation_setting);
+		storeEEbyteIfChanged(&ee_am_drive_level, g_am_drive_level);
+		storeEEbyteIfChanged(&ee_cw_drive_level, g_cw_drive_level);
+		storeEEbyteIfChanged(&ee_active_2m_modulation, g_2m_modulationFormat);
 	}
 
 
-#endif  /*#ifdef INCLUDE_RECEIVER_SUPPORT */
-
-BOOL rxSetCWOffset(Frequency_Hz offset)
-{
-	BOOL success = FALSE;
-	
-	if((offset >= 0) && (offset <= MAX_CW_OFFSET))
-	{
-		g_cw_offset = offset;
-		rxSetBand(g_activeBand); // apply offset to currect frequency setting
-		success = TRUE;
-	}
-	
-	return success;
-}
-
-Frequency_Hz rxGetCWOffset(void)
-{
-	return g_cw_offset;
-}
+#endif  /*#ifdef INCLUDE_TRANSMITTER_SUPPORT */
 
 RadioBand bandForFrequency(Frequency_Hz freq)
 {
 	RadioBand result = BAND_INVALID;
 
-	if((freq >= RX_MINIMUM_2M_FREQUENCY) && (freq <= RX_MAXIMUM_2M_FREQUENCY))
+	if((freq >= TX_MINIMUM_2M_FREQUENCY) && (freq <= TX_MAXIMUM_2M_FREQUENCY))
 	{
 		result = BAND_2M;
 	}
-	else if((freq >= RX_MINIMUM_80M_FREQUENCY) && (freq <= RX_MAXIMUM_80M_FREQUENCY))
+	else if((freq >= TX_MINIMUM_80M_FREQUENCY) && (freq <= TX_MAXIMUM_80M_FREQUENCY))
 	{
 		result = BAND_80M;
 	}
 
 	return(result);
 }
-
-uint8_t rxSetAttenuation(uint8_t att)
-{
-	uint16_t attenuation = CLAMP(0, att, 100); 
-	max5478_set_dualpotentiometer_wipers(potValFromAtten(attenuation));
-	g_attenuation_setting = attenuation;
-						
-	if(attenuation)
-	{
-		g_receiver_port_shadow |= 0b00000100;
-//		mcp23017_writePort(g_receiver_port_shadow); /* set receiver port expander */
-	}
-	else
-	{
-		g_receiver_port_shadow &= 0b11111011;
-//		mcp23017_writePort(g_receiver_port_shadow); /* set receiver port expander */
-	}
-	
-	return g_attenuation_setting;
-}
-
-uint8_t rxGetAttenuation(void)
-{
-	return g_attenuation_setting;
-}
-	
-uint16_t potValFromAtten(uint16_t atten)
-{
-	uint16_t valLow = 0x00FF;
-	uint16_t valHigh = 0;
-		
-	if(atten)
-	{							
-		if(atten < 23) // 0xFFF -> 0x23FF
-		{
-			valHigh = 0xFF00 - (atten * 0x0A00);
-		}
-		else if(atten < 41) // 0x23FF -> 0x00FF
-		{
-			valHigh = 0x2300 - (0x0200 * (atten - 23));
-		}
-		else // 0x00FF -> 0x0000
-		{
-			valLow = (255 * (100 - atten)) / 59;
-		}
-			
-		valHigh += valLow;
-	}
-		
-	return valHigh;
-}
-
-uint8_t rxGetPreamp(void)
-{
-	if(g_activeBand == BAND_2M)
-	{
-		return g_preamp_2m;
-	}
-	else
-	{
-		return g_preamp_80m;
-	}
-}
-
-uint8_t rxSetPreamp(uint8_t setting)
-{
-	uint8_t result;
-	
-	if(g_activeBand == BAND_2M)
-	{
-		if(setting == 0)
-		{
-			g_receiver_port_shadow &= 0b11011111;
-//			mcp23017_writePort(g_receiver_port_shadow); /* set receiver port expander */
-		}
-		else // if(setting == 1)
-		{
-			g_receiver_port_shadow |= 0b00100000;
-//			mcp23017_writePort(g_receiver_port_shadow); /* set receiver port expander */
-		}
-	}
-	else // if g_activeBand == BAND_80M
-	{
-//		dac081c_set_dac(setting);
-	}
-					
-	if(g_activeBand == BAND_2M)
-	{
-		g_preamp_2m = (g_receiver_port_shadow & 0b00100000) >> 5;
-		result = g_preamp_2m;
-	}
-	else
-	{
-//		g_preamp_80m = dac081c_read_dac();
-		result = g_preamp_80m;
-	}
-
-	return(result);
-}
-
-

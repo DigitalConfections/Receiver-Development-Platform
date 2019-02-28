@@ -10,25 +10,29 @@
 
 BOOL wifi_enabled(void)
 {
-	uint8_t result;
-	mcp23017_readPort(&result, MCP23017_PORTB);
-	result &= (1 << WIFI_POWER_ENABLE);
-	return result;
+	return PORTD & (1 << PORTD6);
 }
 
 void wifi_reset(BOOL reset)
 {
 	if(reset) // assert reset low
 	{
-		mcp23017_set(WIFI_RESET, LOW);
+		PORTD &= ~(1 << PORTD6);
 	}
 	else // de-assert reset high
 	{
-		mcp23017_set(WIFI_RESET, HIGH);
+		PORTD |= (1 << PORTD6);
 	}
 }
 
 void wifi_power(BOOL on)
 {
-	mcp23017_set(WIFI_POWER_ENABLE, on);
+	if(on)
+	{
+		PORTD |= (1 << PORTD7);
+	}
+	else
+	{
+		PORTD &= ~(1 << PORTD7);
+	}
 }

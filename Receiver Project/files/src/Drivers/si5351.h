@@ -144,7 +144,6 @@
 /*
  ****************************************************************************************************************/
 
-#define SI5351_BUS_BASE_ADDR                            0xC0    /* I2C slave address */
 #define SI5351_XTAL_FREQ                                25000000UL
 #define SI5351_PLL_FIXED                                900000000UL
 
@@ -438,7 +437,7 @@
 
 /**
  */
-void si5351_init(Si5351_Xtal_load_pF, Frequency_Hz);
+BOOL si5351_init(Si5351_Xtal_load_pF, Frequency_Hz);
 
 /**
  */

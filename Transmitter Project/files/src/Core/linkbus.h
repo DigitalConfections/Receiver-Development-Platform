@@ -30,8 +30,8 @@
 #include "transmitter.h"
 #include "si5351.h"
 
-#define INKBUS_TERMINAL_MODE_DEFAULT FALSE
-#define LINKBUS_MAX_MSG_LENGTH 75
+#define LINKBUS_TERMINAL_MODE_DEFAULT FALSE
+#define LINKBUS_MAX_MSG_LENGTH 50
 #define LINKBUS_MIN_MSG_LENGTH 3    /* shortest message: $TTY; */
 #define LINKBUS_MAX_MSG_FIELD_LENGTH 21
 #define LINKBUS_MAX_MSG_NUMBER_OF_FIELDS 3
@@ -89,27 +89,24 @@ typedef enum
 
 	/* TEST EQUIPMENT MESSAGE FAMILY (TEST DEVICE MESSAGING) */
 	MESSAGE_BAND = 'B' * 100 + 'N' * 10 + 'D',      /* $BND,; / $BND? / !BND,; // Set band; field1 = RadioBand */
-	MESSAGE_SETCLK0 = 'C' * 100 + 'K' * 10 + '0',   /* $CK0,Fhz,on; // FHz=freq_in_Hz nc=null; on=1 off=0 nc=null */
-	MESSAGE_SETCLK1 = 'C' * 100 + 'K' * 10 + '1',   /* $CK1,Fhz,on; // FHz=freq_in_Hz nc=null; on=1 off=0 nc=null */
-	MESSAGE_SETCLK2 = 'C' * 100 + 'K' * 10 + '2',   /* $CK2,Fhz,on; // FHz=freq_in_Hz nc=null; on=1 off=0 nc=null */
-	MESSAGE_BCR = 'B' * 100 + 'C' * 10 + 'R',       /* Broadcast Request: $BCR,? $BCR,; // Start and stop broadcasts of data identified in field1 */
 	MESSAGE_TTY = 'T' * 100 + 'T' * 10 + 'Y',       /* Adjust for PC communications interface (add crlf, etc.) */
 
-	/* CONTROL HEAD MESSAGE FAMILY */
-
-	/*	DUAL-BAND RX MESSAGE FAMILY (FUNCTIONAL MESSAGING) */
-	MESSAGE_SET_FREQ = 'F' * 100 + 'R' * 10 + 'E',  /* $FRE,Fhz; / $FRE,FHz? / !FRE,; // Set/request current receive frequency */
-	MESSAGE_TIME = 'T' * 100 + 'I' * 10 + 'M',      /* $TIM,time; / !TIM,time; / $TIM,? // Set/request RTC time */
+	/*	DUAL-BAND TX MESSAGE FAMILY (FUNCTIONAL MESSAGING) */
+	MESSAGE_SET_FREQ = 'F' * 100 + 'R' * 10 + 'E',  /* $FRE,Fhz; / $FRE,FHz? / !FRE,; // Set/request current frequency */
+	MESSAGE_CLOCK = 'T' * 100 + 'I' * 10 + 'M',		/* Sets/reads the real-time clock */
+	MESSAGE_TIME = 'S' * 10 + 'F',					/* Sets the start and finish times */
 	MESSAGE_BAT = 'B' * 100 + 'A' * 10 + 'T',       /* Battery charge data */
-	MESSAGE_RSSI_BC = 'S',                          /* RSSI broadcast data */
-	MESSAGE_RSSI_REPEAT_BC = 'S' * 10 + 'S',		/* RSSI repeat broadcast toggle */
-	MESSAGE_RF_BC = 'R',                            /* RF level broadcast data */
 	MESSAGE_TEMP = 'T' * 100 + 'E' * 10 + 'M',      /* Temperature  data */
 	MESSAGE_PERM = 'P',								/* Saves most settings to EEPROM "perm" */
-	MESSAGE_CW_OFFSET = 'O',						/* Sets or returns the CW offset in Hz */
-	MESSAGE_ATTENUATION = 'A',                      /* Sets receiver attenuation (0-255) */
-	MESSAGE_PREAMP = 'P' * 100 + 'R' * 10 + 'E',    /* Turn on preamp (1|0) */
-	MESSAGE_TONE_RSSI = 'T' * 100 + 'O' * 10 + 'N', /* Turn on tone RSSI output */
+	MESSAGE_TX_POWER = 'P' * 100 + 'O' * 10 + 'W',	/* Sets transmit power level */
+	MESSAGE_TX_MOD = 'M' * 100 + 'O' * 10 + 'D',    /* Sets 2m modulation format to AM or CW */
+	MESSAGE_DRIVE_LEVEL = 'D' * 100 + 'R' * 10 + 'I', /*  Adjust 2m drive level */
+	MESSAGE_SET_STATION_ID = 'I' * 10 + 'D',        /* Sets amateur radio callsign text */
+	MESSAGE_SET_PATTERN = 'P' * 10 + 'A',           /* Sets unique transmit pattern */
+	MESSAGE_CODE_SPEED = 'S' * 100 + 'P' * 10 + 'D', /* Sets id and pattern code speeds */
+	MESSAGE_TIME_INTERVAL = 'T',					/* Sets on-air, off-air, delay, and ID time intervals */
+	MESSAGE_ESP_COMM = 'E' * 100 + 'S' * 10 + 'P',  /* Communications with ESP8266 controller */
+	MESSAGE_GO = 'G' * 10 + 'O',					/* Start transmitting now without delay */
 
 	/* TTY USER MESSAGES */
 	MESSAGE_ALL_INFO = '?',                         /* Prints all receiver info */
@@ -124,6 +121,9 @@ typedef enum
 
 	INVALID_MESSAGE = UINT16_MAX					/* This value must never overlap a valid message ID */
 } LBMessageID;
+
+#define MESSAGE_TIME_LABEL "TIM"
+#define MESSAGE_ESP_LABEL "ESP"
 
 typedef enum
 {
@@ -154,7 +154,8 @@ typedef enum
 {
 	NO_ID = 0,
 	CONTROL_HEAD_ID = 1,
-	RECEIVER_ID = 2
+	RECEIVER_ID = 2,
+	TRANSMITTER_ID = 3
 } DeviceID;
 
 typedef char LinkbusTxBuffer[LINKBUS_MAX_MSG_LENGTH];
@@ -217,29 +218,17 @@ void linkbus_setTerminalMode(BOOL on);
  */
 void lb_send_FRE(LBMessageType msgType, Frequency_Hz freq, BOOL isMemoryValue);
 
+/** 
+*/
+void lb_send_ESP(LBMessageType msgType, char* msg);
+
 /**
  */
-void lb_send_TIM(LBMessageType msgType, int32_t time);
+void lb_send_msg(LBMessageType msgType, char* msgLabel, char* msgStr);
 
 /**
  */
 void lb_send_BND(LBMessageType msgType, RadioBand band);
-
-/**
- */
-void lb_send_VOL(LBMessageType msgType, VolumeType type, VolumeSetting volume);
-
-/**
- */
-void lb_send_BCR(LBbroadcastType bcType, BOOL start);
-
-/**
- */
-void lb_broadcast_rssi(uint16_t data);
-
-/**
- */
-void lb_broadcast_rf(uint16_t data);
 
 /**
  */
@@ -265,10 +254,6 @@ void lb_send_WDTError(void);
 /**
  */
 void linkbus_setLineTerm(char* term);
-
-/**
- */
-void lb_poweroff_msg(uint8_t sec);
 
 /**
  */

@@ -30,6 +30,7 @@
 #include "receiver.h"
 #include "si5351.h"
 
+#define INKBUS_TERMINAL_MODE_DEFAULT TRUE
 #define LINKBUS_MAX_MSG_LENGTH 75
 #define LINKBUS_MIN_MSG_LENGTH 3    /* shortest message: $TTY; */
 #define LINKBUS_MAX_MSG_FIELD_LENGTH 21
@@ -41,7 +42,7 @@
 
 #define FOSC 8000000    /* Clock Speed */
 #define BAUD 9600
-#define MYUBRR (FOSC / 16 / BAUD - 1)
+#define MYUBRR(b) (FOSC / 16 / (b) - 1)
 
 typedef enum
 {
@@ -173,7 +174,7 @@ typedef struct
 
 /**
  */
-void linkbus_init(void);
+void linkbus_init(uint32_t baud);
 
 /**
  */
@@ -182,6 +183,11 @@ void linkbus_end_tx(void);
 /**
  */
 void linkbus_reset_rx(void);
+
+/**
+ * Immediately turns off receiver and flushes receive buffer
+ */
+void linkbus_disable(void);
 
 /**
  */

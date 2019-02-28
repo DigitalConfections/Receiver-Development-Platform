@@ -27,7 +27,7 @@
 #include "i2c.h"
 #include <util/twi.h>
 
-#define DAC081C_SLAVE_ADDR_A0 0x18
+#define DAC081C_I2C_SLAVE_ADDR_A0 0x18
 
 void dac081c_set_dac(uint8_t setting)
 {
@@ -35,7 +35,7 @@ void dac081c_set_dac(uint8_t setting)
 	
 	byte1 |= (setting >> 4);
 	byte2 |= (setting << 4);
-	i2c_device_write(DAC081C_SLAVE_ADDR_A0, byte1, &byte2, 1);
+	i2c_device_write(DAC081C_I2C_SLAVE_ADDR_A0, byte1, &byte2, 1);
 }
 
 #ifdef SELECTIVELY_DISABLE_OPTIMIZATION
@@ -54,7 +54,7 @@ void dac081c_set_dac(uint8_t setting)
 		return(TRUE);
 	}
 
-	if(i2c_write_success((DAC081C_SLAVE_ADDR_A0 | TW_READ), TW_MR_SLA_ACK))
+	if(i2c_write_success((DAC081C_I2C_SLAVE_ADDR_A0 | TW_READ), TW_MR_SLA_ACK))
 	{
 		return(TRUE);
 	}

@@ -33,11 +33,19 @@
  */
 
 #include "defs.h"
+#include <time.h>
 
 #ifndef DS3231_H_
 #define DS3231_H_
 
+typedef enum {
+	RTC_CLOCK,
+	RTC_ALARM1,
+	RTC_ALARM2
+} ClockSetting;
+
 #ifdef INCLUDE_DS3231_SUPPORT
+
 
 /**
  *  Reads hours, minutes and seconds from the DS3231 and returns them in the memory location pointed to by
@@ -46,13 +54,33 @@
  *  *char - if non-NULL will receive a string representation of the time
  *  format - specifies the string format to be used for the string time representation
  */
-	void ds3231_read_time(int32_t* val, char* buffer, TimeFormat format);
+//	void ds3231_read_time(int32_t* val, char* buffer, TimeFormat format);
+#ifdef DATE_STRING_SUPPORT_ENABLED
+void ds3231_read_date_time(int32_t* val, char* buffer, TimeFormat format);
+#endif // DATE_STRING_SUPPORT_ENABLED
 
 /**
- *  Set hours, minutes and seconds of the DS3231 to the time passed in the argument.
- *  offset - time in seconds since midnight
+ *  Reads time from the DS3231 and returns the epoch
  */
-	void ds3231_set_time(int32_t secondsSinceMidnight);
+time_t ds3231_get_epoch(BOOL *result);
+	
+
+/**
+ *  Set year, month, date, day, hours, minutes and seconds of the DS3231 to the time passed in the argument.
+ * dateString has the format 2018-03-23T18:00:00
+ * ClockSetting setting = clock or alarm to be set
+ */
+	void ds3231_set_date_time(char * dateString, ClockSetting setting);
+	
+/**
+ * Returns day of week given any date
+ * year = 20xx
+ * month = mm
+ * day = dd
+ * Returns 1=Sun, ... 7=Sat
+ */
+//const uint8_t wd(int year, int month, int day);
+
 	
 /**
  *

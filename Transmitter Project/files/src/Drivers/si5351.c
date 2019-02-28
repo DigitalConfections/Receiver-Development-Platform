@@ -391,7 +391,7 @@
 
 
 /*
- * BOOL si5351_set_freq(Frequency_Hz freq_Fout, Si5351_clock output)
+ * BOOL si5351_set_freq(Frequency_Hz freq_Fout, Si5351_clock clk, BOOL clocksOff)
  *
  * Sets the clock frequency of the specified CLK output
  *
@@ -401,7 +401,7 @@
  * Returns TRUE on failure
  *
  */
-	BOOL si5351_set_freq(Frequency_Hz freq_Fout, Si5351_clock clk)
+	BOOL si5351_set_freq(Frequency_Hz freq_Fout, Si5351_clock clk, BOOL clocksOff)
 	{
 		Union_si5351_regs ms_reg;
 		Frequency_Hz freq_VCO = 0;
@@ -584,7 +584,14 @@
 		/* Block 6: */
 		/* Enable desired outputs */
 		/* (see Register 3) */
-		si5351_write(3, ~enabledClocksMask);    /* only enable clock(s) in use */
+		if(clocksOff)
+		{
+			si5351_write(3, enabledClocksMask);    /* disable clock(s) in use */
+		}
+		else
+		{
+			si5351_write(3, ~enabledClocksMask);    /* only enable clock(s) in use */
+		}
 
 		/* power up the clock */
 		if(target_pll == SI5351_PLLA)

@@ -31,6 +31,7 @@
 #define UTIL_H_
 
 #include "defs.h"
+#include <time.h>
 
 /***********************************************************************************************
  *  EEPROM Utility Functions
@@ -52,21 +53,24 @@ void storeEEbyteIfChanged(uint8_t* ee_var, uint8_t val);
  */
 void storeEEdwordIfChanged(uint32_t* ee_var, uint32_t val);
 
+/**
+ *  Writes a word (2 bytes) to the EEPROM memory location specified by ee_var only if that value
+ *  differs from what is already stored in EEPROM.
+ *  ee_var is the pointer to EE prom memory
+ *  val = long value to be written
+ */
+void storeEEwordIfChanged(uint16_t* ee_var, uint16_t val);
+
 /***********************************************************************************************
  *  Print Formatting Utility Functions
  ************************************************************************************************/
 
+#ifdef DATE_STRING_SUPPORT_ENABLED
 /**
- *  str = pointer to char[] of size 10 or greater
- *  timerVal = time (in seconds) to be converted to a string
- *  tf = format to be applied in creating the string
+ * Converts a string of format "yyyy-mm-ddThh:mm:ss" to seconds since 1900
  */
-void timeValToString(char *str, int32_t timeVal, TimeFormat tf);
-
-/**
- *  str = pointer to char[] of size 10 or greater containing time string in format hh:mm:ss
- *  returns time in seconds since midnight
- */
-int32_t stringToTimeVal(char *str);
+uint32_t convertTimeStringToEpoch(char * s);
+BOOL mystrptime(char* s, struct tm* ltm);
+#endif // DATE_STRING_SUPPORT_ENABLED
 
 #endif  /* UTIL_H_ */

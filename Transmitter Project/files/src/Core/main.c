@@ -26,9 +26,9 @@
 
 #include <ctype.h>
 #include <asf.h>
+#include <time.h>
 #include "defs.h"
 #include "si5351.h"		/* Programmable clock generator */
-#include "ad5245.h"		/* Potentiometer for tone volume on Digital Interface */
 #include "ds3231.h"
 #include "mcp23017.h"	/* Port expander on Rev X2 Digital Interface board */
 #include "i2c.h"
@@ -36,6 +36,7 @@
 #include "transmitter.h"
 #include "huzzah.h"
 #include "util.h"
+#include "morse.h"
 
 #include <avr/io.h>
 #include <stdint.h>         /* has to be added to use uint8_t */
@@ -48,11 +49,13 @@
 /***********************************************************************
  * Local Typedefs
 ************************************************************************/
+
 typedef enum
 {
 	WD_SW_RESETS,
 	WD_HW_RESETS,
-	WD_FORCE_RESET
+	WD_FORCE_RESET,
+	WD_DISABLE
 } WDReset;
 
 
@@ -63,101 +66,91 @@ typedef enum
  * Whenever possible limit globals' scope to this file using "static"
  * Use "volatile" for globals shared between ISRs and foreground
  ************************************************************************/
+static char g_tempStr[21] = {'\0'};
 
 static volatile BOOL g_powering_off = FALSE;
 
 static volatile BOOL g_radio_port_changed = FALSE;
-static volatile uint16_t g_beep_length = 0;
 static volatile uint8_t g_wifi_enable_delay = 0;
 
 static volatile uint16_t g_tick_count = 0;
 static volatile BOOL g_battery_measurements_active = FALSE;
 static volatile uint16_t g_maximum_battery = 0;
 static volatile BatteryType g_battery_type = BATTERY_UNKNOWN;
-static volatile uint16_t g_send_ID_countdown = 0;
 static volatile BOOL g_initialization_complete = FALSE;
 
+static volatile uint8_t g_mod_up = MAX_2M_CW_DRIVE_LEVEL;
+static volatile uint8_t g_mod_down = MAX_2M_CW_DRIVE_LEVEL;
+
 #ifdef INCLUDE_DS3231_SUPPORT
-	static int32_t g_start_time;
+	static volatile uint32_t g_temp_time;
+	static volatile uint32_t g_tx_epoch_time; /* kluge to diagnose issue with system clock provided by time.h */
 #endif
 
 /* Linkbus variables */
-static DeviceID g_LB_attached_device = NO_ID;
-static uint16_t g_LB_broadcasts_enabled = 0;
-static BOOL g_terminal_mode = INKBUS_TERMINAL_MODE_DEFAULT;
-static BOOL g_lb_repeat_rssi = FALSE;
-static uint16_t g_rssi_countdown = 0;
+static BOOL g_terminal_mode = LINKBUS_TERMINAL_MODE_DEFAULT;
 
 #ifdef DEBUG_FUNCTIONS_ENABLE
 static volatile uint16_t g_debug_atten_step = 0;
 #endif
 
-static uint8_t g_LB_broadcast_interval = 100;
-static BOOL EEMEM ee_interface_eeprom_initialization_flag = EEPROM_INITIALIZED_FLAG;
+#define MAX_PATTERN_TEXT_LENGTH 20
 
-extern uint32_t EEMEM ee_receiver_2m_mem1_freq;
-extern uint32_t EEMEM ee_receiver_2m_mem2_freq;
-extern uint32_t EEMEM ee_receiver_2m_mem3_freq;
-extern uint32_t EEMEM ee_receiver_2m_mem4_freq;
-extern uint32_t EEMEM ee_receiver_2m_mem5_freq;
-extern uint32_t EEMEM ee_receiver_80m_mem1_freq;
-extern uint32_t EEMEM ee_receiver_80m_mem2_freq;
-extern uint32_t EEMEM ee_receiver_80m_mem3_freq;
-extern uint32_t EEMEM ee_receiver_80m_mem4_freq;
-extern uint32_t EEMEM ee_receiver_80m_mem5_freq;
+static BOOL EEMEM ee_interface_eeprom_initialization_flag = EEPROM_UNINITIALIZED;
 
-static volatile Frequency_Hz g_receiver_freq = 0;
+static char EEMEM ee_stationID_text[MAX_PATTERN_TEXT_LENGTH];
+static char EEMEM ee_pattern_text[MAX_PATTERN_TEXT_LENGTH];
+static uint8_t EEMEM ee_pattern_codespeed;
+static uint8_t EEMEM ee_id_codespeed;
+static uint16_t EEMEM ee_on_air_time;
+static uint16_t EEMEM ee_off_air_time;
+static uint16_t EEMEM ee_intra_cycle_delay_time;
+static uint16_t EEMEM ee_ID_time;
+static time_t EEMEM ee_start_time;
+static time_t EEMEM ee_finish_time;
 
-/* Digital Potentiometer Defines */
-static uint8_t EEMEM ee_tone_volume_setting = EEPROM_TONE_VOLUME_DEFAULT;
-/* Headphone Driver Defines */
-static uint8_t EEMEM ee_main_volume_setting = EEPROM_MAIN_VOLUME_DEFAULT;
-static uint8_t EEMEM ee_audio_RSSI_setting = EEPROM_AUDIO_RSSI_DEFAULT;
-static uint8_t EEMEM ee_tone_RSSI_direction_setting = EEPROM_TONE_RSSI_DIRECTION_DEFAULT;
-static uint8_t EEMEM ee_rssi_filter_setting = EEPROM_TONE_RSSI_FILTER_DEFAULT;
+static char g_messages_text[2][MAX_PATTERN_TEXT_LENGTH] = {"\0", "\0"};
+static volatile uint8_t g_id_codespeed = EEPROM_ID_CODE_SPEED_DEFAULT;
+static volatile uint8_t g_pattern_codespeed = EEPROM_PATTERN_CODE_SPEED_DEFAULT;
+static volatile uint16_t g_time_needed_for_ID = 0;
+static volatile int16_t g_on_air_seconds = EEPROM_ON_AIR_TIME_DEFAULT; /* amount of time to spend on the air */
+static volatile int16_t g_off_air_seconds = EEPROM_OFF_AIR_TIME_DEFAULT; /* amount of time to wait before returning to the air */
+static volatile int16_t g_intra_cycle_delay_time = EEPROM_INTRA_CYCLE_DELAY_TIME_DEFAULT; /* offset time into a repeating transmit cycle */
+static volatile int16_t g_ID_time = EEPROM_ID_TIME_INTERVAL_DEFAULT; /* amount of time between ID/callsign transmissions */
+static volatile time_t g_event_start_time = EEPROM_START_TIME_DEFAULT;
+static volatile time_t g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
+static volatile BOOL g_event_enabled = FALSE;
+static volatile BOOL g_event_commenced = FALSE;
 
-static volatile uint8_t g_main_volume = 0;
-static volatile uint8_t g_hw_main_volume = EEPROM_MAIN_VOLUME_DEFAULT;
-static volatile uint8_t g_tone_volume;
-static volatile uint8_t g_audio_RSSI = FALSE;
-static volatile uint8_t g_tone_RSSI_direction = 0;
-static volatile uint8_t g_rssi_filter = 0;
+static volatile int32_t g_on_the_air = 0;
+static volatile uint16_t g_time_to_send_ID_countdown = 0;
+static volatile uint16_t g_code_throttle = 50;
+static volatile uint8_t g_WiFi_shutdown_seconds = 120;
 
-#ifdef ENABLE_1_SEC_INTERRUPTS
-
-	static volatile uint16_t g_seconds_count = 0;
-	static volatile uint8_t g_seconds_int = FALSE;
-
-#endif  /* #ifdef ENABLE_1_SEC_INTERRUPTS */
+static volatile Frequency_Hz g_transmitter_freq = 0;
 
 /* ADC Defines */
 
-#define RF_READING 0
-#define BATTERY_READING 1
-#define RSSI_READING 2
+#define BATTERY_READING 0
+#define PA_VOLTAGE_READING 1
 
-#define RF_LEVEL 0x03
-#define BAT_VOLTAGE 0x06
-#define RSSI_LEVEL 0x07
-#define NUMBER_OF_POLLED_ADC_CHANNELS 3
-static const uint8_t activeADC[NUMBER_OF_POLLED_ADC_CHANNELS] = { RF_LEVEL, BAT_VOLTAGE, RSSI_LEVEL };
+#define TX_PA_DRIVE_VOLTAGE ADCH6
+#define BAT_VOLTAGE ADCH7
+#define NUMBER_OF_POLLED_ADC_CHANNELS 2
+static const uint8_t activeADC[NUMBER_OF_POLLED_ADC_CHANNELS] = { BAT_VOLTAGE, TX_PA_DRIVE_VOLTAGE };
 
-static const uint16_t g_adcChannelConversionPeriod_ticks[NUMBER_OF_POLLED_ADC_CHANNELS] = { TIMER2_0_5HZ, TIMER2_0_5HZ, TIMER2_20HZ };
-static volatile uint16_t g_tickCountdownADCFlag[NUMBER_OF_POLLED_ADC_CHANNELS] = { TIMER2_0_5HZ, TIMER2_0_5HZ, TIMER2_20HZ };
-static uint16_t g_filterADCValue[NUMBER_OF_POLLED_ADC_CHANNELS] = { 500, 500, 3 };
-static volatile BOOL g_adcUpdated[NUMBER_OF_POLLED_ADC_CHANNELS] = { FALSE, FALSE, FALSE };
+static const uint16_t g_adcChannelConversionPeriod_ticks[NUMBER_OF_POLLED_ADC_CHANNELS] = { TIMER2_0_5HZ, TIMER2_0_5HZ };
+static volatile uint16_t g_tickCountdownADCFlag[NUMBER_OF_POLLED_ADC_CHANNELS] = { TIMER2_0_5HZ, TIMER2_0_5HZ };
+static uint16_t g_filterADCValue[NUMBER_OF_POLLED_ADC_CHANNELS] = { 500, 500 };
+static volatile BOOL g_adcUpdated[NUMBER_OF_POLLED_ADC_CHANNELS] = { FALSE, FALSE };
 static volatile uint16_t g_lastConversionResult[NUMBER_OF_POLLED_ADC_CHANNELS];
 
-static volatile uint32_t g_filteredRSSI = 0;
+static volatile uint32_t g_PA_voltage = 0;
 
-static volatile uint16_t g_power_off_countdown = POWER_OFF_DELAY;
-static volatile uint16_t g_headphone_removed_delay = HEADPHONE_REMOVED_DELAY;
-static volatile uint16_t g_low_voltage_shutdown_delay = LOW_VOLTAGE_DELAY;
-static volatile uint16_t g_backlight_off_countdown = BACKLIGHT_ALWAYS_ON;
-static uint16_t g_backlight_delay_value = BACKLIGHT_ALWAYS_ON;
 extern volatile BOOL g_i2c_not_timed_out;
 static volatile BOOL g_sufficient_power_detected = FALSE;
 static volatile BOOL g_enableHardwareWDResets = FALSE;
+static volatile BOOL g_am_modulation_enabled = FALSE;
 
 /***********************************************************************
  * Private Function Prototypes
@@ -168,7 +161,11 @@ static volatile BOOL g_enableHardwareWDResets = FALSE;
 void initializeEEPROMVars(void);
 void saveAllEEPROM(void);
 void wdt_init(WDReset resetType);
-void tonePitch(uint8_t pitch);
+uint16_t throttleValue(uint8_t speed);
+void initializeTxWithSettings(time_t startTime);
+BOOL hw_init(void);
+void set_ports(InitActionType initType);
+
 
 /***********************************************************************
  * Watchdog Timer ISR
@@ -185,34 +182,153 @@ void __attribute__((optimize("O1"))) wdt_init(WDReset resetType)
 		MCUSR &= (1 << WDRF);   /* Clear the WDT reset flag */
 	}
 
-	if(resetType == WD_HW_RESETS)
+	if(resetType == WD_DISABLE)
 	{
-		WDTCSR |= (1 << WDCE) | (1 << WDE);
-		WDTCSR = (1 << WDP3) | (1 << WDIE) | (1 << WDE);    /* Enable WD interrupt every 4 seconds, and hardware resets */
-		/*	WDTCSR = (1 << WDP3) | (1 << WDP0) | (1 << WDIE) | (1 << WDE); // Enable WD interrupt every 8 seconds, and hardware resets */
-	}
-	else if(resetType == WD_SW_RESETS)
-	{
-		WDTCSR |= (1 << WDCE) | (1 << WDE);
-		/*	WDTCSR = (1 << WDP3) | (1 << WDIE); // Enable WD interrupt every 4 seconds (no HW reset)
-		 *	WDTCSR = (1 << WDP3) | (1 << WDP0)  | (1 << WDIE); // Enable WD interrupt every 8 seconds (no HW reset) */
-		WDTCSR = (1 << WDP1) | (1 << WDP2)  | (1 << WDIE);  /* Enable WD interrupt every 1 seconds (no HW reset) */
+		/* Clear WDRF in MCUSR */
+		MCUSR &= ~(1<<WDRF);
+		/* Write logical one to WDCE and WDE */
+		/* Keep old prescaler setting to prevent unintentional
+		time-out */
+		WDTCSR |= (1<<WDCE) | (1<<WDE);
+		/* Turn off WDT */
+		WDTCSR = 0x00;
+		g_enableHardwareWDResets = FALSE;
 	}
 	else
 	{
-		WDTCSR |= (1 << WDCE) | (1 << WDE);
-		WDTCSR = (1 << WDIE) | (1 << WDE);    /* Enable WD interrupt in 16ms, and hardware reset */
-	}
+		if(resetType == WD_HW_RESETS)
+		{
+			WDTCSR |= (1 << WDCE) | (1 << WDE);
+			WDTCSR = (1 << WDP3) | (1 << WDIE) | (1 << WDE);    /* Enable WD interrupt every 4 seconds, and hardware resets */
+			/*	WDTCSR = (1 << WDP3) | (1 << WDP0) | (1 << WDIE) | (1 << WDE); // Enable WD interrupt every 8 seconds, and hardware resets */
+		}
+		else if(resetType == WD_SW_RESETS)
+		{
+			WDTCSR |= (1 << WDCE) | (1 << WDE);
+			/*	WDTCSR = (1 << WDP3) | (1 << WDIE); // Enable WD interrupt every 4 seconds (no HW reset)
+			 *	WDTCSR = (1 << WDP3) | (1 << WDP0)  | (1 << WDIE); // Enable WD interrupt every 8 seconds (no HW reset) */
+			WDTCSR = (1 << WDP1) | (1 << WDP2)  | (1 << WDIE);  /* Enable WD interrupt every 1 seconds (no HW reset) */
+		}
+		else
+		{
+			WDTCSR |= (1 << WDCE) | (1 << WDE);
+			WDTCSR = (1 << WDIE) | (1 << WDE);    /* Enable WD interrupt in 16ms, and hardware reset */
+		}
 	
-	g_enableHardwareWDResets = (resetType != WD_SW_RESETS);
+		g_enableHardwareWDResets = (resetType != WD_SW_RESETS);
+	}
 }
 
 
 ISR( INT0_vect )
 {
 #ifdef ENABLE_1_SEC_INTERRUPTS
-	g_seconds_count++;
-	g_seconds_int = TRUE;
+	system_tick();
+	g_tx_epoch_time++;
+	
+	if(g_event_enabled)
+	{
+		if(g_event_commenced)
+		{
+			BOOL repeat;
+			
+			if(g_time_to_send_ID_countdown) g_time_to_send_ID_countdown--;
+
+			if(g_on_the_air)
+			{
+				if(g_event_finish_time > 0)
+				{
+					g_temp_time = time(NULL);
+					
+					if(g_temp_time != g_tx_epoch_time)
+					{
+						g_temp_time = g_tx_epoch_time;
+					}
+					
+					if(g_temp_time >= g_event_finish_time)
+					{
+						g_on_the_air = 0;
+						g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
+						keyTransmitter(OFF);
+						g_event_enabled = FALSE;
+						g_event_commenced = FALSE;
+					}
+				}
+
+				if(g_on_the_air > 0) /* on the air */
+				{
+					g_on_the_air--;
+			
+					if(!g_time_to_send_ID_countdown)
+					{
+						if(g_on_the_air == g_time_needed_for_ID) // wait until the end of a transmission
+						{
+							g_time_to_send_ID_countdown = g_ID_time;
+							g_code_throttle = throttleValue(g_id_codespeed);
+							repeat = FALSE;
+							makeMorse(g_messages_text[STATION_ID], &repeat, NULL); /* Send only once */
+						}
+					}
+
+		
+					if(!g_on_the_air)
+					{
+						if(g_off_air_seconds)
+						{
+							keyTransmitter(OFF);
+							g_on_the_air -= g_off_air_seconds;
+							repeat = TRUE;
+							makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL); /* Reset pattern to start */
+						}
+						else
+						{
+							g_on_the_air = g_on_air_seconds;
+							g_code_throttle = throttleValue(g_pattern_codespeed);
+						}
+					}
+				}
+				else if(g_on_the_air < 0) /* off the air - g_on_the_air = 0 means all transmissions are disabled */
+				{
+					g_on_the_air++;
+		
+					if(!g_on_the_air) // off-the-air time has expired
+					{
+						g_on_the_air = g_on_air_seconds;
+						g_code_throttle = throttleValue(g_pattern_codespeed);
+						BOOL repeat = TRUE;
+						makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
+					}
+				}
+			}
+		}
+		else if(g_event_start_time > 0) /* off the air - waiting for the start time to arrive */
+		{
+			g_temp_time = time(NULL);
+			
+			if(g_temp_time != g_tx_epoch_time)
+			{
+				g_temp_time = g_tx_epoch_time;
+			}
+			
+			if(g_temp_time >= g_event_start_time)
+			{
+				if(g_intra_cycle_delay_time)
+				{
+					g_on_the_air = -g_intra_cycle_delay_time;
+				}
+				else
+				{
+					g_on_the_air = g_on_air_seconds;
+					g_code_throttle = throttleValue(g_pattern_codespeed);
+					BOOL repeat = TRUE;
+					makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
+				}
+				
+				g_time_to_send_ID_countdown = g_ID_time;
+				g_event_commenced = TRUE;
+			}
+		}
+	}
 	
 	/**************************************
 	 * Delay before re-enabling linkbus receive
@@ -227,7 +343,21 @@ ISR( INT0_vect )
 			wifi_reset(OFF); // bring WiFi out of reset
 		}
 	}
+	else
+	{
+		if(g_WiFi_shutdown_seconds) 
+		{
+			g_WiFi_shutdown_seconds--;
+			
+			if(!g_WiFi_shutdown_seconds)
+			{
+				wifi_reset(ON); // put WiFi into reset
+				wifi_power(OFF); // power off WiFi
+			}
+		}
+	}
 
+	
 #else
 	if(g_terminal_mode)
 	{
@@ -245,96 +375,68 @@ ISR( TIMER2_COMPB_vect )
 {
 	static BOOL conversionInProcess = FALSE;
 	static int8_t indexConversionInProcess;
+	static uint16_t codeInc = 0;
+	static uint8_t amModulation = 0;
+	BOOL repeat, finished;
 
 	g_tick_count++;
 
-	if(g_power_off_countdown)
+	static BOOL key = FALSE;
+	
+	if(g_event_enabled && g_event_commenced)
 	{
-		g_power_off_countdown--;
-	}
-	if(g_low_voltage_shutdown_delay)
-	{
-		g_low_voltage_shutdown_delay--;
-	}
-	if(g_send_ID_countdown)
-	{
-		g_send_ID_countdown--;
-	}
-	if(g_headphone_removed_delay)
-	{
-		g_headphone_removed_delay--;
-	}
-	if(g_lb_repeat_rssi)
-	{
-		if(g_rssi_countdown)
+		if(g_on_the_air > 0)
 		{
-			g_rssi_countdown--;
+			if(codeInc)
+			{
+				codeInc--;
+				
+				if(!codeInc)
+				{
+					key = makeMorse(NULL, &repeat, &finished);
+					
+					if(!repeat && finished) // ID has completed, so resume pattern
+					{
+						g_code_throttle = throttleValue(g_pattern_codespeed);
+						repeat = TRUE;
+						makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
+						key = makeMorse(NULL, &repeat, &finished);
+					}
+					
+					if(key) powerToTransmitter(ON);
+				}
+			}
+			else
+			{
+				keyTransmitter(key);
+				codeInc = g_code_throttle;
+			}
 		}
-	}
-
-	if(g_LB_broadcast_interval)
-	{
-		g_LB_broadcast_interval--;
+		else if(!g_on_the_air)
+		{
+			if(key)
+			{
+				key = OFF;
+				keyTransmitter(OFF);
+				powerToTransmitter(OFF);
+			}
+		}
 	}
 	
-	static BOOL volumeSetInProcess = FALSE;
-	static BOOL beepInProcess = FALSE;
-
-	/**
-	 * Handle earphone beeps */
-	if(g_beep_length)
+	if(g_am_modulation_enabled)
 	{
-		if(!beepInProcess)
+		amModulation = !amModulation;
+		
+		if(amModulation)
 		{
-			TCCR0A |= (1 << COM0B0);    /* Toggle OC0B (PD5) on Compare Match */
-			beepInProcess = TRUE;
+			dac081c_set_dac(g_mod_up, AM_DAC);
 		}
 		else
 		{
-			g_beep_length--;
-
-			if(!g_beep_length)
-			{
-				TCCR0A &= ~(1 << COM0B0);   /* Turn off toggling of OC0B (PD5) */
-				beepInProcess = FALSE;
-			}
+			dac081c_set_dac(g_mod_down, AM_DAC);
 		}
 	}
 
-	if(volumeSetInProcess)
-	{
-		if(PORTC & (1 << PORTC0))
-		{
-			PORTC &= ~(1 << PORTC0);    /* set clock low */
-		}
-		else
-		{
-			PORTC |= (1 << PORTC0);     /* set clock high */
-			volumeSetInProcess = FALSE;
-		}
-	}
-	else if(g_hw_main_volume != g_main_volume)
-	{
-		if(g_sufficient_power_detected) // wait until audio amp is powered up
-		{
-			if(!(PORTC & (1 << PORTC0)))
-			{
-				PORTC |= (1 << PORTC0); /* set clock high */
-			}
-			if(g_hw_main_volume > g_main_volume)
-			{
-				PORTC &= ~(1 << PORTC1);    /* set direction down */
-				g_hw_main_volume--;
-			}
-			else                            /* if(g_hw_main_volume < g_main_volume) */
-			{
-				PORTC |= (1 << PORTC1);     /* set direction up */
-				g_hw_main_volume++;
-			}
-
-			volumeSetInProcess = TRUE;
-		}
-	}
 
 	/**
 	 * Handle Periodic ADC Readings
@@ -407,56 +509,10 @@ ISR( TIMER2_COMPB_vect )
 				}
 			}
 		}
-		else if(indexConversionInProcess == RSSI_READING)
+		else if(indexConversionInProcess == PA_VOLTAGE_READING)
 		{
-			uint16_t thresh = 0;
-			
 			lastResult = holdConversionResult;
-			
-			switch(g_rssi_filter)
-			{
-				case 1:
-				     thresh = 2500;
-				break;
-				
-				case 2:
-				     thresh = 1000;
-				break;
-				
-				case 3:
-				     thresh = 500;
-				break;
-				
-				case 4:
-				     thresh = 200;
-				break;
-				
-				case 5:
-					thresh = 50;
-				break;
-				
-				default:
-				     thresh = 5;
-				break;
-			}
-
-			if(delta > thresh)
-			{
-				g_filteredRSSI = lastResult;
-			}
-			else
-			{
-				const int n = 3;
-				g_filteredRSSI = g_filteredRSSI << n;
-				g_filteredRSSI += lastResult;
-				g_filteredRSSI /= ((1 << n) + 1);
-			}
-			
-			if(g_audio_RSSI)
-			{
-				g_filteredRSSI = MAX(g_filteredRSSI, 100);
-				tonePitch((g_filteredRSSI - 100) >> 3);
-			}
+			g_PA_voltage = holdConversionResult;
 		}
 
 		g_lastConversionResult[indexConversionInProcess] = lastResult;
@@ -606,12 +662,13 @@ ISR(USART_RX_vect)
 
 	if(buff)
 	{
+		rx_char = toupper(rx_char);
+		SMCR = 0x00; // exit power-down mode
+		
 		if(g_terminal_mode)
 		{
 			static uint8_t ignoreCount = 0;
-
-			rx_char = toupper(rx_char);
-
+			
 			if(ignoreCount)
 			{
 				rx_char = '\0';
@@ -631,8 +688,6 @@ ISR(USART_RX_vect)
 
 			if(rx_char == 0x0D)                             /* Handle carriage return */
 			{
-				g_power_off_countdown = POWER_OFF_DELAY;    /* restart countdown */
-
 				if(receiving_msg)
 				{
 					if(charIndex > 0)
@@ -822,15 +877,12 @@ ISR(USART_RX_vect)
 			}
 			else if(rx_char == 0x0D)    /* Handle carriage return */
 			{
-				if(g_LB_attached_device == NO_ID)
-				{
-					buff->id = LINKBUS_MSG_UNKNOWN;
-					charIndex = LINKBUS_MAX_MSG_LENGTH;
-					field_len = 0;
-					msg_ID = LINKBUS_MSG_UNKNOWN;
-					field_index = 0;
-					buff = NULL;
-				}
+				buff->id = LINKBUS_MSG_UNKNOWN;
+				charIndex = LINKBUS_MAX_MSG_LENGTH;
+				field_len = 0;
+				msg_ID = LINKBUS_MSG_UNKNOWN;
+				field_index = 0;
+				buff = NULL;
 			}
 
 			if(++charIndex >= LINKBUS_MAX_MSG_LENGTH)
@@ -895,6 +947,251 @@ ISR( PCINT2_vect )
 }
 
 
+BOOL hw_init(void)
+{
+	BOOL err = FALSE;
+	
+	/**
+	 * Initialize the transmitter */
+	err = init_transmitter();
+
+	/**
+	 * The watchdog must be petted periodically to keep it from barking */
+	wdt_reset();                /* HW watchdog */
+
+	if(!err)
+	{
+		#ifdef INCLUDE_DS3231_SUPPORT
+			g_tx_epoch_time = ds3231_get_epoch(&err);
+			
+			if(!err) 
+			{
+				set_system_time(g_tx_epoch_time);
+				#ifdef ENABLE_1_SEC_INTERRUPTS
+					g_wifi_enable_delay = 5;
+					ds3231_1s_sqw(ON);
+				#endif    /* #ifdef ENABLE_1_SEC_INTERRUPTS */
+			}
+		#endif
+	}
+	
+	return err;
+}
+
+void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
+{
+	if(initType == POWER_UP)
+	{
+		/** Hardware rev P1.0
+		 * Set up PortB  */
+		// PB0 = VHF_ENABLE
+		// PB1 = HF_ENABLE
+		// PB2 = Testpoint W306
+		// PB3 = MOSI
+		// PB4 = MISO
+		// PB5 = SCK
+		// PB6 = Tx Final Voltage Enable
+		// PB7 = Main Power Enable
+
+		DDRB |= (1 << PORTB0) | (1 << PORTB1) | (1 << PORTB6) | (1 << PORTB7);      
+		PORTB |= (1 << PORTB2) | (1 << PORTB7); /* Turn on main power */
+	//	PORTB |= (1 << PORTB2); /* Bring unused port pin high */
+
+		/** Hardware rev P1.0
+		 * Set up PortD */
+		// PD0 = RXD
+		// PD1 = TXD
+		// PD2 = RTC interrupt
+		// PD3 = Antenna Connect Interrupt
+		// PD4 = n/c
+		// PD5 = n/c
+		// PD6 = WIFI_RESET
+		// PD7 = WIFI_ENABLE
+
+	//	DDRD  = 0b00000010;     /* Set PORTD pin data directions */
+		DDRD  |= (1 << PORTD4) | (1 << PORTD6) | (1 << PORTD7);     /* Set PORTD pin data directions */
+		PORTD = (1 << PORTD2) | (1 << PORTD3) | (1 << PORTD4) | (1 << PORTD5);     /* Enable pull-ups on input pins, and set output levels on all outputs */
+
+		/** Hardware rev P1.0
+		 * Set up PortC */
+		// PC0 = ADC - 80M_ANTENNA_CONNECT
+		// PC1 = ADC - 2M_ANTENNA_CONNECT
+		// PC2 = n/c
+		// PC3 = n/c
+		// PC4 = SDA
+		// PC5 = SCL
+		// PC6 = Reset
+		// PC7 = N/A
+
+		DDRC = 0b00000000;        
+		PORTC = I2C_PINS | (1 << PORTC2) | (1 << PORTC3);     
+
+		/**
+		 * PD5 (OC0B) is tone output for AM modulation generation
+		 * TIMER0 */
+	//	OCR0A = 0x04;                                       /* set compare value */
+	//	TCCR0A |= (1 << WGM01);                             /* set CTC (MODE 2) with OCRA */
+	//	TCCR0A |= (1 << COM0B0);							/* Toggle OC0B on Compare Match */
+	//	TCCR0B |= (1 << CS02) | (1 << CS00);                /* 1024 Prescaler */
+	/*	TIMSK0 &= ~(1 << OCIE0B); // disable compare interrupt - disabled by default */
+
+		/** 
+		* PB2 (OC1B) is PWM for output power level
+		* TIMER1 is for transmit power PWM */
+	//	OCR1B = DEFAULT_AM_DRIVE_LEVEL; /* Set initial duty cycle */
+	//	TCCR1A |= (1 << WGM10); /* 8-bit Phase Correct PWM mode */
+	//	TCCR1A |= (1 << COM1B1); /* Non-inverting mode */
+	//	TCCR1B |= (1 << CS11) | (1 << CS10); /* Prescaler */
+
+		/**
+		 * TIMER2 is for periodic interrupts */
+		OCR2A = 0x0C;                                       /* set frequency to ~300 Hz (0x0c) */
+		TCCR2A |= (1 << WGM01);                             /* set CTC with OCRA */
+		TCCR2B |= (1 << CS22) | (1 << CS21) | (1 << CS20);  /* 1024 Prescaler - why are we setting CS21?? */
+		TIMSK2 |= (1 << OCIE0B);                            /* enable compare interrupt */
+
+		/**
+		 * Set up ADC */
+		ADMUX |= (1 << REFS0) | (1 << REFS1);
+		ADCSRA |= (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0) | (1 << ADEN);
+
+		/**
+		 * Set up pin interrupts */
+		/* Enable pin change interrupts PCINT8, PCINT9, */
+		// TODO
+	
+	//	PCICR |= (1 << PCIE2) | (1 << PCIE1) | (1 << PCIE0);  /* Enable pin change interrupts PCI2, PCI1 and PCI0 */
+	//	PCMSK2 |= 0b10001000;                                   /* Enable port D pin change interrupts */
+	//	PCMSK1 |= (1 << PCINT10);                               /* Enable port C pin change interrupts on pin PC2 */
+	//	PCMSK0 |= (1 << PORTB2);                                /* Do not enable interrupts until HW is ready */
+
+		EICRA  |= ((1 << ISC01) | (1 << ISC00));	/* Configure INT0 for RTC 1-second interrupts */
+		EIMSK |= (1 << INT0);		
+	
+		/* Configure INT1 for antenna connect interrupts */
+		// TODO
+	}
+	else
+	{
+		/** Hardware rev P1.0
+		 * Set up PortB  */
+		// PB0 = VHF_ENABLE
+		// PB1 = HF_ENABLE
+		// PB2 = Testpoint W306
+		// PB3 = MOSI
+		// PB4 = MISO
+		// PB5 = SCK
+		// PB6 = Tx Final Voltage Enable
+		// PB7 = Main Power Enable
+
+		DDRB = 0x00;     /* Set PORTD pin data directions */
+		PORTB = 0x00;
+	//	PORTB &= ~((1 << PORTB0) | (1 << PORTB1) | (1 << PORTB6) | (1 << PORTB7)); /* Turn off main power */
+		
+		/** Hardware rev P1.0
+		* Set up PortD */
+		// PD0 = RXD
+		// PD1 = TXD
+		// PD2 = RTC interrupt
+		// PD3 = Antenna Connect Interrupt
+		// PD4 = n/c
+		// PD5 = n/c
+		// PD6 = WIFI_RESET
+		// PD7 = WIFI_ENABLE
+
+		DDRD = 0x00;
+		PORTD = 0x00;
+		
+	//	PORTD &= ~((1 << PORTD6) | (1 << PORTD7));     /* Enable pull-ups on input pins, and set output levels on all outputs */
+
+		/** Hardware rev P1.0
+		 * Set up PortC */
+		// PC0 = ADC - 80M_ANTENNA_CONNECT
+		// PC1 = ADC - 2M_ANTENNA_CONNECT
+		// PC2 = n/c
+		// PC3 = n/c
+		// PC4 = SDA
+		// PC5 = SCL
+		// PC6 = Reset
+		// PC7 = N/A
+		
+		DDRC = 0x00;
+		PORTC = 0x00;
+
+		/**
+		* PD5 (OC0B) is tone output for AM modulation generation
+		* TIMER0 */
+	//	OCR0A = 0x04;                                       /* set compare value */
+	//	TCCR0A |= (1 << WGM01);                             /* set CTC (MODE 2) with OCRA */
+	//	TCCR0A |= (1 << COM0B0);							/* Toggle OC0B on Compare Match */
+	//	TCCR0B |= (1 << CS02) | (1 << CS00);                /* 1024 Prescaler */
+	/*	TIMSK0 &= ~(1 << OCIE0B); // disable compare interrupt - disabled by default */
+
+		/** 
+		* PB2 (OC1B) is PWM for output power level
+		* TIMER1 is for transmit power PWM */
+	//	OCR1B = DEFAULT_AM_DRIVE_LEVEL; /* Set initial duty cycle */
+	//	TCCR1A |= (1 << WGM10); /* 8-bit Phase Correct PWM mode */
+	//	TCCR1A |= (1 << COM1B1); /* Non-inverting mode */
+	//	TCCR1B |= (1 << CS11) | (1 << CS10); /* Prescaler */
+
+		/**
+		 * TIMER2 is for periodic interrupts */
+		TIMSK2 &= ~(1 << OCIE0B);                            /* disable compare interrupt */
+		OCR2A = 0x00;                                       /* set frequency to ~300 Hz (0x0c) */
+		TCCR2A &= ~(1 << WGM01);                             /* set CTC with OCRA */
+		TCCR2B &= ~((1 << CS22) | (1 << CS21) | (1 << CS20));  /* Prescalar */
+
+		/**
+		 * Set up ADC */
+		ADMUX &= ~((1 << REFS0) | (1 << REFS1));
+		// ADCSRA &= ~((1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0) | (1 << ADEN));
+		ADCSRA = 0;
+		
+		DIDR0 = 0x3f; // disable ADC pins
+		DIDR1 = 0x03; // disable analog inputs
+		
+		
+		/**
+		* Set up pin interrupts */
+		/* Enable pin change interrupts PCINT8, PCINT9, */
+		// TODO
+	
+		PCICR = 0;
+		PCMSK0 = 0;
+		PCMSK1 = 0;
+		PCMSK2 = 0;
+	//	PCICR |= (1 << PCIE2) | (1 << PCIE1) | (1 << PCIE0);  /* Enable pin change interrupts PCI2, PCI1 and PCI0 */
+	//	PCMSK2 |= 0b10001000;                                   /* Enable port D pin change interrupts */
+	//	PCMSK1 |= (1 << PCINT10);                               /* Enable port C pin change interrupts on pin PC2 */
+	//	PCMSK0 |= (1 << PORTB2);                                /* Do not enable interrupts until HW is ready */
+
+		EICRA = 0;
+		EIMSK = 0;
+	//	EICRA  |= ((1 << ISC01) | (1 << ISC00));	/* Configure INT0 for RTC 1-second interrupts */
+	//	EIMSK |= (1 << INT0);		
+	
+		/* Configure INT1 for antenna connect interrupts */
+		// TODO
+		
+		/**
+		Turn off UART
+		*/
+		linkbus_disable();
+		
+		/* Disable brown-out detection
+		**/
+		PRR = 0xff;		
+		cli();
+		MCUCR = (1 << BODS) | (1 << BODSE);  // turn on brown-out enable select
+		MCUCR = (1 << BODS);        // this must be done within 4 clock cycles of above
+		SMCR = 0x09; // set power-down mode
+		asm("sleep"); /* enter power-down mode */
+		sei();
+	}
+}
+
+
 /***********************************************************************
  * Main Foreground Task
  *
@@ -907,9 +1204,7 @@ ISR( PCINT2_vect )
  ************************************************************************/
 int main( void )
 {
-	BOOL attach_success = TRUE; // Start out in TTY terminal communication mode
 	BOOL err = FALSE;
-	uint16_t hold_tick_count = 0;
 	LinkbusRxBuffer* lb_buff = 0;
 
 	/**
@@ -917,82 +1212,10 @@ int main( void )
 	initializeEEPROMVars();
 	
 	/**
-	 * Set up PortB  */
-	// PB0 = D101 LED out
-	// PB1 = SW101 input
-	// PB2 = Tx Gain PWM output
-	// PB3 = MOSI
-	// PB4 = MISO
-	// PB5 = SCK
-	// PB6 = Tx Power Enable
-	// PB7 = Main Power Enable
-
-		DDRB |= (1 << PORTB0) | (1 << PORTB2) | (1 << PORTB6) | (1 << PORTB7);       /* PB0 is Radio Enable output; */
-		PORTB |= (1 << PORTB7); /* Turn on main power */
-//		PORTB |= (1 << PORTB0) | (1 << PORTB2);        /* Enable Radio hardware, and pull up RTC interrupt pin */
-
-	/**
-	 * Set up PortD */
-	// PD0 = RXD
-	// PD1 = TXD
-	// PD2 = RTC interrupt
-	// PD3 = Port expander interrupt A
-	// PD4 = RTTY mark/space
-	// PD5 = AM modulation PWM output
-	// PD6 = Test Point
-	// PD7 =  Port expander interrupt B
-
-//		DDRD  = 0b00000010;     /* Set PORTD pin data directions */
-		DDRD  = 0b00000000;     /* Set PORTD pin data directions */
-		PORTD = 0b11111100;     /* Enable pull-ups on input pins, and set output levels on all outputs */
-
-	/**
-	 * Set up PortC */
-	// PC0 = ADC - 80m Forward Power
-	// PC1 = ADC - 80m Reflected Power
-	// PC2 = ADC - 2m Relative Power
-	// PC3 = Test Point
-	// PC4 = SDA
-	// PC5 = SCL
-	// PC6 = Reset
-	// PC7 = N/A
-
-	DDRC = 0b00000011;                                          /* PC4 and PC5 are inputs (should be true by default); PC2 and PC3 are used for their ADC function; PC1 and PC0 outputs control main volume */
-	PORTC = (I2C_PINS | (1 << PORTC2));                         /* Set all Port C pins low, except I2C lines and PC2; includes output port PORTC0 and PORTC1 (main volume controls) */
-
-	/**
-	 * PD5 (OC0B) is PWM output for AM modulation generation
-	 * Write 8-bit registers for TIMER0 */
-	OCR0A = 0x0C;                                       /* set frequency to ~300 Hz (0x0c) */
-	TCCR0A |= (1 << WGM01);                             /* set CTC with OCRA */
-	TCCR0B |= (1 << CS02) | (1 << CS00);                /* 1024 Prescaler */
-/*	TIMSK0 &= ~(1 << OCIE0B); // disable compare interrupt - disabled by default */
-
-	/**
-	 * TIMER2 is for periodic interrupts */
-	OCR2A = 0x0C;                                       /* set frequency to ~300 Hz (0x0c) */
-	TCCR2A |= (1 << WGM01);                             /* set CTC with OCRA */
-	TCCR2B |= (1 << CS22) | (1 << CS21) | (1 << CS20);  /* 1024 Prescaler */
-	TIMSK2 |= (1 << OCIE0B);                            /* enable compare interrupt */
-
-	/**
-	 * Set up ADC */
-	ADMUX |= (1 << REFS0);
-	ADCSRA |= (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0) | (1 << ADEN);
-
-	/**
-	 * Set up pin interrupts */
-	PCICR |= (1 << PCIE2) | (1 << PCIE1) | (1 << PCIE0);    /* Enable pin change interrupts PCI2, PCI1 and PCI0 */
-	PCMSK2 |= 0b10001000;                                   /* Enable port D pin change interrupts */
-//	PCMSK1 |= (1 << PCINT10);                               /* Enable port C pin change interrupts on pin PC2 */
-//	PCMSK0 |= (1 << PORTB2);                                /* Do not enable interrupts until HW is ready */
-
-	EICRA  |= ((1 << ISC01) | (1 << ISC00));	/* Configure INT0 for RTC 1-second interrupts */
-	EIMSK |= (1 << INT0);		
-
+	 * Initialize port pins and timers */
+	set_ports(POWER_UP);
+	
 	cpu_irq_enable();                                           /* same as sei(); */
-
-	g_low_voltage_shutdown_delay = POWERUP_LOW_VOLTAGE_DELAY;
 
 	/**
 	 * Enable watchdog interrupts before performing I2C calls that might cause a lockup */
@@ -1003,22 +1226,15 @@ int main( void )
 
 	/**
 	 * Initialize the transmitter */
-	err = init_transmitter();
+//	err = init_transmitter();
 
-	if(g_audio_RSSI)
-	{
-		TCCR0A |= (1 << COM0B0);    /* Toggle OC0B (PD5) on Compare Match */
-	}
-	
 	/**
 	 * The watchdog must be petted periodically to keep it from barking */
-	wdt_reset();                /* HW watchdog */
+//	wdt_reset();                /* HW watchdog */
 
 	/**
 	 * Initialize tone volume setting */
-//	ad5245_set_potentiometer(TONE_POT_VAL(g_tone_volume));    /* move to receiver initialization */
 
-	mcp23017_init();
 //	wifi_power(ON); // power on WiFi
 //	wifi_reset(OFF); // bring WiFi out of reset
 	// Uncomment the two lines above and set a breakpoint after this line to permit serial access to ESP8266 serial lines for programming
@@ -1046,33 +1262,24 @@ int main( void )
 	else 
 	{
 		lb_send_sync();                                 /* send test pattern to help synchronize baud rate with any attached device */
-		while(linkbusTxInProgress())
-		{
-			;                                           /* wait until transmit finishes */
-		}
-		wdt_reset();
 	}
 	
 	wdt_reset();
+	
+	while(linkbusTxInProgress())
+	{
+		;                                           /* wait until transmit finishes */
+	}
 		
-	#ifdef INCLUDE_DS3231_SUPPORT
-		ds3231_read_time(&g_start_time, NULL, Time_Format_Not_Specified);
-	   #ifdef ENABLE_1_SEC_INTERRUPTS
-			g_seconds_count = 0;    /* sync seconds count to clock */
-			ds3231_1s_sqw(ON);
-	   #endif    /* #ifdef ENABLE_1_SEC_INTERRUPTS */
-		g_wifi_enable_delay = 4;
-	#endif
-
 	while(linkbusTxInProgress())
 	{
 	}               /* wait until transmit finishes */
 
-	g_send_ID_countdown = 0; /* Do not send ID broadcasts initially */
 #ifndef TRANQUILIZE_WATCHDOG
 	wdt_init(WD_HW_RESETS); /* enable hardware interrupts */
 #endif // TRANQUILIZE_WATCHDOG
-	
+
+	g_am_modulation_enabled = txAMModulationEnabled();
 
 	while(1)
 	{
@@ -1082,99 +1289,17 @@ int main( void )
 		cli(); wdt_reset(); /* HW watchdog */ sei();
 
 		/***************************************
-		* Check for Power Off
+		* Check for Power 
 		***************************************/
 		if(g_battery_measurements_active)                                                                           /* if ADC battery measurements have stabilized */
 		{
-			if((g_lastConversionResult[BATTERY_READING] < POWER_OFF_VOLT_THRESH_MV) && g_sufficient_power_detected) /* Battery measurement indicates headphones removed */
+			if(!g_sufficient_power_detected)
 			{
-				if(!g_headphone_removed_delay)
+				if(g_lastConversionResult[BATTERY_READING] > POWER_ON_VOLT_THRESH_MV)  /* Battery measurement indicates sufficient voltage */
 				{
-					if(!g_powering_off)                                                              /* Handle the case of power off immediately after power on */
+					if(!hw_init()) // initialize hardware that depends on i2c communications
 					{
-						g_powering_off = TRUE;
-						g_power_off_countdown = POWER_OFF_DELAY;
-					}
-
-					g_backlight_off_countdown = g_backlight_delay_value;    /* turn on backlight */
-
-
-					if(g_terminal_mode)
-					{
-						static uint8_t lastCountdown = 0;
-						uint8_t countdown = (uint8_t)((10 * g_power_off_countdown) / POWER_OFF_DELAY);
-
-						if(countdown != lastCountdown)
-						{
-							lb_poweroff_msg(countdown);
-							lb_send_NewPrompt();
-							lastCountdown = countdown;
-						}
-					}
-
-					if(!g_power_off_countdown)
-					{
-						saveAllEEPROM();
-//						PORTB &= ~(1 << PORTB1);    /* latch power off */
-						g_power_off_countdown = POWER_OFF_DELAY;
-
-						while(1)    /* wait for power-off */
-						{
-							/* The following things can prevent shutdown
-							 * HW watchdog will expire and reset the device eventually if none of the following happens first: */
-							if(!g_power_off_countdown)
-							{
-								break;  /* Timeout waiting for power to be removed */
-							}
-
-							if(g_lastConversionResult[BATTERY_READING] > POWER_ON_VOLT_THRESH_MV)
-							{
-								break;  /* Headphone re-inserted */
-							}
-						}
-
-						/**
-						 * Execution reaches here if power was restored before the processor shut down, or if shutdown timed out.
-						 * Attempt to restart things as if nothing has happened. */
-						wdt_reset();    /* HW watchdog */
-						g_powering_off = FALSE;
-					}
-				}
-			}
-			else if(g_lastConversionResult[BATTERY_READING] > POWER_ON_VOLT_THRESH_MV)  /* Battery measurement indicates sufficient voltage */
-			{
-				g_sufficient_power_detected = TRUE;
-				g_headphone_removed_delay = HEADPHONE_REMOVED_DELAY;
-				g_low_voltage_shutdown_delay = LOW_VOLTAGE_DELAY;
-				g_power_off_countdown = POWER_OFF_DELAY;    /* restart countdown */
-
-//				PORTB |= (1 << PORTB1); /* latch power on */
-			}
-			else
-			{
-				if(!g_low_voltage_shutdown_delay)
-				{
-					if(!g_powering_off)
-					{
-						g_powering_off = TRUE;
-						g_power_off_countdown = POWER_OFF_DELAY;
-					}
-
-					if(!g_power_off_countdown)
-					{
-						PORTB &= ~(1 << PORTB1);    /* latch power off */
-
-						while(1)                        /* wait for power-off */
-						{
-							/* These things can prevent shutdown
-							 * HW watchdog will expire and reset the device eventually if none of the following happens first: */
-							if(g_lastConversionResult[BATTERY_READING] > POWER_ON_VOLT_THRESH_MV)
-							{
-								break;                  /* Voltage rises sufficiently */
-							}
-						}
-
-						wdt_reset();                    /* HW watchdog */
+						g_sufficient_power_detected = TRUE;
 					}
 				}
 			}
@@ -1197,86 +1322,59 @@ int main( void )
 //					if(toggle)
 //					{
 //						toggle = FALSE;
-//						g_lb_repeat_rssi = FALSE;
+//						g_lb_repeat_readings = FALSE;
 //						g_debug_atten_step = 0;
 //					}
 //					else
 //					{
 //						toggle = TRUE;
-//						g_lb_repeat_rssi = TRUE;
+//						g_lb_repeat_readings = TRUE;
 //						g_debug_atten_step = 1;
 //					}
 
 					if(toggle)
 					{
 						toggle = FALSE;
-						g_lb_repeat_rssi = FALSE;
 						g_debug_atten_step = 0;
 					}
 					else
 					{
 						toggle = TRUE;
-						g_lb_repeat_rssi = TRUE;
-//						rxSetAttenuation(0);
 						g_debug_atten_step = 1;
 					}
 				}
 				break;
 #endif //DEBUG_FUNCTIONS_ENABLE		
 
-				case MESSAGE_TONE_RSSI:
+				case MESSAGE_DRIVE_LEVEL:
 				{
-					if(lb_buff->fields[FIELD1][0])
+					uint8_t setting = 0;
+					
+					if(lb_buff->fields[FIELD1][0] && lb_buff->fields[FIELD2][0])
 					{
-						int8_t arg;
-						arg = atoi(lb_buff->fields[FIELD1]); // Prevent optimizer from breaking this
-						if(arg > 0)
+						char ud = lb_buff->fields[FIELD1][0];
+						setting = atoi(lb_buff->fields[FIELD2]);
+						
+						if(ud == 'U')
 						{
-							g_tone_RSSI_direction = 0;
-							g_audio_RSSI = 1;
-							g_rssi_filter = arg;
+							g_mod_up = setting;
+							lb_broadcast_num(setting, "DRI U");
 						}
-						else if(arg < 0)
+						else if(ud == 'D')
 						{
-							g_tone_RSSI_direction = 1;
-							g_audio_RSSI = 1;
-							g_rssi_filter = -arg;
+							g_mod_down = setting;
+							lb_broadcast_num(setting, "DRI D");
 						}
 						else
 						{
-							g_audio_RSSI = 0;
+							lb_send_string("DRI U|D 0-255\n");
 						}
 					}
 					else
 					{
-						g_audio_RSSI = !g_audio_RSSI;
+						sprintf(g_tempStr, "U/D = %d/%d\n", g_mod_up, g_mod_down);
+						lb_send_string(g_tempStr);
 					}
-	
-					if(g_audio_RSSI)
-					{
-						TCCR0A |= (1 << COM0B0);    /* Toggle OC0B (PD5) on Compare Match */
-					}
-					else if(!g_beep_length)
-					{
-						TCCR0A &= ~(1 << COM0B0);   /* Turn off toggling of OC0B (PD5) */
-					}
-			
-					lb_broadcast_num((uint16_t)g_audio_RSSI, NULL);
-				}
-				break;
-
-				case MESSAGE_PREAMP:
-				{
-					BOOL result = rxGetPreamp();
-					
-					if(lb_buff->fields[FIELD1][0])
-					{
-						uint8_t setting = atoi(lb_buff->fields[FIELD1]);
-						
-						result = rxSetPreamp(setting);
-					}
-					
-					lb_broadcast_num((uint16_t)result, NULL);
 
 				}
 				break;
@@ -1297,7 +1395,11 @@ int main( void )
 						wifi_reset(g_terminal_mode);
 						linkbus_setTerminalMode(g_terminal_mode);
 
-						if(result != 2)
+						if(result == 2)
+						{
+							g_WiFi_shutdown_seconds = 0; // disable shutdown
+						}
+						else
 						{
 							linkbus_init(BAUD);
 						}
@@ -1308,24 +1410,6 @@ int main( void )
 				}
 				break;
 
-				case MESSAGE_ATTENUATION:
-				{
-					uint16_t attenuation;
-					
-					if(lb_buff->fields[FIELD1][0])
-					{
-						attenuation = CLAMP(0, (uint16_t)atoi(lb_buff->fields[FIELD1]), 100); 
-						attenuation = rxSetAttenuation(attenuation);
-					}
-					else
-					{
-						attenuation = rxGetAttenuation();
-					}
-
-					lb_broadcast_num(attenuation, NULL);
-				}
-				break;
-				
 				case MESSAGE_RESET:
 				{
 #ifndef TRANQUILIZE_WATCHDOG
@@ -1335,76 +1419,412 @@ int main( void )
 				}
 				break;
 				
-				case MESSAGE_RSSI_REPEAT_BC:
+				case MESSAGE_ESP_COMM:
 				{
-					g_lb_repeat_rssi = !g_lb_repeat_rssi;
+					uint8_t f1 = lb_buff->fields[FIELD1][0];
+					
+					if(f1 == '0') /* I'm awake message */
+					{
+						/* WiFi is awake. Send it the current time */
+						sprintf(g_tempStr, "%lu", time(NULL));
+						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
+					}
+					else if(f1 == '1')
+					{
+						/* ESP8266 is ready with event data */
+						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ESP_LABEL, "1");
+					}
+					else if(f1 == '2') /* ESP module needs continuous power to save data */
+					{
+						g_WiFi_shutdown_seconds = 0; // disable shutdown
+						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ESP_LABEL, "2"); /* Save data now */
+					}
+					else if(f1 == '3')
+					{
+						g_WiFi_shutdown_seconds = 3; /* Shut down WiFi in 3 seconds */
+					}
+					else if(f1 == 'Z') /* No scheduled events - keep alive */
+					{
+						/* shut down WiFi after 2 minutes of inactivity */
+						g_WiFi_shutdown_seconds = 120; // wait 2 more minutes before shutting down WiFi
+					}
 				}
 				break;
-
-				case MESSAGE_CW_OFFSET:
+				
+				case MESSAGE_TX_MOD:
 				{
-					Frequency_Hz offset;
+					Modulation m;
 					
-					if(lb_buff->fields[FIELD1][0])
+					if(lb_buff->fields[FIELD1][0] == 'A') // AM
 					{
-						offset = atol(lb_buff->fields[FIELD1]); // Prevent optimizer from breaking this
-						rxSetCWOffset(offset);
+						txSetModulation(MODE_AM);
+						saveAllEEPROM();
+					}
+					else if(lb_buff->fields[FIELD1][0] == 'C') // CW
+					{
+						txSetModulation(MODE_CW);
+						saveAllEEPROM();
 					}
 					
-					offset = rxGetCWOffset();
-					lb_send_FRE(LINKBUS_MSG_REPLY, offset, FALSE);
+					g_am_modulation_enabled = txAMModulationEnabled();
+					
+					m = txGetModulation();
+					
+					sprintf(g_tempStr, "MOD=%s\n", m == MODE_AM ? "AM": m == MODE_CW ? "CW":"N/A");
+					lb_send_string(g_tempStr);
+				}
+				break;
+				
+				case MESSAGE_TX_POWER:
+				{
+					static uint8_t pwr;
+					
+					PORTB |= (1 << PORTB7); /* Turn on main power */
+						
+					if(lb_buff->fields[FIELD1][0])
+					{
+						if((lb_buff->fields[FIELD1][0] == 'M') && (lb_buff->fields[FIELD2][0]))
+						{
+							static int16_t mW;
+							mW = atoi(lb_buff->fields[FIELD2]);
+							mW = CLAMP(0, mW, 255);
+							/* TODO: convert milliwatts to power setting */
+							pwr = (uint8_t)mW;
+						}
+						else
+						{
+							pwr = atoi(lb_buff->fields[FIELD1]);
+						}
+						
+						txSetPowerLevel(pwr);
+						//txGetModulationLevels(&g_mod_up, &g_mod_down);
+						saveAllEEPROM();
+					}
+					
+					pwr = txGetPowerLevel();
+					lb_send_value(pwr, "POW");
 				}
 				break;
 				
 				case MESSAGE_PERM:
 				{
-					store_receiver_values();
+					storeTtransmitterValues();
 					saveAllEEPROM();
+				}
+				break;
+				
+				case MESSAGE_GO:
+				{
+					if(lb_buff->fields[FIELD1][0] == '1')
+					{
+						/* Set the Morse code pattern and speed */
+						cli();
+						BOOL repeat = TRUE;
+						makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
+						g_code_throttle = throttleValue(g_pattern_codespeed);
+						sei();
+						g_event_finish_time = 999999999; // run for a long long time
+						g_on_air_seconds = 9999; // on period is very long
+						g_off_air_seconds = 0; // off period is very short
+						g_on_the_air = 9999; //  start out transmitting
+						g_time_to_send_ID_countdown = 9999; // wait a long time to send the ID
+						g_event_commenced = TRUE; // get things running immediately
+						g_event_enabled = TRUE; // get things running immediately
+					}
+					else
+					{
+						g_on_the_air = 0; //  stop transmitting
+						g_event_commenced = FALSE; // get things stopped immediately
+						g_event_enabled = FALSE; // get things stopped immediately
+						keyTransmitter(OFF);
+						powerToTransmitter(OFF);
+						if(lb_buff->fields[FIELD1][0] == '0')
+						{
+							ds3231_1s_sqw(OFF);
+							wdt_init(WD_DISABLE);
+							set_ports(POWER_SLEEP);	
+						}
+						else if(lb_buff->fields[FIELD1][0] == '+')
+						{
+							set_ports(POWER_UP);
+							wdt_init(WD_HW_RESETS);
+							ds3231_1s_sqw(ON);
+						}
+					}
 				}
 				break;
 				
 				case MESSAGE_TIME:
 				{
-					if(lb_buff->type == LINKBUS_MSG_COMMAND) // ignore replies since, as the time source, we should never be sending queries anyway
+					time_t mtime = 0;
+					
+					if(lb_buff->fields[FIELD1][0] == 'S')
+					{
+						if(lb_buff->fields[FIELD2][0])
+						{
+							mtime = atol(lb_buff->fields[FIELD2]);
+						}
+		
+						if(mtime) 
+						{							
+							initializeTxWithSettings(mtime);
+						}
+					}
+					else if(lb_buff->fields[FIELD1][0] == 'F')
+					{
+						if(lb_buff->fields[FIELD2][0])
+						{
+							mtime = atol(lb_buff->fields[FIELD2]);
+						}
+						
+						if(mtime) g_event_finish_time = mtime;
+						
+						cli();
+						g_event_enabled = FALSE;  // enabled when starttime is set
+						g_event_commenced = FALSE; // commences when starttime is reached
+						g_on_the_air = 0; // turn off all transmissions
+						sei();
+						g_event_start_time = 0;
+						g_on_air_seconds = 0;
+						g_off_air_seconds = 0;
+						g_intra_cycle_delay_time = 0;
+						g_messages_text[PATTERN_TEXT][0] = '\0';
+						g_pattern_codespeed = 0;
+						g_ID_time = 0;
+						
+						keyTransmitter(OFF);
+					}
+						
+					if(mtime)
+					{
+						saveAllEEPROM(); 
+					}
+					else if(g_terminal_mode)
+					{
+						lb_send_string("Usage: SF F|S epoch\n");
+					}
+				}
+				break;
+				
+				case MESSAGE_CLOCK:
+				{
+					if(g_terminal_mode)
+					{
+						if(lb_buff->fields[FIELD1][0])
+						{ /* Expected format:  2018-03-23T18:00:00 */
+							if((lb_buff->fields[FIELD1][13] == ':') && (lb_buff->fields[FIELD1][16] == ':'))
+							{
+								strncpy(g_tempStr, lb_buff->fields[FIELD1], 20);
+								#ifdef INCLUDE_DS3231_SUPPORT
+								ds3231_set_date_time(g_tempStr, RTC_CLOCK);
+								#endif
+								initializeTxWithSettings(0);
+							}
+						}
+						else
+						{
+							g_tx_epoch_time = ds3231_get_epoch(NULL);
+						}
+						
+						g_temp_time = time(NULL);
+						
+						if(g_temp_time != g_tx_epoch_time)
+						{
+							g_temp_time = g_tx_epoch_time;
+						}
+						
+						sprintf(g_tempStr, "%lu", g_temp_time);
+						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
+					}
+					else if(lb_buff->type == LINKBUS_MSG_COMMAND) // ignore replies since, as the time source, we should never be sending queries anyway
 					{
 						if(lb_buff->fields[FIELD1][0])
 						{
-							volatile int32_t time = -1; // prevent optimizer from breaking this
-
-							if(g_terminal_mode)
+							strncpy(g_tempStr, lb_buff->fields[FIELD1], 20);
+							#ifdef INCLUDE_DS3231_SUPPORT
+								ds3231_set_date_time(g_tempStr, RTC_CLOCK);
+								g_tx_epoch_time = ds3231_get_epoch(NULL);
+								set_system_time(g_tx_epoch_time); // update system clock
+							#endif
+							initializeTxWithSettings(0);
+						}
+						else
+						{
+							#ifdef INCLUDE_DS3231_SUPPORT
+							g_temp_time = time(NULL);
+							
+							if(g_temp_time != g_tx_epoch_time)
 							{
-								if(((lb_buff->fields[FIELD1][2] == ':') && (lb_buff->fields[FIELD1][5] == ':')) || ((lb_buff->fields[FIELD1][1] == ':') && (lb_buff->fields[FIELD1][4] == ':')))
-								{
-									time = stringToTimeVal(lb_buff->fields[FIELD1]);
-								}
+								g_temp_time = g_tx_epoch_time;
 							}
-							else
-							{
-								time = atol(lb_buff->fields[FIELD1]);
-							}
-
-							if(time >= 0)
-							{
-								#ifdef INCLUDE_DS3231_SUPPORT
-									ds3231_set_time(time);
-								#endif
-							}
+							
+							sprintf(g_tempStr, "%lu", g_tx_epoch_time);
+							lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
+							#endif
 						}
 					}
 					else if(lb_buff->type == LINKBUS_MSG_QUERY)
 					{
-						static int32_t lastTime = 0;
-						#ifdef INCLUDE_DS3231_SUPPORT
-							
-						if(g_seconds_count != lastTime)
+						static volatile int32_t lastTime = 0;
+						
+						#ifdef INCLUDE_DS3231_SUPPORT	
+						
+						g_temp_time	 = time(NULL);
+						
+						if(g_temp_time != g_tx_epoch_time)
 						{
-							int32_t time;
-							ds3231_read_time(&time, NULL, Time_Format_Not_Specified);
-							lb_send_TIM(LINKBUS_MSG_REPLY, time);
-								
-							lastTime = g_seconds_count;
+							g_temp_time = g_tx_epoch_time;
+						}						
+						
+						if(g_temp_time != lastTime)
+						{
+							sprintf(g_tempStr, "%lu", g_temp_time);
+							lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
+							lastTime = g_temp_time;
 						}
 						#endif
+					}
+				}
+				break;
+				
+				case MESSAGE_SET_STATION_ID:
+				{
+					if(lb_buff->fields[FIELD1][0])
+					{
+						strncpy(g_messages_text[STATION_ID], lb_buff->fields[FIELD1], MAX_PATTERN_TEXT_LENGTH);
+						saveAllEEPROM(); 
+						
+						if(g_messages_text[STATION_ID][0])
+						{
+							g_time_needed_for_ID = (500 + timeRequiredToSendStrAtWPM(g_messages_text[STATION_ID], g_id_codespeed)) / 1000;
+						}
+					}
+					
+					if(g_terminal_mode)  {
+						lb_send_string(g_messages_text[STATION_ID]);
+						lb_send_string("\n");
+                    }
+				}
+				break;
+				
+				case MESSAGE_CODE_SPEED:
+				{
+					uint8_t speed = g_pattern_codespeed;
+					
+					if(lb_buff->fields[FIELD1][0] == 'I')
+					{
+						if(lb_buff->fields[FIELD2][0])
+						{
+							speed = atol(lb_buff->fields[FIELD2]);
+							g_id_codespeed = CLAMP(5, speed, 20);
+							saveAllEEPROM(); 
+							if(g_messages_text[STATION_ID][0])
+							{
+								g_time_needed_for_ID = (500 + timeRequiredToSendStrAtWPM(g_messages_text[STATION_ID], g_id_codespeed)) / 1000;
+							}
+						}
+						else
+						{
+							speed = g_id_codespeed;
+						}
+						
+					}
+					else if(lb_buff->fields[FIELD1][0] == 'P')
+					{
+						if(lb_buff->fields[FIELD2][0]) 
+						{
+							speed = atol(lb_buff->fields[FIELD2]);
+							g_pattern_codespeed = CLAMP(5, speed, 20);
+							saveAllEEPROM();
+							g_code_throttle = (7042 / g_pattern_codespeed) / 10;
+						}
+						else
+						{
+							speed = g_pattern_codespeed;
+						}
+					}
+					
+					if(g_terminal_mode)  {
+						lb_send_value(speed, "spd");
+                    }
+				}
+				break;
+				
+				case MESSAGE_TIME_INTERVAL:
+				{
+					uint16_t time = g_on_air_seconds;
+					
+					if(lb_buff->fields[FIELD1][0] == '0')
+					{
+						time = g_off_air_seconds;
+						if(lb_buff->fields[FIELD2][0])
+						{
+							time = atol(lb_buff->fields[FIELD2]);
+							g_off_air_seconds = time;
+							saveAllEEPROM(); 
+						}
+						else
+						{
+							time = g_off_air_seconds;
+						}
+					}
+					else if(lb_buff->fields[FIELD1][0] == '1')
+					{
+						if(lb_buff->fields[FIELD2][0])
+						{
+							time = atol(lb_buff->fields[FIELD2]);
+							g_on_air_seconds = time;
+							saveAllEEPROM();
+						}
+						else
+						{
+							time = g_on_air_seconds;
+						}
+					}
+					else if(lb_buff->fields[FIELD1][0] == 'I')
+					{
+						if(lb_buff->fields[FIELD2][0]) 
+						{
+							time = atol(lb_buff->fields[FIELD2]);
+							g_ID_time = time;
+							saveAllEEPROM();
+						}
+						else
+						{
+							time = g_ID_time;
+						}
+					}
+					else if(lb_buff->fields[FIELD1][0] == 'D')
+					{
+						if(lb_buff->fields[FIELD2][0])
+						{
+							time = atol(lb_buff->fields[FIELD2]);
+							g_intra_cycle_delay_time = time;
+							saveAllEEPROM();
+						}
+						else
+						{
+							time = g_intra_cycle_delay_time;							
+						}
+					}
+					
+					if(g_terminal_mode) {
+						lb_send_value(time, "t");
+					}
+				}
+				break;
+				
+				case MESSAGE_SET_PATTERN:
+				{
+					if(lb_buff->fields[FIELD1][0])
+					{
+						strncpy(g_messages_text[PATTERN_TEXT], lb_buff->fields[FIELD1], MAX_PATTERN_TEXT_LENGTH);
+						saveAllEEPROM(); 
+					}
+					
+					if(g_terminal_mode) {
+						lb_send_string(g_messages_text[PATTERN_TEXT]);
+						lb_send_string("\n");
 					}
 				}
 				break;
@@ -1415,164 +1835,22 @@ int main( void )
 
 						if(lb_buff->fields[FIELD1][0])
 						{
-							if(lb_buff->fields[FIELD1][0] == 'M')
-							{
-								uint8_t mem = atoi(&lb_buff->fields[FIELD1][1]);
-
-								Frequency_Hz f = FREQUENCY_NOT_SPECIFIED;
-								RadioBand b = rxGetBand();
-								Frequency_Hz *eemem_location = NULL;
-
-								switch(mem)
-								{
-									case 1:
-									{
-										if(b == BAND_2M)
-										{
-											eemem_location = &ee_receiver_2m_mem1_freq;
-										}
-										else
-										{
-											eemem_location = &ee_receiver_80m_mem1_freq;
-										}
-
-									}
-									break;
-
-									case 2:
-									{
-										if(b == BAND_2M)
-										{
-											eemem_location = &ee_receiver_2m_mem2_freq;
-										}
-										else
-										{
-											eemem_location = &ee_receiver_80m_mem2_freq;
-										}
-
-									}
-									break;
-
-									case 3:
-									{
-										if(b == BAND_2M)
-										{
-											eemem_location = &ee_receiver_2m_mem3_freq;
-										}
-										else
-										{
-											eemem_location = &ee_receiver_80m_mem3_freq;
-										}
-
-									}
-									break;
-
-									case 4:
-									{
-										if(b == BAND_2M)
-										{
-											eemem_location = &ee_receiver_2m_mem4_freq;
-										}
-										else
-										{
-											eemem_location = &ee_receiver_80m_mem4_freq;
-										}
-
-									}
-									break;
-
-									case 5:
-									{
-										if(b == BAND_2M)
-										{
-											eemem_location = &ee_receiver_2m_mem5_freq;
-										}
-										else
-										{
-											eemem_location = &ee_receiver_80m_mem5_freq;
-										}
-
-									}
-									break;
-
-									default:
-									{
-									}
-									break;
-								}
-
-								if(eemem_location)
-								{
-									volatile Frequency_Hz memFreq = 0; // Prevent optimizer from breaking this
-									isMem = TRUE;
-
-									if(g_terminal_mode)              /* Handle terminal mode message */
-									{
-										if(lb_buff->fields[FIELD2][0])  /* second field holds frequency to be written to memory */
-										{
-											memFreq = atol(lb_buff->fields[FIELD2]);
-											lb_buff->type = LINKBUS_MSG_COMMAND;
-										}
-									}
-
-									if(lb_buff->type == LINKBUS_MSG_QUERY)  /* Query: apply and return the memory setting */
-									{
-										f = eeprom_read_dword(eemem_location);
-
-										if(f != FREQUENCY_NOT_SPECIFIED)
-										{
-											if(rxSetFrequency(&f))
-											{
-												g_receiver_freq = f;
-											}
-										}
-									}
-									else if(lb_buff->type == LINKBUS_MSG_COMMAND)   /* Command: save the current frequency setting to the memory location */
-									{
-										if(g_terminal_mode)
-										{
-											Frequency_Hz m = memFreq;
-											if(rxSetFrequency(&m))
-											{
-												g_receiver_freq = m;
-												f = m;
-											}
-											else
-											{
-												f = FREQUENCY_NOT_SPECIFIED;
-											}
-										}
-										else
-										{
-											f = rxGetFrequency();
-										}
-
-										if(f != FREQUENCY_NOT_SPECIFIED)
-										{
-											storeEEdwordIfChanged(eemem_location, f);
-										}
-									}
-								}
-							}
-							else
-							{
-								Frequency_Hz f = atol(lb_buff->fields[FIELD1]); // Prevent optimizer from breaking this							
+							Frequency_Hz f = atol(lb_buff->fields[FIELD1]); // Prevent optimizer from breaking this							
 								
-								Frequency_Hz ff = f;
-								if(rxSetFrequency(&ff))
-								{
-									g_receiver_freq = ff;
-								}
+							Frequency_Hz ff = f;
+							if(txSetFrequency(&ff))
+							{
+								g_transmitter_freq = ff;
 							}
 						}
 						else
 						{
-							g_receiver_freq = rxGetFrequency();
+							g_transmitter_freq = txGetFrequency();
 						}
 
-						if(g_receiver_freq)
+						if(g_transmitter_freq)
 						{
-							lb_send_FRE(LINKBUS_MSG_REPLY, g_receiver_freq, isMem);
+							lb_send_FRE(LINKBUS_MSG_REPLY, g_transmitter_freq, isMem);
 						}
 				}
 				break;
@@ -1581,27 +1859,29 @@ int main( void )
 				{
 					RadioBand band;
 
-						if(lb_buff->fields[FIELD1][0])  /* band field */
-						{
-							int b = atoi(lb_buff->fields[FIELD1]);
+					if(lb_buff->fields[FIELD1][0])  /* band field */
+					{
+						int b = atoi(lb_buff->fields[FIELD1]);
 							
-							if(b == 80)
-							{
-								rxSetBand(BAND_80M);
-							}
-							else if(b == 2)
-							{
-								rxSetBand(BAND_2M);
-							}
-						}
-
-						band = rxGetBand();
-
-						if(lb_buff->type == LINKBUS_MSG_QUERY)  /* Query */
+						if(b == 80)
 						{
-							/* Send a reply */
-							lb_send_BND(LINKBUS_MSG_REPLY, band);
+							txSetBand(BAND_80M, ON);
 						}
+						else if(b == 2)
+						{
+							txSetBand(BAND_2M, ON);
+						}
+						
+						g_am_modulation_enabled = txAMModulationEnabled();
+					}
+
+					band = txGetBand();
+
+					if(lb_buff->type == LINKBUS_MSG_QUERY)  /* Query */
+					{
+						/* Send a reply */
+						lb_send_BND(LINKBUS_MSG_REPLY, band);
+					}
 				}
 				break;
 
@@ -1616,27 +1896,9 @@ int main( void )
 					wifi_reset(ON);
 					wifi_power(OFF);
 
-					g_LB_broadcasts_enabled = 0;    /* disable all broadcasts */
-					attach_success = TRUE;          /* stop any ongoing ID messages */
-					g_send_ID_countdown = 0;
 					linkbus_setLineTerm("\n\n");
 					
 					linkbus_init(BAUD);
-				}
-				break;
-
-				case MESSAGE_BCR:
-				{
-					LBbroadcastType bcType = atoi(lb_buff->fields[FIELD1]);
-
-					if(lb_buff->type == LINKBUS_MSG_QUERY)  /* Query */
-					{
-						g_LB_broadcasts_enabled |= bcType;
-					}
-					else
-					{
-						g_LB_broadcasts_enabled &= ~bcType;
-					}
 				}
 				break;
 
@@ -1653,41 +1915,30 @@ int main( void )
 				}
 				break;
 				
-				case MESSAGE_RSSI_BC:
-				{
-					lb_broadcast_rssi(g_lastConversionResult[RSSI_READING]);
-				}
-				break;
-
-				case MESSAGE_RF_BC:
-				{
-				}
-				break;
-
 				case MESSAGE_ALL_INFO:
 				{
-					#ifdef INCLUDE_DS3231_SUPPORT
-						int32_t time;
-					#endif
-					
+					uint32_t temp;
 					cli(); wdt_reset(); /* HW watchdog */ sei();
 					linkbus_setLineTerm("\n");
-					lb_send_BND(LINKBUS_MSG_REPLY, rxGetBand());
-					lb_send_FRE(LINKBUS_MSG_REPLY, rxGetFrequency(), FALSE);
-					lb_send_value(g_audio_RSSI, "TON");
-					lb_send_FRE(LINKBUS_MSG_REPLY, rxGetCWOffset(), FALSE);
-					lb_send_value(rxGetAttenuation(), "ATT");
-					lb_send_value(rxGetPreamp(), "PRE");
-					lb_send_value(g_main_volume, "MAIN VOL");
-					lb_send_value(g_tone_volume, "TONE VOL");
+					lb_send_BND(LINKBUS_MSG_REPLY, txGetBand());
+					lb_send_FRE(LINKBUS_MSG_REPLY, txGetFrequency(), FALSE);
 					cli(); wdt_reset(); /* HW watchdog */ sei();
-					lb_broadcast_num(g_lastConversionResult[BATTERY_READING], "BAT");
-					lb_broadcast_rssi(g_lastConversionResult[RSSI_READING]);
+					temp = VBAT(g_lastConversionResult[BATTERY_READING]);
+					lb_broadcast_num(temp, "BAT");
+					temp = VPA(g_PA_voltage);
+					lb_broadcast_num(temp, "Vpa");
 					linkbus_setLineTerm("\n\n");
 					cli(); wdt_reset(); /* HW watchdog */ sei();
 					#ifdef INCLUDE_DS3231_SUPPORT
-						ds3231_read_time(&time, NULL, Time_Format_Not_Specified);
-						lb_send_TIM(LINKBUS_MSG_REPLY, time);
+					    g_temp_time = time(NULL);
+						
+						if(g_temp_time != g_tx_epoch_time)
+						{
+							g_temp_time = g_tx_epoch_time;						
+						}
+						
+						sprintf(g_tempStr, "%lu", g_temp_time);
+						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
 						cli(); wdt_reset(); /* HW watchdog */ sei();
 					#endif
 				}
@@ -1733,200 +1984,140 @@ int main( void )
 
 			/* ////////////////////////////////////
 			 * Handle periodic tasks triggered by the tick count */
-			if(hold_tick_count != g_tick_count)
-			{
-				hold_tick_count = g_tick_count;
-
-				if(g_lb_repeat_rssi)
-				{
-					static uint16_t lastRSSI = 0;
-					static uint16_t lastRoundedRSSI = 0;
-					
-					if(!g_rssi_countdown)
-					{
-						if(lastRSSI != g_filteredRSSI)
-						{
-							uint16_t roundedRSSI = g_filteredRSSI / 10;
-							
-							if(lastRoundedRSSI != roundedRSSI)
-							{
-								lastRoundedRSSI = roundedRSSI;
-#ifndef DEBUG_FUNCTIONS_ENABLE
-								g_rssi_countdown = 100;
-#endif
-								lb_broadcast_rssi(10*roundedRSSI);
-							}
-
-							lastRSSI = g_filteredRSSI;
-							
-						}
-						
-#ifdef DEBUG_FUNCTIONS_ENABLE
-//						g_rssi_countdown = 100;
-//						if(g_debug_atten_step)
-//						{
-//							static uint16_t attenuation = 0;
-//						
-//							g_debug_atten_step++;
-//						
-//							if(attenuation)
-//							{
-//								g_receiver_port_shadow |= 0b00000100;
-//								mcp23017_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
-//							}
-//							else
-//							{
-//								g_receiver_port_shadow &= 0b11111011;
-//								mcp23017_writePort(g_receiver_port_shadow); /* initialize receiver port expander */
-//							}
-//
-//							attenuation++;
-//							attenuation = attenuation % 100;
-//
-//						}
-
-						g_rssi_countdown = 100;
-						if(g_debug_atten_step)
-						{
-//							static uint8_t attenuation = 0;
-							static uint16_t pitch = 0;
-							
-							
-							if(g_beep_length ==0)
-							{
-								uint8_t cs = TCCR0B & 0x07;
-								/* 
-								1,2,3,4,5
-								1,8,64,256,1024
-								*/
-								
-								pitch++;
-								
-								uint8_t thresh;
-								if((cs == 5) || (cs == 4))
-								{
-									thresh = 64;
-								}
-								else if((cs == 3) || (cs == 2))
-								{
-									thresh = 32;	
-								}
-								else
-								{
-									thresh = 1;
-								}
-								
-								if(OCR0A> thresh)
-								{
-									OCR0A--;
-								}
-								else
-								{
-									uint8_t cs = TCCR0B & 0x07;
-									cs--;
-									if(cs == 0)
-									{ 
-										cs = ((1 << CS02) | (1 << CS00)); 
-										pitch = 0;
-									}
-									cs |= (TCCR0B & 0xF8);
-									TCCR0B = cs;                /*  Prescaler */
-									OCR0A = 255;
-								}
-
-								g_beep_length = 2*BEEP_SHORT;
-								
-								char str[20];
-								sprintf(str, "%d, %d", (TCCR0B & 0x07), OCR0A);
-								lb_broadcast_num(pitch, str);
-							}
-
-						//	rxSetAttenuation(attenuation++);
-						}
-
-#endif // DEBUG_FUNCTIONS_ENABLE
-
-					}				
-				}
-
-				if(!g_LB_broadcast_interval && g_LB_broadcasts_enabled)
-				{
-					if(g_LB_broadcasts_enabled & UPC_TEMP_BROADCAST)
-					{
-						/* not yet supported - gets read from processor chip */
-					}
-
-					if(g_LB_broadcasts_enabled & BATTERY_BROADCAST)
-					{
-						if(g_adcUpdated[BATTERY_READING])
-						{
-							uint16_t v = (uint16_t)( ( 1000 * ( (uint32_t)(g_lastConversionResult[BATTERY_READING] + POWER_SUPPLY_VOLTAGE_DROP_MV) ) ) / BATTERY_VOLTAGE_COEFFICIENT ); /* round up and adjust for voltage divider and drops */
-					        lb_broadcast_num(v, "BAT");
-							g_adcUpdated[BATTERY_READING] = FALSE;
-							g_LB_broadcast_interval = 100;                                                                                                                              /* minimum delay before next broadcast */
-						}
-					}
-
-					if(g_LB_broadcasts_enabled & RSSI_BROADCAST)
-					{
-						if(g_adcUpdated[RSSI_READING])
-						{
-							uint16_t v = g_lastConversionResult[RSSI_READING];  /* round up and adjust for voltage divider */
-							lb_broadcast_rssi(v);
-							g_adcUpdated[RSSI_READING] = FALSE;
-							g_LB_broadcast_interval = 100;                      /* minimum delay before next broadcast */
-						}
-					}
-
-					if(g_LB_broadcasts_enabled & RF_BROADCAST)
-					{
-						if(g_adcUpdated[RF_READING])
-						{
-							g_adcUpdated[RF_READING] = FALSE;
-							uint16_t v = (uint16_t)(((uint32_t)(g_lastConversionResult[RF_READING]) + 9) / 100);    /* round up and adjust for voltage divider */
-							lb_broadcast_rf(v);
-							g_LB_broadcast_interval = 100;                                                          /* minimum delay before next broadcast */
-						}
-					}
-				}
-
-				if(!g_send_ID_countdown && !attach_success)
-				{
-					static uint8_t tries = 10;
-
-					if(tries)
-					{
-						tries--;
-						g_send_ID_countdown = SEND_ID_DELAY;
-//						lb_send_ID(LINKBUS_MSG_COMMAND, RECEIVER_ID, g_LB_attached_device);
-					}
-				}
-			}
-
-
+//			if(hold_tick_count != g_tick_count)
+//			{
+//				hold_tick_count = g_tick_count;
+//			}
 	}       /* while(1) */
 }/* main */
+
+void initializeTxWithSettings(time_t startTime) 
+{
+	if(startTime > 0)
+	{
+		g_event_start_time = startTime;
+		g_event_enabled = TRUE;
+	}
+	
+	// Make sure everything has been initialized
+	if(!g_event_start_time) return;
+	if(!g_on_air_seconds) return;
+	//if(!g_off_air_seconds) return;
+	if(g_messages_text[PATTERN_TEXT][0] == '\0') return;
+	if(!g_pattern_codespeed) return;
+	//if(!g_transmitter_freq) return;
+	//if(!modulation_format) return;
+	//if(!power_level) return;
+	//if(!callsign) return;
+	//if(!csllsign_speed) return;
+	g_time_to_send_ID_countdown = g_ID_time;
+
+	if(startTime > 0) 
+	{
+		cli(); 
+		g_tx_epoch_time = ds3231_get_epoch(NULL);
+		set_system_time(g_tx_epoch_time); // update system clock
+		sei();
+	}
+	
+	g_temp_time = time(NULL);
+	if(g_temp_time != g_tx_epoch_time)
+	{
+		g_temp_time = g_tx_epoch_time;
+	}
+	
+	int32_t dif = difftime(g_temp_time, g_event_start_time); // returns arg1 - arg2
+		
+	if(dif >= 0) // start time is in the past
+	{
+		BOOL turnOnTransmitter = FALSE;
+		int cyclePeriod = g_on_air_seconds + g_off_air_seconds;
+		int secondsIntoCycle = dif % cyclePeriod;
+		int timeTillTransmit = g_intra_cycle_delay_time - secondsIntoCycle;
+								
+		if(timeTillTransmit <= 0) // we should have started transmitting already
+		{
+			if(g_on_air_seconds <= -timeTillTransmit) // we should have finished transmitting in this cycle
+			{
+				g_on_the_air = -(cyclePeriod + timeTillTransmit);
+			}
+			else // we should be transmitting right now
+			{
+				g_on_the_air = g_on_air_seconds + timeTillTransmit;
+				turnOnTransmitter = TRUE;
+			}
+		}
+		else // not yet time time to transmit in this cycle
+		{
+			g_on_the_air = -timeTillTransmit;
+		}
+								
+		if(turnOnTransmitter)
+		{
+			cli();
+			BOOL repeat = TRUE;
+			makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
+			g_code_throttle = throttleValue(g_pattern_codespeed);
+			sei();
+		}
+		else
+		{
+			keyTransmitter(OFF);
+		}
+
+		g_event_commenced = TRUE;
+	}
+	else // start time is in the future
+	{
+		keyTransmitter(OFF);
+	}
+}
 
 /**********************
 **********************/
 
 void initializeEEPROMVars(void)
 {
+	uint8_t i;
+	
 	if(eeprom_read_byte(&ee_interface_eeprom_initialization_flag) == EEPROM_INITIALIZED_FLAG)
 	{
-		g_tone_volume = eeprom_read_byte(&ee_tone_volume_setting);
-		g_main_volume = eeprom_read_byte(&ee_main_volume_setting);
-		g_audio_RSSI = eeprom_read_byte(&ee_audio_RSSI_setting);
-		g_tone_RSSI_direction = eeprom_read_byte(&ee_tone_RSSI_direction_setting);
-		g_rssi_filter = eeprom_read_byte(&ee_rssi_filter_setting);
+		g_event_start_time = eeprom_read_dword((uint32_t*)(&ee_start_time));
+		g_event_finish_time = eeprom_read_dword((uint32_t*)(&ee_finish_time));
+		
+		g_pattern_codespeed = eeprom_read_byte(&ee_pattern_codespeed);
+		g_id_codespeed = eeprom_read_byte(&ee_id_codespeed);
+		g_on_air_seconds = eeprom_read_word(&ee_on_air_time);
+		g_off_air_seconds = eeprom_read_word(&ee_off_air_time);
+		g_intra_cycle_delay_time = eeprom_read_word(&ee_intra_cycle_delay_time);
+		g_ID_time = eeprom_read_word(&ee_ID_time);
+		
+		for(i=0; i<20; i++)
+		{
+			g_messages_text[STATION_ID][i] = (char)eeprom_read_byte((uint8_t*)(&ee_stationID_text[i]));
+			if(!g_messages_text[STATION_ID][i]) break;
+		}
+		
+		for(i=0; i<20; i++)
+		{
+			g_messages_text[PATTERN_TEXT][i] = (char)eeprom_read_byte((uint8_t*)(&ee_pattern_text[i]));
+			if(!g_messages_text[PATTERN_TEXT][i]) break;
+		}
 	}
 	else
 	{
-		g_tone_volume = EEPROM_TONE_VOLUME_DEFAULT;
-		g_main_volume = EEPROM_MAIN_VOLUME_DEFAULT;
-		g_audio_RSSI = EEPROM_AUDIO_RSSI_DEFAULT;
-		g_tone_RSSI_direction = EEPROM_TONE_RSSI_DIRECTION_DEFAULT;
-		g_rssi_filter = EEPROM_TONE_RSSI_FILTER_DEFAULT;
+		g_event_start_time = EEPROM_START_TIME_DEFAULT;
+		g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
+		
+		g_id_codespeed = EEPROM_ID_CODE_SPEED_DEFAULT;
+		g_pattern_codespeed = EEPROM_PATTERN_CODE_SPEED_DEFAULT;
+		g_on_air_seconds = EEPROM_ON_AIR_TIME_DEFAULT;
+		g_off_air_seconds = EEPROM_OFF_AIR_TIME_DEFAULT;
+		g_intra_cycle_delay_time = EEPROM_INTRA_CYCLE_DELAY_TIME_DEFAULT;
+		g_ID_time = EEPROM_ID_TIME_INTERVAL_DEFAULT;
+		
+		strncpy(g_messages_text[STATION_ID], EEPROM_STATION_ID_DEFAULT, MAX_PATTERN_TEXT_LENGTH);
+		strncpy(g_messages_text[PATTERN_TEXT], EEPROM_PATTERN_TEXT_DEFAULT, MAX_PATTERN_TEXT_LENGTH);
 
 		saveAllEEPROM();
 		eeprom_write_byte(&ee_interface_eeprom_initialization_flag, EEPROM_INITIALIZED_FLAG);
@@ -1936,47 +2127,36 @@ void initializeEEPROMVars(void)
 
 void saveAllEEPROM()
 {
+	int i;
 	wdt_reset();                                    /* HW watchdog */
-	storeEEbyteIfChanged(&ee_tone_volume_setting, g_tone_volume);
-	storeEEbyteIfChanged(&ee_main_volume_setting, g_main_volume);
-	storeEEbyteIfChanged(&ee_audio_RSSI_setting, g_audio_RSSI);
-	storeEEbyteIfChanged(&ee_tone_RSSI_direction_setting, g_tone_RSSI_direction);
-	storeEEbyteIfChanged(&ee_rssi_filter_setting, g_rssi_filter);
+	
+	storeEEdwordIfChanged((uint32_t*)&ee_start_time, g_event_start_time);
+	storeEEdwordIfChanged((uint32_t*)&ee_finish_time, g_event_finish_time);
+	
+	storeEEbyteIfChanged(&ee_id_codespeed, g_id_codespeed);
+	storeEEbyteIfChanged(&ee_pattern_codespeed, g_pattern_codespeed);
+	storeEEwordIfChanged(&ee_on_air_time, g_on_air_seconds);
+	storeEEwordIfChanged(&ee_off_air_time, g_off_air_seconds);
+	storeEEwordIfChanged(&ee_intra_cycle_delay_time, g_intra_cycle_delay_time);
+	storeEEwordIfChanged(&ee_ID_time, g_ID_time);
+
+	for(i=0; i<strlen(g_messages_text[STATION_ID]); i++)
+	{
+		storeEEbyteIfChanged((uint8_t*)&ee_stationID_text[i], (uint8_t)g_messages_text[STATION_ID][i]);
+	}
+
+	storeEEbyteIfChanged((uint8_t*)&ee_stationID_text[i], 0);
+	
+	for(i=0; i<strlen(g_messages_text[PATTERN_TEXT]); i++)
+	{
+		storeEEbyteIfChanged((uint8_t*)&ee_pattern_text[i], (uint8_t)g_messages_text[PATTERN_TEXT][i]);
+	}
+	
+	storeEEbyteIfChanged((uint8_t*)&ee_pattern_text[i], 0);
 }
-	
-void tonePitch(uint8_t pitch)
+
+uint16_t throttleValue(uint8_t speed)
 {
-	Frequency_Hz freq;
-	uint16_t prescale = 8;
-	
-	if(g_tone_RSSI_direction == 1)
-	{
-		pitch = 255 - pitch;
-	}
-	
-	freq = 15 + (13*pitch);
-					
-	TCCR0B &= 0xF8;
-
-	if(freq < 60) // 1024
-	{
-		TCCR0B |= 0x05;
-		prescale = 1024;
-	}
-	else if(freq < 240) // 256
-	{
-		TCCR0B |= 0x04;
-		prescale = 256;
-	}
-	else if(freq < 1900) // 64
-	{
-		TCCR0B |= 0x03;
-		prescale = 64;
-	}
-	else // 8
-	{
-		TCCR0B |= 0x02;
-	}
-
-	OCR0A =  MIN(((8000000 / (2 * prescale * freq)) - 1), 255);
+	uint16_t temp = (7042L / (uint16_t)speed) / 10L;
+	return temp;
 }
