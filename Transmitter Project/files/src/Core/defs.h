@@ -65,9 +65,14 @@
 /* Battery voltage should be read when +12V supply is enabled and all transmitters are fully powered off */
 #define ADC_REF_VOLTAGE_mV 1100UL
 
-#define BATTERY_VOLTAGE_MAX_MV 4200UL
-#define BATTERY_DROP 140UL
-#define VBAT(x) (BATTERY_DROP + (x * BATTERY_VOLTAGE_MAX_MV) / 1023)
+#define ADC_MAX_VOLTAGE_MV 4200UL /* maximum voltage the ADC can read */
+#define BATTERY_VOLTAGE_MAX_MV 4200UL /* voltage at which the battery is considered to be fully charged */
+#define BATTERY_VOLTAGE_MIN_MV 3200UL /* voltage at which the battery is considered to be fully depleted */
+#define BATTERY_VOLTAGE_RANGE_MV (BATTERY_VOLTAGE_MAX_MV - BATTERY_VOLTAGE_MIN_MV)
+#define BATTERY_DROP 320UL /* voltage drop between the battery terminals and the ADC input while powering the ESP8266 */
+#define BATTERY_DROP_OFFSET (BATTERY_DROP * 1023UL)
+#define VBAT(x) (BATTERY_DROP + (x * ADC_MAX_VOLTAGE_MV) / 1023)
+#define BATTERY_PERCENTAGE(x) ( ( 100UL * ((x * ADC_MAX_VOLTAGE_MV + BATTERY_DROP_OFFSET) - (1023UL * BATTERY_VOLTAGE_MIN_MV)) )  / (BATTERY_VOLTAGE_RANGE_MV * 1023))
 
 #define SUPPLY_VOLTAGE_MAX_MV 14100UL
 #define VSUPPLY(x)((x * SUPPLY_VOLTAGE_MAX_MV) / 1023)
@@ -94,7 +99,7 @@ typedef uint16_t BatteryLevel;  /* in milliVolts */
 
 /******************************************************
  * EEPROM definitions */
-#define EEPROM_INITIALIZED_FLAG 0xAA
+#define EEPROM_INITIALIZED_FLAG 0xAB
 #define EEPROM_UNINITIALIZED 0x00
 
 #define EEPROM_STATION_ID_DEFAULT "FOXBOX"

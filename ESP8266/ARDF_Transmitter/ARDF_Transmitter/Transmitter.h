@@ -1,3 +1,25 @@
+/**********************************************************************************************
+   Copyright © 2019 Digital Confections LLC
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy of
+   this software and associated documentation files (the "Software"), to deal in the
+   Software without restriction, including without limitation the rights to use, copy,
+   modify, merge, publish, distribute, sublicense, and/or sell copies of the Software,
+   and to permit persons to whom the Software is furnished to do so, subject to the
+   following conditions:
+
+   The above copyright notice and this permission notice shall be included in all
+   copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+   INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+   PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+   FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+   OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
+
+ **********************************************************************************************/
+
 #ifndef _TRANSMITTER_H_
 #define _TRANSMITTER_H_
 
@@ -109,6 +131,8 @@
 #define LB_MESSAGE_TX_POWER_SET "$POW,M," /* Prefix for sending tx power level (mW) to ATMEGA */
 #define LB_MESSAGE_TX_MOD "MOD"
 #define LB_MESSAGE_TX_MOD_SET "$MOD," /* Prefix for sending 2m tx modulation format (AM or CW) to ATMEGA */
+#define LB_MESSAGE_TX_BAND "BND"
+#define LB_MESSAGE_TX_BAND_SET "$BND," /* Prefix for sending band set command (2 or 80) to ATMEGA */
 #define LB_MESSAGE_TX_FREQ "FRE"
 #define LB_MESSAGE_TX_FREQ_SET "$FRE," /* Prefix for sending frequency setting (Hz) to ATMEGA */
 #define LB_MESSAGE_PATTERN "PA"
@@ -121,6 +145,7 @@
 #define LB_MESSAGE_TIME_INTERVAL_SET1 "$T,1," /* Prefix for sending time interval (sec) for on-air time to ATMEGA */
 #define LB_MESSAGE_TIME_INTERVAL_SETD "$T,D," /* Prefix for sending time interval (sec) for time-slot delay to ATMEGA */
 #define LB_MESSAGE_TIME_INTERVAL_SETID "$T,I," /* Prefix for sending time interval (sec) for station identification to ATMEGA */
+#define LB_MESSAGE_WIFI_COMS_OFF "$WI,2;" /* Tell ATMEGA to disable linkbus to support ESP8266 programming */
 
 typedef enum {
   TX_WAKE_UP,
@@ -137,31 +162,6 @@ typedef enum {
 class Transmitter {
   public:
     String masterCloneSetting;
-    String callsignSetting;
-    String classic2mIDSetting;
-    String classic80mIDSetting;
-    String sprint80mIDSetting;
-    String foxO_80mIDSetting;
-    String classic2MstartDateTimeSetting;
-    String classic2MfinishDateTimeSetting;
-    String classic80MstartDateTimeSetting;
-    String classic80MfinishDateTimeSetting;
-    String sprintStartDateTimeSetting;
-    String sprintFinishDateTimeSetting;
-    String foxOstartDateTimeSetting;
-    String foxOfinishDateTimeSetting;
-    String classic2mFoxFrequencySetting; // Classic event only (e.g., 144.500 MHz)
-    String classic2mHomeFrequencySetting; // Classic event only (e.g., 144.900 MHz)
-    String classic80mFoxFrequency1Setting; // Classic event only (e.g., 3.510 MHz)
-    String classic80mHomeFrequencySetting; // Classic, Fox-O events only (e.g., 3.600 MHz)
-    String fox_O_80mFoxFrequency1Setting; // Fox-O event only (e.g., 3.510 MHz)
-    String fox_O_80mFoxFrequency2Setting; // Fox-O event only (e.g., 3.540 MHz)
-    String fox_O_80mFoxFrequency3Setting; // Fox-O event only (e.g., 3.570 MHz)
-    String fox_O_80mHomeFrequencySetting; // Fox-O event only (e.g., 3.570 MHz)
-    String sprintSpectator80mFrequencySetting; // Sprint event only (e.g., 3.550 MHz)
-    String sprintSlow80mFrequencySetting; // Sprint event only (e.g., 3.530 MHz)
-    String sprintFast80mFrequencySetting; // Sprint event only (e.g., 3.570 MHz)
-    String sprintFinish80mFrequencySetting; // Sprint event only (e.g., 3.600 MHz)
     bool debug_prints_enabled;
 
   public:

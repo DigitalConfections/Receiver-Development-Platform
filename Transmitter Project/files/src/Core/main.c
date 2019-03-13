@@ -152,6 +152,10 @@ static volatile BOOL g_sufficient_power_detected = FALSE;
 static volatile BOOL g_enableHardwareWDResets = FALSE;
 static volatile BOOL g_am_modulation_enabled = FALSE;
 
+static volatile BOOL g_go_to_sleep = FALSE;
+static volatile BOOL g_returned_from_sleep = FALSE;
+static volatile uint16_t g_seconds_left_to_sleep = 0;
+
 /***********************************************************************
  * Private Function Prototypes
  *
@@ -223,136 +227,154 @@ void __attribute__((optimize("O1"))) wdt_init(WDReset resetType)
 ISR( INT0_vect )
 {
 #ifdef ENABLE_1_SEC_INTERRUPTS
+	
 	system_tick();
 	g_tx_epoch_time++;
 	
-	if(g_event_enabled)
+	if(g_go_to_sleep)
 	{
-		if(g_event_commenced)
+		if(g_seconds_left_to_sleep) g_seconds_left_to_sleep--;
+		
+		if(!g_seconds_left_to_sleep)
 		{
-			BOOL repeat;
-			
-			if(g_time_to_send_ID_countdown) g_time_to_send_ID_countdown--;
-
-			if(g_on_the_air)
+			g_returned_from_sleep = TRUE;
+		}
+		else
+		{
+			set_ports(POWER_SLEEP);
+		}
+	}
+	else
+	{
+		if(g_event_enabled)
+		{
+			if(g_event_commenced)
 			{
-				if(g_event_finish_time > 0)
-				{
-					g_temp_time = time(NULL);
-					
-					if(g_temp_time != g_tx_epoch_time)
-					{
-						g_temp_time = g_tx_epoch_time;
-					}
-					
-					if(g_temp_time >= g_event_finish_time)
-					{
-						g_on_the_air = 0;
-						g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
-						keyTransmitter(OFF);
-						g_event_enabled = FALSE;
-						g_event_commenced = FALSE;
-					}
-				}
-
-				if(g_on_the_air > 0) /* on the air */
-				{
-					g_on_the_air--;
+				BOOL repeat;
 			
-					if(!g_time_to_send_ID_countdown)
+				if(g_time_to_send_ID_countdown) g_time_to_send_ID_countdown--;
+
+				if(g_on_the_air)
+				{
+					if(g_event_finish_time > 0)
 					{
-						if(g_on_the_air == g_time_needed_for_ID) // wait until the end of a transmission
+						g_temp_time = time(NULL);
+					
+						if(g_temp_time != g_tx_epoch_time)
 						{
-							g_time_to_send_ID_countdown = g_ID_time;
-							g_code_throttle = throttleValue(g_id_codespeed);
-							repeat = FALSE;
-							makeMorse(g_messages_text[STATION_ID], &repeat, NULL); /* Send only once */
+							g_temp_time = g_tx_epoch_time;
+						}
+					
+						if(g_temp_time >= g_event_finish_time)
+						{
+							g_on_the_air = 0;
+							g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
+							keyTransmitter(OFF);
+							g_event_enabled = FALSE;
+							g_event_commenced = FALSE;
 						}
 					}
+
+					if(g_on_the_air > 0) /* on the air */
+					{
+						g_on_the_air--;
+			
+						if(!g_time_to_send_ID_countdown)
+						{
+							if(g_on_the_air == g_time_needed_for_ID) // wait until the end of a transmission
+							{
+								g_time_to_send_ID_countdown = g_ID_time;
+								g_code_throttle = throttleValue(g_id_codespeed);
+								repeat = FALSE;
+								makeMorse(g_messages_text[STATION_ID], &repeat, NULL); /* Send only once */
+							}
+						}
 
 		
-					if(!g_on_the_air)
-					{
-						if(g_off_air_seconds)
+						if(!g_on_the_air)
 						{
-							keyTransmitter(OFF);
-							g_on_the_air -= g_off_air_seconds;
-							repeat = TRUE;
-							makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL); /* Reset pattern to start */
+							if(g_off_air_seconds)
+							{
+								keyTransmitter(OFF);
+								g_on_the_air -= g_off_air_seconds;
+								repeat = TRUE;
+								makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL); /* Reset pattern to start */
+							}
+							else
+							{
+								g_on_the_air = g_on_air_seconds;
+								g_code_throttle = throttleValue(g_pattern_codespeed);
+							}
 						}
-						else
+					}
+					else if(g_on_the_air < 0) /* off the air - g_on_the_air = 0 means all transmissions are disabled */
+					{
+						g_on_the_air++;
+		
+						if(!g_on_the_air) // off-the-air time has expired
 						{
 							g_on_the_air = g_on_air_seconds;
 							g_code_throttle = throttleValue(g_pattern_codespeed);
+							BOOL repeat = TRUE;
+							makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
 						}
 					}
 				}
-				else if(g_on_the_air < 0) /* off the air - g_on_the_air = 0 means all transmissions are disabled */
+			}
+			else if(g_event_start_time > 0) /* off the air - waiting for the start time to arrive */
+			{
+				g_temp_time = time(NULL);
+			
+				if(g_temp_time != g_tx_epoch_time)
 				{
-					g_on_the_air++;
-		
-					if(!g_on_the_air) // off-the-air time has expired
+					g_temp_time = g_tx_epoch_time;
+				}
+			
+				if(g_temp_time >= g_event_start_time)
+				{
+					if(g_intra_cycle_delay_time)
+					{
+						g_on_the_air = -g_intra_cycle_delay_time;
+					}
+					else
 					{
 						g_on_the_air = g_on_air_seconds;
 						g_code_throttle = throttleValue(g_pattern_codespeed);
 						BOOL repeat = TRUE;
 						makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
 					}
-				}
-			}
-		}
-		else if(g_event_start_time > 0) /* off the air - waiting for the start time to arrive */
-		{
-			g_temp_time = time(NULL);
-			
-			if(g_temp_time != g_tx_epoch_time)
-			{
-				g_temp_time = g_tx_epoch_time;
-			}
-			
-			if(g_temp_time >= g_event_start_time)
-			{
-				if(g_intra_cycle_delay_time)
-				{
-					g_on_the_air = -g_intra_cycle_delay_time;
-				}
-				else
-				{
-					g_on_the_air = g_on_air_seconds;
-					g_code_throttle = throttleValue(g_pattern_codespeed);
-					BOOL repeat = TRUE;
-					makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
-				}
 				
-				g_time_to_send_ID_countdown = g_ID_time;
-				g_event_commenced = TRUE;
+					g_time_to_send_ID_countdown = g_ID_time;
+					g_event_commenced = TRUE;
+				}
 			}
 		}
-	}
 	
-	/**************************************
-	 * Delay before re-enabling linkbus receive
-	 ***************************************/
-	if(g_wifi_enable_delay)
-	{
-		g_wifi_enable_delay--;
+		/**************************************
+		 * Delay before re-enabling linkbus receive
+		 ***************************************/
+		if(g_wifi_enable_delay)
+		{
+			g_wifi_enable_delay--;
 
-		if(!g_wifi_enable_delay)
-		{
-			wifi_power(ON); // power on WiFi
-			wifi_reset(OFF); // bring WiFi out of reset
-		}
-	}
-	else
-	{
-		if(g_WiFi_shutdown_seconds) 
-		{
-			g_WiFi_shutdown_seconds--;
-			
-			if(!g_WiFi_shutdown_seconds)
+			if(!g_wifi_enable_delay)
 			{
-				wifi_reset(ON); // put WiFi into reset
-				wifi_power(OFF); // power off WiFi
+				wifi_power(ON); // power on WiFi
+				wifi_reset(OFF); // bring WiFi out of reset
+			}
+		}
+		else
+		{
+			if(g_WiFi_shutdown_seconds) 
+			{
+				g_WiFi_shutdown_seconds--;
+			
+				if(!g_WiFi_shutdown_seconds)
+				{
+					wifi_reset(ON); // put WiFi into reset
+					wifi_power(OFF); // power off WiFi
+					g_go_to_sleep = TRUE;
+				}
 			}
 		}
 	}
@@ -982,6 +1004,8 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 {
 	if(initType == POWER_UP)
 	{
+		SMCR = 0x00; // clear sleep bit
+
 		/** Hardware rev P1.0
 		 * Set up PortB  */
 		// PB0 = VHF_ENABLE
@@ -1100,7 +1124,7 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 		// PD7 = WIFI_ENABLE
 
 		DDRD = 0x00;
-		PORTD = 0x00;
+		PORTD = (1 << PORTD2); /* Allow RTC interrupts to continue */
 		
 	//	PORTD &= ~((1 << PORTD6) | (1 << PORTD7));     /* Enable pull-ups on input pins, and set output levels on all outputs */
 
@@ -1166,10 +1190,10 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 	//	PCMSK1 |= (1 << PCINT10);                               /* Enable port C pin change interrupts on pin PC2 */
 	//	PCMSK0 |= (1 << PORTB2);                                /* Do not enable interrupts until HW is ready */
 
-		EICRA = 0;
-		EIMSK = 0;
-	//	EICRA  |= ((1 << ISC01) | (1 << ISC00));	/* Configure INT0 for RTC 1-second interrupts */
-	//	EIMSK |= (1 << INT0);		
+	//	EICRA = 0;
+	//	EIMSK = 0;
+		EICRA  &= ~((1 << ISC01) | (1 << ISC00));	/* Configure INT0 for low level interrupts */
+		EIMSK |= (1 << INT0);		
 	
 		/* Configure INT1 for antenna connect interrupts */
 		// TODO
@@ -1179,15 +1203,20 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 		*/
 		linkbus_disable();
 		
+		/**
+		Disable Watchdog timer
+		*/
+		wdt_init(WD_DISABLE);
+		
 		/* Disable brown-out detection
 		**/
 		PRR = 0xff;		
 		cli();
+		SMCR = 0x05; // set power-down mode
 		MCUCR = (1 << BODS) | (1 << BODSE);  // turn on brown-out enable select
 		MCUCR = (1 << BODS);        // this must be done within 4 clock cycles of above
-		SMCR = 0x09; // set power-down mode
-		asm("sleep"); /* enter power-down mode */
 		sei();
+		asm("sleep"); /* enter power-down mode */
 	}
 }
 
@@ -1232,9 +1261,6 @@ int main( void )
 	 * The watchdog must be petted periodically to keep it from barking */
 //	wdt_reset();                /* HW watchdog */
 
-	/**
-	 * Initialize tone volume setting */
-
 //	wifi_power(ON); // power on WiFi
 //	wifi_reset(OFF); // bring WiFi out of reset
 	// Uncomment the two lines above and set a breakpoint after this line to permit serial access to ESP8266 serial lines for programming
@@ -1270,10 +1296,6 @@ int main( void )
 	{
 		;                                           /* wait until transmit finishes */
 	}
-		
-	while(linkbusTxInProgress())
-	{
-	}               /* wait until transmit finishes */
 
 #ifndef TRANQUILIZE_WATCHDOG
 	wdt_init(WD_HW_RESETS); /* enable hardware interrupts */
@@ -1291,9 +1313,9 @@ int main( void )
 		/***************************************
 		* Check for Power 
 		***************************************/
-		if(g_battery_measurements_active)                                                                           /* if ADC battery measurements have stabilized */
+		if(!g_sufficient_power_detected)                                                                           /* if ADC battery measurements have stabilized */
 		{
-			if(!g_sufficient_power_detected)
+			if(g_battery_measurements_active)
 			{
 				if(g_lastConversionResult[BATTERY_READING] > POWER_ON_VOLT_THRESH_MV)  /* Battery measurement indicates sufficient voltage */
 				{
@@ -1303,6 +1325,25 @@ int main( void )
 					}
 				}
 			}
+		}
+		
+		/********************************
+		* Handle sleep
+		******************************/
+		if(g_go_to_sleep)
+		{
+			g_go_to_sleep = FALSE;
+			g_seconds_left_to_sleep = 60;
+			set_ports(POWER_SLEEP);
+		}
+		
+		if(g_returned_from_sleep)
+		{
+			g_returned_from_sleep = FALSE;
+			linkbus_init(BAUD);
+			set_ports(POWER_UP);
+			wdt_init(WD_HW_RESETS); /* enable hardware interrupts */
+			g_wifi_enable_delay = 2;
 		}
 
 		/***********************************************************************
@@ -1359,11 +1400,21 @@ int main( void )
 						{
 							g_mod_up = setting;
 							lb_broadcast_num(setting, "DRI U");
+							txSetModulationLevels((uint8_t*)&g_mod_up, NULL);
+							
+							if(txGetBand() == BAND_2M)
+							{
+								if(txGetModulation() == MODE_CW)
+								{
+									dac081c_set_dac(g_mod_up, AM_DAC);
+								}
+							}
 						}
 						else if(ud == 'D')
 						{
 							g_mod_down = setting;
 							lb_broadcast_num(setting, "DRI D");
+							txSetModulationLevels(NULL, (uint8_t*)&g_mod_down);
 						}
 						else
 						{
@@ -1479,8 +1530,6 @@ int main( void )
 				{
 					static uint8_t pwr;
 					
-					PORTB |= (1 << PORTB7); /* Turn on main power */
-						
 					if(lb_buff->fields[FIELD1][0])
 					{
 						if((lb_buff->fields[FIELD1][0] == 'M') && (lb_buff->fields[FIELD2][0]))
@@ -1497,7 +1546,17 @@ int main( void )
 						}
 						
 						txSetPowerLevel(pwr);
-						//txGetModulationLevels(&g_mod_up, &g_mod_down);
+						
+						if(txGetBand() == BAND_2M)
+						{
+							txGetModulationLevels((uint8_t *)&g_mod_up, (uint8_t *)&g_mod_down);
+							
+							if(txGetModulation() == MODE_CW)
+							{
+								dac081c_set_dac(g_mod_up, AM_DAC);
+							}
+						}
+						
 						saveAllEEPROM();
 					}
 					
@@ -1538,17 +1597,14 @@ int main( void )
 						g_event_enabled = FALSE; // get things stopped immediately
 						keyTransmitter(OFF);
 						powerToTransmitter(OFF);
-						if(lb_buff->fields[FIELD1][0] == '0')
-						{
-							ds3231_1s_sqw(OFF);
-							wdt_init(WD_DISABLE);
-							set_ports(POWER_SLEEP);	
-						}
-						else if(lb_buff->fields[FIELD1][0] == '+')
+						
+						if(lb_buff->fields[FIELD1][0] == '+')
 						{
 							set_ports(POWER_UP);
-							wdt_init(WD_HW_RESETS);
-							ds3231_1s_sqw(ON);
+						}
+						else if(lb_buff->fields[FIELD1][0] == 'S') // sleep
+						{
+							set_ports(POWER_SLEEP);	
 						}
 					}
 				}
@@ -1589,7 +1645,7 @@ int main( void )
 						g_off_air_seconds = 0;
 						g_intra_cycle_delay_time = 0;
 						g_messages_text[PATTERN_TEXT][0] = '\0';
-						g_pattern_codespeed = 0;
+						g_pattern_codespeed = EEPROM_PATTERN_CODE_SPEED_DEFAULT;
 						g_ID_time = 0;
 						
 						keyTransmitter(OFF);
@@ -1669,12 +1725,13 @@ int main( void )
 						
 						#ifdef INCLUDE_DS3231_SUPPORT	
 						
-						g_temp_time	 = time(NULL);
+//						g_temp_time	 = time(NULL);
+g_temp_time = ds3231_get_epoch(NULL);
 						
-						if(g_temp_time != g_tx_epoch_time)
-						{
-							g_temp_time = g_tx_epoch_time;
-						}						
+//						if(g_temp_time != g_tx_epoch_time)
+//						{
+//							g_temp_time = g_tx_epoch_time;
+//						}						
 						
 						if(g_temp_time != lastTime)
 						{
@@ -1869,10 +1926,15 @@ int main( void )
 						}
 						else if(b == 2)
 						{
-							txSetBand(BAND_2M, ON);
+							txSetBand(BAND_2M, ON);							
+							txGetModulationLevels((uint8_t *)&g_mod_up, (uint8_t *)&g_mod_down);
+							g_am_modulation_enabled = txAMModulationEnabled();
+														
+							if(txGetModulation() == MODE_CW)
+							{
+								dac081c_set_dac(g_mod_up, AM_DAC);
+							}
 						}
-						
-						g_am_modulation_enabled = txAMModulationEnabled();
 					}
 
 					band = txGetBand();
@@ -1904,7 +1966,9 @@ int main( void )
 
 				case MESSAGE_BAT:
 				{
-					lb_broadcast_num(g_lastConversionResult[BATTERY_READING], "!BAT");
+					int32_t bat = BATTERY_PERCENTAGE(g_lastConversionResult[BATTERY_READING]);	
+					bat = CLAMP(0, bat, 100);
+					lb_broadcast_num(bat, "!BAT");
 				}
 				break;
 
@@ -2157,6 +2221,8 @@ void saveAllEEPROM()
 
 uint16_t throttleValue(uint8_t speed)
 {
-	uint16_t temp = (7042L / (uint16_t)speed) / 10L;
+	uint16_t temp;
+	speed = CLAMP(5, speed, 20);
+	temp = (7042L / (uint16_t)speed) / 10L;
 	return temp;
 }

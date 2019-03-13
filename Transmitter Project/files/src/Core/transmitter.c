@@ -42,7 +42,8 @@
 	static volatile RadioBand g_activeBand = DEFAULT_TX_ACTIVE_BAND;
 	static volatile Modulation g_2m_modulationFormat = DEFAULT_TX_2M_MODULATION;
 	static volatile BOOL g_am_modulation_enabled = FALSE;
-	static volatile uint8_t g_am_drive_level = DEFAULT_AM_DRIVE_LEVEL;
+	static volatile uint8_t g_am_drive_level_high = DEFAULT_AM_DRIVE_LEVEL_HIGH;
+	static volatile uint8_t g_am_drive_level_low = DEFAULT_AM_DRIVE_LEVEL_LOW;
 	static volatile uint8_t g_cw_drive_level = DEFAULT_CW_DRIVE_LEVEL;
 	
 	static volatile BOOL g_transmitter_keyed = FALSE;
@@ -59,7 +60,8 @@
 	static uint32_t EEMEM ee_active_80m_frequency = DEFAULT_TX_80M_FREQUENCY;
 	static uint8_t EEMEM ee_80m_power_level = DEFAULT_TX_80M_POWER;
 	static uint32_t EEMEM ee_cw_offset_frequency = DEFAULT_RTTY_OFFSET_FREQUENCY;
-	static uint8_t EEMEM ee_am_drive_level = DEFAULT_AM_DRIVE_LEVEL;
+	static uint8_t EEMEM ee_am_drive_level_high = DEFAULT_AM_DRIVE_LEVEL_HIGH;
+	static uint8_t EEMEM ee_am_drive_level_low = DEFAULT_AM_DRIVE_LEVEL_LOW;
 	static uint8_t EEMEM ee_cw_drive_level = DEFAULT_CW_DRIVE_LEVEL;
 	static uint8_t EEMEM ee_active_2m_modulation = DEFAULT_TX_2M_MODULATION;
 
@@ -132,9 +134,26 @@
 	
 	void txGetModulationLevels(uint8_t *high, uint8_t *low)
 	{
-		*high = (uint8_t)g_am_drive_level;
-		*low = (uint8_t)(g_am_drive_level >> 1);
+		*high = (uint8_t)g_am_drive_level_high;
+		*low = (uint8_t)g_am_drive_level_low;
 	}
+	
+	void txSetModulationLevels(uint8_t *high, uint8_t *low)
+	{
+		if(g_activeBand != BAND_2M) return;
+			
+		if(high)
+		{
+			g_am_drive_level_high = MIN(*high, MAX_2M_AM_DRIVE_LEVEL);
+			g_cw_drive_level = MIN(*high, MAX_2M_AM_DRIVE_LEVEL);
+		}
+		
+		if(low)
+		{
+			g_am_drive_level_low = MIN(*low, MAX_2M_AM_DRIVE_LEVEL);
+		}
+	}
+
 
 	void __attribute__((optimize("O0"))) txSetBand(RadioBand band, BOOL enable)
 	{
@@ -224,22 +243,6 @@
 		}
 	}
 	
-	void txSetDrive(uint8_t drive)
-	{
-		if(g_activeBand != BAND_2M) return;
-		
-		if(g_2m_modulationFormat == MODE_AM)
-		{
-			drive =  MIN(drive, MAX_2M_AM_DRIVE_LEVEL);
-			g_am_drive_level = drive;
-		}
-		else
-		{
-			drive = MIN(drive, MAX_2M_CW_DRIVE_LEVEL);
-			g_cw_drive_level = drive;
-		}
-	}
-	
 	void txSetPowerLevel(uint8_t power)
 	{
 		// Prevent possible damage to transmitter
@@ -279,14 +282,14 @@
 		if((g_activeBand == BAND_2M) && (mode == MODE_AM))
 		{
 			g_2m_modulationFormat = MODE_AM;
-			txSetDrive(g_am_drive_level);
+			txSetModulationLevels((uint8_t*)&g_am_drive_level_high, (uint8_t*)&g_am_drive_level_low);
 			g_am_modulation_enabled = TRUE;
 		}
 		else
 		{
 			g_am_modulation_enabled = FALSE;
 			if(g_activeBand == BAND_2M) g_2m_modulationFormat = MODE_CW;
-			txSetDrive(g_cw_drive_level);
+			txSetModulationLevels((uint8_t*)&g_cw_drive_level, NULL);
 		}
 	}
 	
@@ -344,7 +347,8 @@
 			g_80m_frequency = eeprom_read_dword(&ee_active_80m_frequency);
 			g_80m_power_level = eeprom_read_byte(&ee_80m_power_level);
 			g_rtty_offset = eeprom_read_dword(&ee_cw_offset_frequency);
-			g_am_drive_level = eeprom_read_byte(&ee_am_drive_level);
+			g_am_drive_level_high = eeprom_read_byte(&ee_am_drive_level_high);
+			g_am_drive_level_low = eeprom_read_byte(&ee_am_drive_level_low);
 			g_cw_drive_level = eeprom_read_byte(&ee_cw_drive_level);
 			g_2m_modulationFormat = eeprom_read_byte(&ee_active_2m_modulation);
 		}
@@ -358,7 +362,8 @@
 			g_80m_frequency = DEFAULT_TX_80M_FREQUENCY;
 			g_80m_power_level = DEFAULT_TX_80M_POWER;
 			g_rtty_offset = DEFAULT_RTTY_OFFSET_FREQUENCY;
-			g_am_drive_level = DEFAULT_AM_DRIVE_LEVEL;
+			g_am_drive_level_high = DEFAULT_AM_DRIVE_LEVEL_HIGH;
+			g_am_drive_level_low = DEFAULT_AM_DRIVE_LEVEL_LOW;
 			g_cw_drive_level = DEFAULT_CW_DRIVE_LEVEL;
 			g_2m_modulationFormat = DEFAULT_TX_2M_MODULATION;
 
@@ -375,7 +380,8 @@
 		storeEEbyteIfChanged(&ee_80m_power_level, g_80m_power_level);
 		storeEEdwordIfChanged((uint32_t*)&ee_cw_offset_frequency, g_rtty_offset);
 		storeEEdwordIfChanged((uint32_t*)&ee_si5351_ref_correction, si5351_get_correction());
-		storeEEbyteIfChanged(&ee_am_drive_level, g_am_drive_level);
+		storeEEbyteIfChanged(&ee_am_drive_level_high, g_am_drive_level_high);
+		storeEEbyteIfChanged(&ee_am_drive_level_high, g_am_drive_level_low);
 		storeEEbyteIfChanged(&ee_cw_drive_level, g_cw_drive_level);
 		storeEEbyteIfChanged(&ee_active_2m_modulation, g_2m_modulationFormat);
 	}

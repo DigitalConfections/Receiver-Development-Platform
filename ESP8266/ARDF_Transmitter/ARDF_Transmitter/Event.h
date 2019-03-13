@@ -1,3 +1,25 @@
+/**********************************************************************************************
+   Copyright © 2019 Digital Confections LLC
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy of
+   this software and associated documentation files (the "Software"), to deal in the
+   Software without restriction, including without limitation the rights to use, copy,
+   modify, merge, publish, distribute, sublicense, and/or sell copies of the Software,
+   and to permit persons to whom the Software is furnished to do so, subject to the
+   following conditions:
+
+   The above copyright notice and this permission notice shall be included in all
+   copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+   INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+   PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+   FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+   OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
+
+ **********************************************************************************************/
+
 #ifndef _EVENT_H_
 #define _EVENT_H_
 
@@ -35,6 +57,8 @@
 #define TX_DESCRIPTIVE_NAME "TX_ROLE_NAME" /* Descriptive name of role assignment */
 #define TX_ROLE_FREQ "TX_ROLE_FREQ" /* Frequency of role assignment */
 #define TX_ASSIGNMENT_IS_DEFAULT "TX_DEFAULT" /* Identifies the assignment as the default assignment */
+
+/* This structure contains all the essential information needed to summarize the contents of an Event file */
 typedef struct {
   String path;
   unsigned long startDateTimeEpoch;
@@ -46,11 +70,13 @@ typedef struct {
   String freq;
 } EventFileRef;
 
+/* This structure contains the elements of a single line in an event file */
 typedef struct {
   String id;
   String value;
 } EventLineData;
 
+/* This structure holds all the data that defines transmitter operation */
 typedef struct TxDataStruct {
   String pattern;
   String onTime;
@@ -58,16 +84,18 @@ typedef struct TxDataStruct {
   int delayTime;
 } TxDataType;
 
+/* This structure holds all the data that defines a transmitter Role */
 typedef struct RoleDataStruct {
   String rolename;
   int  numberOfTxs;
-  int  frequency;
+  long frequency;
   int  powerLevel_mW;
   int  code_speed;
   int  id_interval;
   TxDataStruct *tx[MAXIMUM_NUMBER_OF_TXs_OF_A_TYPE];
 } RoleDataType;
 
+/* This structure holds all the data that defines an Event */
 typedef struct EventDataStruct {
   String tx_assignment; // <- Role and time slot assigned to this tx: "r:t" 
   String tx_role_name; // <- Descriptive name ofassigned Role
@@ -104,6 +132,8 @@ class Event {
     void saveMeData(String newAssignment);
     bool setTxAssignment(String role_slot);
     String getTxAssignment(void);
+    bool setTxFrequency(String role_slot);
+    String getTxFrequency(void);
 
     void setEventName(String str);
     String getEventName(void) const;

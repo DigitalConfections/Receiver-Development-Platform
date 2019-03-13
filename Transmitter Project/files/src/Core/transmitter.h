@@ -97,10 +97,11 @@ typedef enum
 #define DEFAULT_TX_2M_POWER 72 // 5V to all components
 #define DEFAULT_TX_80M_POWER 50
 
-#define MAX_2M_PWR_SETTING 120 /* maximum safe DAC setting = 5V*/
+#define MAX_2M_PWR_SETTING 150 /* maximum safe DAC setting = 5V*/
 #define MAX_80M_PWR_SETTING 255 /* maximum safe DAC setting */
 
-#define DEFAULT_AM_DRIVE_LEVEL 195
+#define DEFAULT_AM_DRIVE_LEVEL_HIGH 195
+#define DEFAULT_AM_DRIVE_LEVEL_LOW 0
 #define DEFAULT_CW_DRIVE_LEVEL 195
 
 #define MAX_2M_AM_DRIVE_LEVEL 195
@@ -191,10 +192,6 @@ typedef enum {
 	
 /**
  */
-	void txSetDrive(uint8_t drive);
-
-/**
- */
 	Frequency_Hz txGetFrequency(void);
 
 #endif  /* #ifdef INCLUDE_TRANSMITTER_SUPPORT */
@@ -214,5 +211,10 @@ void powerToTransmitter(BOOL on);
 /**
  */
 void txGetModulationLevels(uint8_t *high, uint8_t *low);
+
+/**
+ */
+void txSetModulationLevels(uint8_t *high, uint8_t *low);
+
 
 #endif  /* TRANSMITTER_H_ */

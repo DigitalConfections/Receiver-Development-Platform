@@ -127,9 +127,13 @@ time_t ds3231_get_epoch(BOOL *result)
 
 		twelvehour = ((data[2] >> 6) & 0x01);
 
-		if(!twelvehour && am_pm)
+		if(twelvehour)
 		{
-			hours += 10;
+			if(am_pm) hours += 12;
+		}
+		else // am_pm holds 20 hours flag
+		{
+			if(am_pm) hours += 20;
 		}
 
 		ltm.tm_hour = hours;
