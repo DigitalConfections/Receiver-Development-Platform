@@ -23,6 +23,7 @@ Pass in a pointer to a BOOL in the second and third arguments:
 BOOL makeMorse(char* s, BOOL* repeating, BOOL* finished)
 {
 	static char* str = NULL;
+	static char c = ' ';
 	static BOOL repeat = TRUE;
 	static MorseCharacter morseInProgress;
 	static uint8_t charIndex; /* letters, numbers, punctuation */
@@ -39,6 +40,7 @@ BOOL makeMorse(char* s, BOOL* repeating, BOOL* finished)
 		if(*s)
 		{
 			str = s;
+			c = ' ';
 			morseInProgress = getMorseChar(*str);
 			charIndex = 0;
 			symbolIndex = 0;
@@ -58,7 +60,7 @@ BOOL makeMorse(char* s, BOOL* repeating, BOOL* finished)
 	}
 	else if(str)
 	{
-		if(*str == '<') // constant tone
+		if(c == '<') // constant tone
 		{
 			carrierOn = TRUE;
 		}
@@ -90,7 +92,7 @@ BOOL makeMorse(char* s, BOOL* repeating, BOOL* finished)
 			{
 				if(symbolIndex >= morseInProgress.lengthInSymbols)
 				{
-					char c = (*(str + ++charIndex));
+					c = (*(str + ++charIndex));
 				
 					if(!c) /* wrap to beginning of text */
 					{
@@ -132,9 +134,17 @@ BOOL makeMorse(char* s, BOOL* repeating, BOOL* finished)
 				} 
 				else
 				{
+					uint8_t sym = morseInProgress.lengthInSymbols;
 					symbolIndex = 255; /* ensure the next character gets read */
 					carrierOn = FALSE;
-					elementIndex = morseInProgress.lengthInSymbols-4;
+					if(sym >=4 )
+					{
+						elementIndex = morseInProgress.lengthInSymbols-4;
+					}
+					else
+					{
+						elementIndex = 0;
+					}
 				}
 			}
 		}

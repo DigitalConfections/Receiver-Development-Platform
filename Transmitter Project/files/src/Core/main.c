@@ -1582,7 +1582,7 @@ int main( void )
 						makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
 						g_code_throttle = throttleValue(g_pattern_codespeed);
 						sei();
-						g_event_finish_time = 999999999; // run for a long long time
+						g_event_finish_time = MAX_TIME; // run for a long long time
 						g_on_air_seconds = 9999; // on period is very long
 						g_off_air_seconds = 0; // off period is very short
 						g_on_the_air = 9999; //  start out transmitting

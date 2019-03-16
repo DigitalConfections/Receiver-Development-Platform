@@ -19,12 +19,12 @@
    DEALINGS IN THE SOFTWARE.
 
  **********************************************************************************************
- *
- * esp8266.h
- *
- * Created: 6/18/2017 2:08:00 PM
- * Author: Digital Confections LLC
- */ 
+
+   esp8266.h
+
+   Created: 6/18/2017 2:08:00 PM
+   Author: Digital Confections LLC
+*/
 
 
 #ifndef ESP8266_H_
@@ -66,15 +66,15 @@ typedef enum
   HOTSPOT_PW3,
   MDNS_RESPONDER,
   SOFT_AP_IP_ADDR,
-	TIME_HOST,
-	TIME_HTTP_PORT,
+  TIME_HOST,
+  TIME_HTTP_PORT,
   BRIDGE_IP_ADDR,
-	BRIDGE_SSID,
-	BRIDGE_PW,
-	BRIDGE_TCP_PORT,
+  BRIDGE_SSID,
+  BRIDGE_PW,
+  BRIDGE_TCP_PORT,
   LEDS_ENABLE,
   DEBUG_PRINTS_ENABLE,
-	NUMBER_OF_SETTABLE_VARIABLES
+  NUMBER_OF_SETTABLE_VARIABLES
 } WiFiMemory;
 
 #endif /* ESP8266_H_ */

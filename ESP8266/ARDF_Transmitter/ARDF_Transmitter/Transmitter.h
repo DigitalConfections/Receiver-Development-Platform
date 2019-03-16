@@ -31,34 +31,34 @@
       WiFi wakes up
       WiFi reads all data from FS and completes initialization tasks
       WiFi sends WiFiReady message to ATMEGA
-      
+
       ATMEGA replies with $TIM message containing the current time
-      
+
       WiFi updates time
       WiFi checks to see if any events are scheduled
-      
+
       If no event is scheduled
         WiFi sends EventConfig=NULL message to ATMEGA
       If event is scheduled
         WiFi sends EventConfig message to ATMEGA that includes start and finish times
-      
+
       WiFi waits for WiFi connections, further commands, or power down.
-      
-      
+
+
       NORMAL ATMEGA POWER UP SEQUENCE
-      
+
       ATMEGA wakes up
       ATMEGA reads all permed data and completes initialization tasks
       ATMEGA powers up WiFi
       ATMEGA receives WiFiReady message from WiFi
       ATMEGA replies with a message containing the current time
       ATMEGA receives EventConfig message from WiFi
-      
+
       If no event is scheduled
         ATMEGA waits for two minutes of inactivity before shutting down WiFi
       If event is scheduled
         ATMEGA configures hardware for event
-      
+
       If event is in progress
         ATMEGA requests WiFi to configure it for transmissions
         ATMEGA begins transmissions as instructed by data received from WiFi
@@ -68,13 +68,13 @@
 
       End of event time is reached
       ATMEGA powers off the transmitter hardware and places itself to sleep
-      
+
       NORMAL ATMEGA WAKE-UP SEQUENCE
-      
+
       Interrupt awakens ATMEGA
       Same as NORMAL ATMEGA POWER UP SEQUENCE
 
- */
+*/
 
 #define TRANSMITTER_DEBUG_PRINTS_OVERRIDE false
 
@@ -82,6 +82,10 @@
 #define FULLY_DEPLETED_BATTERY_mV 3200.
 
 #define MASTER_OR_CLONE_SETTING "MASTER_SETTING"
+
+#define TX_MAX_ALLOWED_POWER_MW 2000
+#define TX_MAX_ALLOWED_FREQUENCY_HZ 148000000
+#define TX_MIN_ALLOWED_FREQUENCY_HZ 3500000
 
 // Websocket Command Messages
 #define SOCK_COMMAND_EVENT_NAME "EVENT_NAME" /* read only */
@@ -95,18 +99,23 @@
 #define SOCK_COMMAND_VERSION "VERS" /* read only */
 #define SOCK_COMMAND_MAC "MAC" /* read only */
 #define SOCK_COMMAND_CALLSIGN "CALLSIGN"
+#define SOCK_COMMAND_PATTERN "PATTERN"
 #define SOCK_COMMAND_BAND "BAND" /* read only */
 #define SOCK_COMMAND_START_TIME "START_TIME"
 #define SOCK_COMMAND_FINISH_TIME "FINISH_TIME"
 #define SOCK_COMMAND_TYPE_NAME "TYPE_NAME" /* read only */
 //#define SOCK_COMMAND_TYPE_TX_COUNT "TX_COUNT"  /* read only */
-//#define SOCK_COMMANT_TYPE_PWR "POWER" /* read only */
+#define SOCK_COMMAND_TYPE_PWR "POWER"
+#define SOCK_COMMAND_TYPE_MODULATION "MOD"
 #define SOCK_COMMAND_TYPE_FREQ "FREQ"
 //#define SOCK_COMMAND_TYPE_WPM "CODE_SPEED" /* read only */
 //#define SOCK_COMMAND_TYPE_ID_INTERVAL "ID_INT" /* read only */
 #define SOCK_COMMAND_TX_ROLE "TX_ROLE"
 #define SOCK_COMMAND_TEST "TEST"
 #define SOCK_COMMAND_REFRESH "REFRESH"
+#define SOCK_COMMAND_KEY_DOWN "KEY_DOWN"
+#define SOCK_COMMAND_KEY_UP "KEY_UP"
+#define SOCK_COMMAND_SLEEP "SLEEP"
 
 // LinkBus Messages
 #define LB_MESSAGE_ESP "ESP"
@@ -145,7 +154,10 @@
 #define LB_MESSAGE_TIME_INTERVAL_SET1 "$T,1," /* Prefix for sending time interval (sec) for on-air time to ATMEGA */
 #define LB_MESSAGE_TIME_INTERVAL_SETD "$T,D," /* Prefix for sending time interval (sec) for time-slot delay to ATMEGA */
 #define LB_MESSAGE_TIME_INTERVAL_SETID "$T,I," /* Prefix for sending time interval (sec) for station identification to ATMEGA */
-#define LB_MESSAGE_WIFI_COMS_OFF "$WI,2;" /* Tell ATMEGA to disable linkbus to support ESP8266 programming */
+#define LB_MESSAGE_WIFI_COMS_OFF "$WI,2;" /* Tell ATMEGA to disable linkbus to support ESP8266 programming (no exit without power cycle) */
+#define LB_MESSAGE_KEY_DOWN "$GO,1;" /* Tell ATMEGA to key transmitter continuously */
+#define LB_MESSAGE_KEY_UP "$GO,0;" /* Tell ATMEGA to stop continuous transmit */
+#define LB_MESSAGE_SLEEP "$GO,S;" /* Tell ATMEGA to put all circuits to sleep (no exit without power cycle) */
 
 typedef enum {
   TX_WAKE_UP,
