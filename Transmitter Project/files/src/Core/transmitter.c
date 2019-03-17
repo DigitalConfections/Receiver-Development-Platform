@@ -45,9 +45,9 @@
 	static volatile uint8_t g_am_drive_level_high = DEFAULT_AM_DRIVE_LEVEL_HIGH;
 	static volatile uint8_t g_am_drive_level_low = DEFAULT_AM_DRIVE_LEVEL_LOW;
 	static volatile uint8_t g_cw_drive_level = DEFAULT_CW_DRIVE_LEVEL;
-	
+
 	static volatile BOOL g_transmitter_keyed = FALSE;
-	
+
 /* EEPROM Defines */
 #define EEPROM_BAND_DEFAULT BAND_80M
 
@@ -64,6 +64,12 @@
 	static uint8_t EEMEM ee_am_drive_level_low = DEFAULT_AM_DRIVE_LEVEL_LOW;
 	static uint8_t EEMEM ee_cw_drive_level = DEFAULT_CW_DRIVE_LEVEL;
 	static uint8_t EEMEM ee_active_2m_modulation = DEFAULT_TX_2M_MODULATION;
+	static uint8_t EEMEM ee_80m_power_table[22] = DEFAULT_80M_POWER_TABLE;
+	static uint8_t EEMEM ee_2m_am_power_table[22] = DEFAULT_2M_AM_POWER_TABLE;
+	static uint8_t EEMEM ee_2m_am_drive_low_table[22] = DEFAULT_2M_AM_DRIVE_LOW_TABLE;
+	static uint8_t EEMEM ee_2m_am_drive_high_table[22] = DEFAULT_2M_AM_DRIVE_HIGH_TABLE;
+	static uint8_t EEMEM ee_2m_cw_power_table[22] = DEFAULT_2M_CW_POWER_TABLE;
+	static uint8_t EEMEM ee_2m_cw_drive_table[22] = DEFAULT_2M_CW_DRIVE_TABLE;
 
 /*
  *       Local Function Prototypes
@@ -373,17 +379,19 @@
 
 	void saveAllTransmitterEEPROM(void)
 	{
-		storeEEbyteIfChanged(&ee_active_band, g_activeBand);
-		storeEEdwordIfChanged((uint32_t*)&ee_active_2m_frequency, g_2m_frequency);
-		storeEEbyteIfChanged(&ee_2m_power_level, g_2m_power_level);
-		storeEEdwordIfChanged((uint32_t*)&ee_active_80m_frequency, g_80m_frequency);
-		storeEEbyteIfChanged(&ee_80m_power_level, g_80m_power_level);
-		storeEEdwordIfChanged((uint32_t*)&ee_cw_offset_frequency, g_rtty_offset);
-		storeEEdwordIfChanged((uint32_t*)&ee_si5351_ref_correction, si5351_get_correction());
-		storeEEbyteIfChanged(&ee_am_drive_level_high, g_am_drive_level_high);
-		storeEEbyteIfChanged(&ee_am_drive_level_high, g_am_drive_level_low);
-		storeEEbyteIfChanged(&ee_cw_drive_level, g_cw_drive_level);
-		storeEEbyteIfChanged(&ee_active_2m_modulation, g_2m_modulationFormat);
+		uint8_t table[22] = DEFAULT_80M_POWER_TABLE;
+		eeprom_update_byte(&ee_active_band, g_activeBand);
+		eeprom_update_dword((uint32_t*)&ee_active_2m_frequency, g_2m_frequency);
+		eeprom_update_byte(&ee_2m_power_level, g_2m_power_level);
+		eeprom_update_dword((uint32_t*)&ee_active_80m_frequency, g_80m_frequency);
+		eeprom_update_byte(&ee_80m_power_level, g_80m_power_level);
+		eeprom_update_dword((uint32_t*)&ee_cw_offset_frequency, g_rtty_offset);
+		eeprom_update_dword((uint32_t*)&ee_si5351_ref_correction, si5351_get_correction());
+		eeprom_update_byte(&ee_am_drive_level_high, g_am_drive_level_high);
+		eeprom_update_byte(&ee_am_drive_level_high, g_am_drive_level_low);
+		eeprom_update_byte(&ee_cw_drive_level, g_cw_drive_level);
+		eeprom_update_byte(&ee_active_2m_modulation, g_2m_modulationFormat);
+		eeprom_write_block(table, ee_80m_power_table, sizeof(table));
 	}
 
 
@@ -403,4 +411,69 @@ RadioBand bandForFrequency(Frequency_Hz freq)
 	}
 
 	return(result);
+}
+
+BOOL txMilliwattsToSettings(uint16_t powerMW, uint8_t* powerLevel, uint8_t* modLevelHigh, uint8_t* modLevelLow)
+{
+	RadioBand band = txGetBand();
+
+	if(band == BAND_80M)
+	{
+		powerMW = CLAMP(0, powerMW, MAX_TX_POWER_80M_MW);
+	}
+	else
+	{
+		powerMW = CLAMP(0, powerMW, MAX_TX_POWER_2M_MW);
+	}
+
+	if(powerMW)
+	{
+		if(powerMW > 99)
+		{
+			powerMW /= 100;
+			powerMW++;
+		}
+		else
+		{
+			powerMW /= 10;
+			if(powerMW > 2)
+			{
+				powerMW = 1;
+			}
+			else
+			{
+				powerMW = 0;
+			}
+		}
+
+		if(band == BAND_80M)
+		{
+			*powerLevel = eeprom_read_byte(&ee_80m_power_table[powerMW]);
+			*modLevelHigh = 0;
+			*modLevelLow = 0;
+		}
+		else
+		{
+			if(txGetModulation() == MODE_AM)
+			{
+				*powerLevel = eeprom_read_byte(&ee_2m_am_power_table[powerMW]);
+				*modLevelHigh = eeprom_read_byte(&ee_2m_am_drive_high_table[powerMW]);
+				*modLevelLow = eeprom_read_byte(&ee_2m_am_drive_low_table[powerMW]);
+			}
+			else
+			{
+				*powerLevel = eeprom_read_byte(&ee_2m_cw_power_table[powerMW]);
+				*modLevelHigh = eeprom_read_byte(&ee_2m_cw_drive_table[powerMW]);
+				*modLevelLow = *modLevelHigh;
+			}
+		}
+	}
+	else
+	{
+		*powerLevel = 0;
+		*modLevelHigh = 0;
+		*modLevelLow = 0;
+	}
+
+	return FALSE;
 }

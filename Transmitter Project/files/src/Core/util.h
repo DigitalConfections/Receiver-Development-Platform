@@ -33,33 +33,6 @@
 #include "defs.h"
 #include <time.h>
 
-/***********************************************************************************************
- *  EEPROM Utility Functions
- ************************************************************************************************/
-
-/**
- *  Writes a short (byte) to the EEPROM memory location specified by ee_var only if that value
- *  differs from what is already stored in EEPROM.
- *  ee_var is the pointer to EE prom memory
- *  val = byte value to be written
- */
-void storeEEbyteIfChanged(uint8_t* ee_var, uint8_t val);
-
-/**
- *  Writes a long (4 bytes) to the EEPROM memory location specified by ee_var only if that value
- *  differs from what is already stored in EEPROM.
- *  ee_var is the pointer to EE prom memory
- *  val = long value to be written
- */
-void storeEEdwordIfChanged(uint32_t* ee_var, uint32_t val);
-
-/**
- *  Writes a word (2 bytes) to the EEPROM memory location specified by ee_var only if that value
- *  differs from what is already stored in EEPROM.
- *  ee_var is the pointer to EE prom memory
- *  val = long value to be written
- */
-void storeEEwordIfChanged(uint16_t* ee_var, uint16_t val);
 
 /***********************************************************************************************
  *  Print Formatting Utility Functions

@@ -38,6 +38,8 @@ typedef int16_t Attenuation;
 #define RADIO_NUMBER_OF_BANDS 2
 #define RADIO_IF_FREQUENCY ((Frequency_Hz)10700000)
 #define RADIO_MINIMUM_RECEIVE_FREQ ((Frequency_Hz)3500000)
+#define MAX_TX_POWER_80M_MW 2000
+#define MAX_TX_POWER_2M_MW 1000
 
 /*
  * Define clock pins
@@ -88,6 +90,12 @@ typedef enum
 #define DEFAULT_RTTY_OFFSET_FREQUENCY 170
 #define DEFAULT_TX_ACTIVE_BAND BAND_80M
 #define DEFAULT_TX_2M_MODULATION MODE_AM
+#define DEFAULT_80M_POWER_TABLE {1, 12, 30, 66, 88, 110, 132, 144, 156, 168, 190, 202, 214, 226, 238, 250, 250, 250, 250, 250, 250, 250}
+#define DEFAULT_2M_AM_POWER_TABLE {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define DEFAULT_2M_AM_DRIVE_LOW_TABLE {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define DEFAULT_2M_AM_DRIVE_HIGH_TABLE {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define DEFAULT_2M_CW_POWER_TABLE {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define DEFAULT_2M_CW_DRIVE_TABLE {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 
 #define TX_MINIMUM_2M_FREQUENCY 144000000
 #define TX_MAXIMUM_2M_FREQUENCY 148000000
@@ -216,5 +224,8 @@ void txGetModulationLevels(uint8_t *high, uint8_t *low);
  */
 void txSetModulationLevels(uint8_t *high, uint8_t *low);
 
+/**
+ */
+BOOL txMilliwattsToSettings(uint16_t powerMW, uint8_t* powerLevel, uint8_t* modLevelHigh, uint8_t* modLevelLow);
 
 #endif  /* TRANSMITTER_H_ */

@@ -2142,7 +2142,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           typeIndex = (p.substring(firstComma + 1, secondComma)).toInt();
           pwr = (p.substring(secondComma + 1));
 
-          if ((pwr.toInt() > 0) && (pwr.toInt() < TX_MAX_ALLOWED_POWER_MW) && (typeIndex >= 0) && (typeIndex < MAXIMUM_NUMBER_OF_EVENT_TX_TYPES)) {
+          if ((pwr.toInt() >= 0) && (pwr.toInt() < TX_MAX_ALLOWED_POWER_MW) && (typeIndex >= 0) && (typeIndex < MAXIMUM_NUMBER_OF_EVENT_TX_TYPES)) {
             if (g_activeEvent != NULL) {
               g_activeEvent->setPowerlevelForRole(typeIndex, pwr);
               g_ESP_ATMEGA_Comm_State = TX_HTML_SAVE_CHANGES;

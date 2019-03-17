@@ -78,5 +78,3 @@ typedef enum
 } WiFiMemory;
 
 #endif /* ESP8266_H_ */
-
-

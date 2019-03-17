@@ -218,7 +218,7 @@ void __attribute__((optimize("O1"))) wdt_init(WDReset resetType)
 			WDTCSR |= (1 << WDCE) | (1 << WDE);
 			WDTCSR = (1 << WDIE) | (1 << WDE);    /* Enable WD interrupt in 16ms, and hardware reset */
 		}
-	
+
 		g_enableHardwareWDResets = (resetType != WD_SW_RESETS);
 	}
 }
@@ -227,14 +227,14 @@ void __attribute__((optimize("O1"))) wdt_init(WDReset resetType)
 ISR( INT0_vect )
 {
 #ifdef ENABLE_1_SEC_INTERRUPTS
-	
+
 	system_tick();
 	g_tx_epoch_time++;
-	
+
 	if(g_go_to_sleep)
 	{
 		if(g_seconds_left_to_sleep) g_seconds_left_to_sleep--;
-		
+
 		if(!g_seconds_left_to_sleep)
 		{
 			g_returned_from_sleep = TRUE;
@@ -251,7 +251,7 @@ ISR( INT0_vect )
 			if(g_event_commenced)
 			{
 				BOOL repeat;
-			
+
 				if(g_time_to_send_ID_countdown) g_time_to_send_ID_countdown--;
 
 				if(g_on_the_air)
@@ -259,12 +259,12 @@ ISR( INT0_vect )
 					if(g_event_finish_time > 0)
 					{
 						g_temp_time = time(NULL);
-					
+
 						if(g_temp_time != g_tx_epoch_time)
 						{
 							g_temp_time = g_tx_epoch_time;
 						}
-					
+
 						if(g_temp_time >= g_event_finish_time)
 						{
 							g_on_the_air = 0;
@@ -278,7 +278,7 @@ ISR( INT0_vect )
 					if(g_on_the_air > 0) /* on the air */
 					{
 						g_on_the_air--;
-			
+
 						if(!g_time_to_send_ID_countdown)
 						{
 							if(g_on_the_air == g_time_needed_for_ID) // wait until the end of a transmission
@@ -290,7 +290,7 @@ ISR( INT0_vect )
 							}
 						}
 
-		
+
 						if(!g_on_the_air)
 						{
 							if(g_off_air_seconds)
@@ -310,7 +310,7 @@ ISR( INT0_vect )
 					else if(g_on_the_air < 0) /* off the air - g_on_the_air = 0 means all transmissions are disabled */
 					{
 						g_on_the_air++;
-		
+
 						if(!g_on_the_air) // off-the-air time has expired
 						{
 							g_on_the_air = g_on_air_seconds;
@@ -324,12 +324,12 @@ ISR( INT0_vect )
 			else if(g_event_start_time > 0) /* off the air - waiting for the start time to arrive */
 			{
 				g_temp_time = time(NULL);
-			
+
 				if(g_temp_time != g_tx_epoch_time)
 				{
 					g_temp_time = g_tx_epoch_time;
 				}
-			
+
 				if(g_temp_time >= g_event_start_time)
 				{
 					if(g_intra_cycle_delay_time)
@@ -343,13 +343,13 @@ ISR( INT0_vect )
 						BOOL repeat = TRUE;
 						makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
 					}
-				
+
 					g_time_to_send_ID_countdown = g_ID_time;
 					g_event_commenced = TRUE;
 				}
 			}
 		}
-	
+
 		/**************************************
 		 * Delay before re-enabling linkbus receive
 		 ***************************************/
@@ -365,10 +365,10 @@ ISR( INT0_vect )
 		}
 		else
 		{
-			if(g_WiFi_shutdown_seconds) 
+			if(g_WiFi_shutdown_seconds)
 			{
 				g_WiFi_shutdown_seconds--;
-			
+
 				if(!g_WiFi_shutdown_seconds)
 				{
 					wifi_reset(ON); // put WiFi into reset
@@ -379,7 +379,7 @@ ISR( INT0_vect )
 		}
 	}
 
-	
+
 #else
 	if(g_terminal_mode)
 	{
@@ -404,7 +404,7 @@ ISR( TIMER2_COMPB_vect )
 	g_tick_count++;
 
 	static BOOL key = FALSE;
-	
+
 	if(g_event_enabled && g_event_commenced)
 	{
 		if(g_on_the_air > 0)
@@ -412,11 +412,11 @@ ISR( TIMER2_COMPB_vect )
 			if(codeInc)
 			{
 				codeInc--;
-				
+
 				if(!codeInc)
 				{
 					key = makeMorse(NULL, &repeat, &finished);
-					
+
 					if(!repeat && finished) // ID has completed, so resume pattern
 					{
 						g_code_throttle = throttleValue(g_pattern_codespeed);
@@ -424,7 +424,7 @@ ISR( TIMER2_COMPB_vect )
 						makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
 						key = makeMorse(NULL, &repeat, &finished);
 					}
-					
+
 					if(key) powerToTransmitter(ON);
 				}
 			}
@@ -444,11 +444,11 @@ ISR( TIMER2_COMPB_vect )
 			}
 		}
 	}
-	
+
 	if(g_am_modulation_enabled)
 	{
 		amModulation = !amModulation;
-		
+
 		if(amModulation)
 		{
 			dac081c_set_dac(g_mod_up, AM_DAC);
@@ -520,7 +520,7 @@ ISR( TIMER2_COMPB_vect )
 				}
 
 				g_battery_measurements_active = TRUE;
-	
+
 				if(lastResult > VOLTS_5)
 				{
 					g_battery_type = BATTERY_9V;
@@ -686,11 +686,11 @@ ISR(USART_RX_vect)
 	{
 		rx_char = toupper(rx_char);
 		SMCR = 0x00; // exit power-down mode
-		
+
 		if(g_terminal_mode)
 		{
 			static uint8_t ignoreCount = 0;
-			
+
 			if(ignoreCount)
 			{
 				rx_char = '\0';
@@ -972,7 +972,7 @@ ISR( PCINT2_vect )
 BOOL hw_init(void)
 {
 	BOOL err = FALSE;
-	
+
 	/**
 	 * Initialize the transmitter */
 	err = init_transmitter();
@@ -985,8 +985,8 @@ BOOL hw_init(void)
 	{
 		#ifdef INCLUDE_DS3231_SUPPORT
 			g_tx_epoch_time = ds3231_get_epoch(&err);
-			
-			if(!err) 
+
+			if(!err)
 			{
 				set_system_time(g_tx_epoch_time);
 				#ifdef ENABLE_1_SEC_INTERRUPTS
@@ -996,7 +996,7 @@ BOOL hw_init(void)
 			}
 		#endif
 	}
-	
+
 	return err;
 }
 
@@ -1017,7 +1017,7 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 		// PB6 = Tx Final Voltage Enable
 		// PB7 = Main Power Enable
 
-		DDRB |= (1 << PORTB0) | (1 << PORTB1) | (1 << PORTB6) | (1 << PORTB7);      
+		DDRB |= (1 << PORTB0) | (1 << PORTB1) | (1 << PORTB6) | (1 << PORTB7);
 		PORTB |= (1 << PORTB2) | (1 << PORTB7); /* Turn on main power */
 	//	PORTB |= (1 << PORTB2); /* Bring unused port pin high */
 
@@ -1047,8 +1047,8 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 		// PC6 = Reset
 		// PC7 = N/A
 
-		DDRC = 0b00000000;        
-		PORTC = I2C_PINS | (1 << PORTC2) | (1 << PORTC3);     
+		DDRC = 0b00000000;
+		PORTC = I2C_PINS | (1 << PORTC2) | (1 << PORTC3);
 
 		/**
 		 * PD5 (OC0B) is tone output for AM modulation generation
@@ -1059,7 +1059,7 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 	//	TCCR0B |= (1 << CS02) | (1 << CS00);                /* 1024 Prescaler */
 	/*	TIMSK0 &= ~(1 << OCIE0B); // disable compare interrupt - disabled by default */
 
-		/** 
+		/**
 		* PB2 (OC1B) is PWM for output power level
 		* TIMER1 is for transmit power PWM */
 	//	OCR1B = DEFAULT_AM_DRIVE_LEVEL; /* Set initial duty cycle */
@@ -1083,15 +1083,15 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 		 * Set up pin interrupts */
 		/* Enable pin change interrupts PCINT8, PCINT9, */
 		// TODO
-	
+
 	//	PCICR |= (1 << PCIE2) | (1 << PCIE1) | (1 << PCIE0);  /* Enable pin change interrupts PCI2, PCI1 and PCI0 */
 	//	PCMSK2 |= 0b10001000;                                   /* Enable port D pin change interrupts */
 	//	PCMSK1 |= (1 << PCINT10);                               /* Enable port C pin change interrupts on pin PC2 */
 	//	PCMSK0 |= (1 << PORTB2);                                /* Do not enable interrupts until HW is ready */
 
 		EICRA  |= ((1 << ISC01) | (1 << ISC00));	/* Configure INT0 for RTC 1-second interrupts */
-		EIMSK |= (1 << INT0);		
-	
+		EIMSK |= (1 << INT0);
+
 		/* Configure INT1 for antenna connect interrupts */
 		// TODO
 	}
@@ -1111,7 +1111,7 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 		DDRB = 0x00;     /* Set PORTD pin data directions */
 		PORTB = 0x00;
 	//	PORTB &= ~((1 << PORTB0) | (1 << PORTB1) | (1 << PORTB6) | (1 << PORTB7)); /* Turn off main power */
-		
+
 		/** Hardware rev P1.0
 		* Set up PortD */
 		// PD0 = RXD
@@ -1125,7 +1125,7 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 
 		DDRD = 0x00;
 		PORTD = (1 << PORTD2); /* Allow RTC interrupts to continue */
-		
+
 	//	PORTD &= ~((1 << PORTD6) | (1 << PORTD7));     /* Enable pull-ups on input pins, and set output levels on all outputs */
 
 		/** Hardware rev P1.0
@@ -1138,7 +1138,7 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 		// PC5 = SCL
 		// PC6 = Reset
 		// PC7 = N/A
-		
+
 		DDRC = 0x00;
 		PORTC = 0x00;
 
@@ -1151,7 +1151,7 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 	//	TCCR0B |= (1 << CS02) | (1 << CS00);                /* 1024 Prescaler */
 	/*	TIMSK0 &= ~(1 << OCIE0B); // disable compare interrupt - disabled by default */
 
-		/** 
+		/**
 		* PB2 (OC1B) is PWM for output power level
 		* TIMER1 is for transmit power PWM */
 	//	OCR1B = DEFAULT_AM_DRIVE_LEVEL; /* Set initial duty cycle */
@@ -1171,16 +1171,16 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 		ADMUX &= ~((1 << REFS0) | (1 << REFS1));
 		// ADCSRA &= ~((1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0) | (1 << ADEN));
 		ADCSRA = 0;
-		
+
 		DIDR0 = 0x3f; // disable ADC pins
 		DIDR1 = 0x03; // disable analog inputs
-		
-		
+
+
 		/**
 		* Set up pin interrupts */
 		/* Enable pin change interrupts PCINT8, PCINT9, */
 		// TODO
-	
+
 		PCICR = 0;
 		PCMSK0 = 0;
 		PCMSK1 = 0;
@@ -1193,24 +1193,24 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 	//	EICRA = 0;
 	//	EIMSK = 0;
 		EICRA  &= ~((1 << ISC01) | (1 << ISC00));	/* Configure INT0 for low level interrupts */
-		EIMSK |= (1 << INT0);		
-	
+		EIMSK |= (1 << INT0);
+
 		/* Configure INT1 for antenna connect interrupts */
 		// TODO
-		
+
 		/**
 		Turn off UART
 		*/
 		linkbus_disable();
-		
+
 		/**
 		Disable Watchdog timer
 		*/
 		wdt_init(WD_DISABLE);
-		
+
 		/* Disable brown-out detection
 		**/
-		PRR = 0xff;		
+		PRR = 0xff;
 		cli();
 		SMCR = 0x05; // set power-down mode
 		MCUCR = (1 << BODS) | (1 << BODSE);  // turn on brown-out enable select
@@ -1239,11 +1239,11 @@ int main( void )
 	/**
 	 * Initialize internal EEPROM if needed */
 	initializeEEPROMVars();
-	
+
 	/**
 	 * Initialize port pins and timers */
 	set_ports(POWER_UP);
-	
+
 	cpu_irq_enable();                                           /* same as sei(); */
 
 	/**
@@ -1275,23 +1275,23 @@ int main( void )
 		{
 			lb_send_NewLine();
 			lb_send_string("Init error!");
-			lb_send_NewPrompt();		
-			
+			lb_send_NewPrompt();
+
 		}
 		else
 		{
 			lb_send_NewLine();
 			lb_send_Help();
-			lb_send_NewPrompt();		
+			lb_send_NewPrompt();
 		}
 	}
-	else 
+	else
 	{
 		lb_send_sync();                                 /* send test pattern to help synchronize baud rate with any attached device */
 	}
-	
+
 	wdt_reset();
-	
+
 	while(linkbusTxInProgress())
 	{
 		;                                           /* wait until transmit finishes */
@@ -1311,7 +1311,7 @@ int main( void )
 		cli(); wdt_reset(); /* HW watchdog */ sei();
 
 		/***************************************
-		* Check for Power 
+		* Check for Power
 		***************************************/
 		if(!g_sufficient_power_detected)                                                                           /* if ADC battery measurements have stabilized */
 		{
@@ -1326,7 +1326,7 @@ int main( void )
 				}
 			}
 		}
-		
+
 		/********************************
 		* Handle sleep
 		******************************/
@@ -1336,7 +1336,7 @@ int main( void )
 			g_seconds_left_to_sleep = 60;
 			set_ports(POWER_SLEEP);
 		}
-		
+
 		if(g_returned_from_sleep)
 		{
 			g_returned_from_sleep = FALSE;
@@ -1359,7 +1359,7 @@ int main( void )
 				case MESSAGE_DEBUG:
 				{
 					static BOOL toggle = FALSE;
-//					
+//
 //					if(toggle)
 //					{
 //						toggle = FALSE;
@@ -1385,23 +1385,23 @@ int main( void )
 					}
 				}
 				break;
-#endif //DEBUG_FUNCTIONS_ENABLE		
+#endif //DEBUG_FUNCTIONS_ENABLE
 
 				case MESSAGE_DRIVE_LEVEL:
 				{
 					uint8_t setting = 0;
-					
+
 					if(lb_buff->fields[FIELD1][0] && lb_buff->fields[FIELD2][0])
 					{
 						char ud = lb_buff->fields[FIELD1][0];
 						setting = atoi(lb_buff->fields[FIELD2]);
-						
+
 						if(ud == 'U')
 						{
 							g_mod_up = setting;
 							lb_broadcast_num(setting, "DRI U");
 							txSetModulationLevels((uint8_t*)&g_mod_up, NULL);
-							
+
 							if(txGetBand() == BAND_2M)
 							{
 								if(txGetModulation() == MODE_CW)
@@ -1429,18 +1429,18 @@ int main( void )
 
 				}
 				break;
-				
+
 				case MESSAGE_WIFI:
 				{
 					BOOL result = wifi_enabled();
-					
+
 					if(lb_buff->fields[FIELD1][0])
 					{
 						result = atoi(lb_buff->fields[FIELD1]);
-						
-						cli(); 
+
+						cli();
 						linkbus_disable();
-						sei();	
+						sei();
 						wifi_power(result);
 						g_terminal_mode = !result;
 						wifi_reset(g_terminal_mode);
@@ -1455,7 +1455,7 @@ int main( void )
 							linkbus_init(BAUD);
 						}
 					}
-					
+
 					if(g_terminal_mode) lb_broadcast_num((uint16_t)result, NULL);
 
 				}
@@ -1469,11 +1469,11 @@ int main( void )
 #endif // TRANQUILIZE_WATCHDOG
 				}
 				break;
-				
+
 				case MESSAGE_ESP_COMM:
 				{
 					uint8_t f1 = lb_buff->fields[FIELD1][0];
-					
+
 					if(f1 == '0') /* I'm awake message */
 					{
 						/* WiFi is awake. Send it the current time */
@@ -1501,11 +1501,11 @@ int main( void )
 					}
 				}
 				break;
-				
+
 				case MESSAGE_TX_MOD:
 				{
 					Modulation m;
-					
+
 					if(lb_buff->fields[FIELD1][0] == 'A') // AM
 					{
 						txSetModulation(MODE_AM);
@@ -1516,62 +1516,65 @@ int main( void )
 						txSetModulation(MODE_CW);
 						saveAllEEPROM();
 					}
-					
+
 					g_am_modulation_enabled = txAMModulationEnabled();
-					
+
 					m = txGetModulation();
-					
+
 					sprintf(g_tempStr, "MOD=%s\n", m == MODE_AM ? "AM": m == MODE_CW ? "CW":"N/A");
 					lb_send_string(g_tempStr);
 				}
 				break;
-				
+
 				case MESSAGE_TX_POWER:
 				{
 					static uint8_t pwr;
-					
+
 					if(lb_buff->fields[FIELD1][0])
 					{
 						if((lb_buff->fields[FIELD1][0] == 'M') && (lb_buff->fields[FIELD2][0]))
 						{
-							static int16_t mW;
+							int16_t mW;
+							uint8_t powerLevel, modLevelHigh, modLevelLow;
+
 							mW = atoi(lb_buff->fields[FIELD2]);
-							mW = CLAMP(0, mW, 255);
-							/* TODO: convert milliwatts to power setting */
-							pwr = (uint8_t)mW;
+
+							txMilliwattsToSettings(mW, &powerLevel, &modLevelHigh, &modLevelLow);
+
+							pwr = powerLevel;
 						}
 						else
 						{
 							pwr = atoi(lb_buff->fields[FIELD1]);
 						}
-						
+
 						txSetPowerLevel(pwr);
-						
+
 						if(txGetBand() == BAND_2M)
 						{
 							txGetModulationLevels((uint8_t *)&g_mod_up, (uint8_t *)&g_mod_down);
-							
+
 							if(txGetModulation() == MODE_CW)
 							{
 								dac081c_set_dac(g_mod_up, AM_DAC);
 							}
 						}
-						
+
 						saveAllEEPROM();
 					}
-					
+
 					pwr = txGetPowerLevel();
 					lb_send_value(pwr, "POW");
 				}
 				break;
-				
+
 				case MESSAGE_PERM:
 				{
 					storeTtransmitterValues();
 					saveAllEEPROM();
 				}
 				break;
-				
+
 				case MESSAGE_GO:
 				{
 					if(lb_buff->fields[FIELD1][0] == '1')
@@ -1597,32 +1600,32 @@ int main( void )
 						g_event_enabled = FALSE; // get things stopped immediately
 						keyTransmitter(OFF);
 						powerToTransmitter(OFF);
-						
+
 						if(lb_buff->fields[FIELD1][0] == '+')
 						{
 							set_ports(POWER_UP);
 						}
 						else if(lb_buff->fields[FIELD1][0] == 'S') // sleep
 						{
-							set_ports(POWER_SLEEP);	
+							set_ports(POWER_SLEEP);
 						}
 					}
 				}
 				break;
-				
+
 				case MESSAGE_TIME:
 				{
 					time_t mtime = 0;
-					
+
 					if(lb_buff->fields[FIELD1][0] == 'S')
 					{
 						if(lb_buff->fields[FIELD2][0])
 						{
 							mtime = atol(lb_buff->fields[FIELD2]);
 						}
-		
-						if(mtime) 
-						{							
+
+						if(mtime)
+						{
 							initializeTxWithSettings(mtime);
 						}
 					}
@@ -1632,9 +1635,9 @@ int main( void )
 						{
 							mtime = atol(lb_buff->fields[FIELD2]);
 						}
-						
+
 						if(mtime) g_event_finish_time = mtime;
-						
+
 						cli();
 						g_event_enabled = FALSE;  // enabled when starttime is set
 						g_event_commenced = FALSE; // commences when starttime is reached
@@ -1647,13 +1650,13 @@ int main( void )
 						g_messages_text[PATTERN_TEXT][0] = '\0';
 						g_pattern_codespeed = EEPROM_PATTERN_CODE_SPEED_DEFAULT;
 						g_ID_time = 0;
-						
+
 						keyTransmitter(OFF);
 					}
-						
+
 					if(mtime)
 					{
-						saveAllEEPROM(); 
+						saveAllEEPROM();
 					}
 					else if(g_terminal_mode)
 					{
@@ -1661,7 +1664,7 @@ int main( void )
 					}
 				}
 				break;
-				
+
 				case MESSAGE_CLOCK:
 				{
 					if(g_terminal_mode)
@@ -1681,14 +1684,14 @@ int main( void )
 						{
 							g_tx_epoch_time = ds3231_get_epoch(NULL);
 						}
-						
+
 						g_temp_time = time(NULL);
-						
+
 						if(g_temp_time != g_tx_epoch_time)
 						{
 							g_temp_time = g_tx_epoch_time;
 						}
-						
+
 						sprintf(g_tempStr, "%lu", g_temp_time);
 						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
 					}
@@ -1708,12 +1711,12 @@ int main( void )
 						{
 							#ifdef INCLUDE_DS3231_SUPPORT
 							g_temp_time = time(NULL);
-							
+
 							if(g_temp_time != g_tx_epoch_time)
 							{
 								g_temp_time = g_tx_epoch_time;
 							}
-							
+
 							sprintf(g_tempStr, "%lu", g_tx_epoch_time);
 							lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
 							#endif
@@ -1722,17 +1725,17 @@ int main( void )
 					else if(lb_buff->type == LINKBUS_MSG_QUERY)
 					{
 						static volatile int32_t lastTime = 0;
-						
-						#ifdef INCLUDE_DS3231_SUPPORT	
-						
+
+						#ifdef INCLUDE_DS3231_SUPPORT
+
 //						g_temp_time	 = time(NULL);
 g_temp_time = ds3231_get_epoch(NULL);
-						
+
 //						if(g_temp_time != g_tx_epoch_time)
 //						{
 //							g_temp_time = g_tx_epoch_time;
-//						}						
-						
+//						}
+
 						if(g_temp_time != lastTime)
 						{
 							sprintf(g_tempStr, "%lu", g_temp_time);
@@ -1743,38 +1746,38 @@ g_temp_time = ds3231_get_epoch(NULL);
 					}
 				}
 				break;
-				
+
 				case MESSAGE_SET_STATION_ID:
 				{
 					if(lb_buff->fields[FIELD1][0])
 					{
 						strncpy(g_messages_text[STATION_ID], lb_buff->fields[FIELD1], MAX_PATTERN_TEXT_LENGTH);
-						saveAllEEPROM(); 
-						
+						saveAllEEPROM();
+
 						if(g_messages_text[STATION_ID][0])
 						{
 							g_time_needed_for_ID = (500 + timeRequiredToSendStrAtWPM(g_messages_text[STATION_ID], g_id_codespeed)) / 1000;
 						}
 					}
-					
+
 					if(g_terminal_mode)  {
 						lb_send_string(g_messages_text[STATION_ID]);
 						lb_send_string("\n");
                     }
 				}
 				break;
-				
+
 				case MESSAGE_CODE_SPEED:
 				{
 					uint8_t speed = g_pattern_codespeed;
-					
+
 					if(lb_buff->fields[FIELD1][0] == 'I')
 					{
 						if(lb_buff->fields[FIELD2][0])
 						{
 							speed = atol(lb_buff->fields[FIELD2]);
 							g_id_codespeed = CLAMP(5, speed, 20);
-							saveAllEEPROM(); 
+							saveAllEEPROM();
 							if(g_messages_text[STATION_ID][0])
 							{
 								g_time_needed_for_ID = (500 + timeRequiredToSendStrAtWPM(g_messages_text[STATION_ID], g_id_codespeed)) / 1000;
@@ -1784,11 +1787,11 @@ g_temp_time = ds3231_get_epoch(NULL);
 						{
 							speed = g_id_codespeed;
 						}
-						
+
 					}
 					else if(lb_buff->fields[FIELD1][0] == 'P')
 					{
-						if(lb_buff->fields[FIELD2][0]) 
+						if(lb_buff->fields[FIELD2][0])
 						{
 							speed = atol(lb_buff->fields[FIELD2]);
 							g_pattern_codespeed = CLAMP(5, speed, 20);
@@ -1800,17 +1803,17 @@ g_temp_time = ds3231_get_epoch(NULL);
 							speed = g_pattern_codespeed;
 						}
 					}
-					
+
 					if(g_terminal_mode)  {
 						lb_send_value(speed, "spd");
                     }
 				}
 				break;
-				
+
 				case MESSAGE_TIME_INTERVAL:
 				{
 					uint16_t time = g_on_air_seconds;
-					
+
 					if(lb_buff->fields[FIELD1][0] == '0')
 					{
 						time = g_off_air_seconds;
@@ -1818,7 +1821,7 @@ g_temp_time = ds3231_get_epoch(NULL);
 						{
 							time = atol(lb_buff->fields[FIELD2]);
 							g_off_air_seconds = time;
-							saveAllEEPROM(); 
+							saveAllEEPROM();
 						}
 						else
 						{
@@ -1840,7 +1843,7 @@ g_temp_time = ds3231_get_epoch(NULL);
 					}
 					else if(lb_buff->fields[FIELD1][0] == 'I')
 					{
-						if(lb_buff->fields[FIELD2][0]) 
+						if(lb_buff->fields[FIELD2][0])
 						{
 							time = atol(lb_buff->fields[FIELD2]);
 							g_ID_time = time;
@@ -1861,24 +1864,24 @@ g_temp_time = ds3231_get_epoch(NULL);
 						}
 						else
 						{
-							time = g_intra_cycle_delay_time;							
+							time = g_intra_cycle_delay_time;
 						}
 					}
-					
+
 					if(g_terminal_mode) {
 						lb_send_value(time, "t");
 					}
 				}
 				break;
-				
+
 				case MESSAGE_SET_PATTERN:
 				{
 					if(lb_buff->fields[FIELD1][0])
 					{
 						strncpy(g_messages_text[PATTERN_TEXT], lb_buff->fields[FIELD1], MAX_PATTERN_TEXT_LENGTH);
-						saveAllEEPROM(); 
+						saveAllEEPROM();
 					}
-					
+
 					if(g_terminal_mode) {
 						lb_send_string(g_messages_text[PATTERN_TEXT]);
 						lb_send_string("\n");
@@ -1892,8 +1895,8 @@ g_temp_time = ds3231_get_epoch(NULL);
 
 						if(lb_buff->fields[FIELD1][0])
 						{
-							Frequency_Hz f = atol(lb_buff->fields[FIELD1]); // Prevent optimizer from breaking this							
-								
+							Frequency_Hz f = atol(lb_buff->fields[FIELD1]); // Prevent optimizer from breaking this
+
 							Frequency_Hz ff = f;
 							if(txSetFrequency(&ff))
 							{
@@ -1919,17 +1922,17 @@ g_temp_time = ds3231_get_epoch(NULL);
 					if(lb_buff->fields[FIELD1][0])  /* band field */
 					{
 						int b = atoi(lb_buff->fields[FIELD1]);
-							
+
 						if(b == 80)
 						{
 							txSetBand(BAND_80M, ON);
 						}
 						else if(b == 2)
 						{
-							txSetBand(BAND_2M, ON);							
+							txSetBand(BAND_2M, ON);
 							txGetModulationLevels((uint8_t *)&g_mod_up, (uint8_t *)&g_mod_down);
 							g_am_modulation_enabled = txAMModulationEnabled();
-														
+
 							if(txGetModulation() == MODE_CW)
 							{
 								dac081c_set_dac(g_mod_up, AM_DAC);
@@ -1951,22 +1954,22 @@ g_temp_time = ds3231_get_epoch(NULL);
 				{
 					g_terminal_mode = TRUE;
 					linkbus_setTerminalMode(g_terminal_mode);
-					
-					cli(); 
+
+					cli();
 					linkbus_disable();
-					sei();	
+					sei();
 					wifi_reset(ON);
 					wifi_power(OFF);
 
 					linkbus_setLineTerm("\n\n");
-					
+
 					linkbus_init(BAUD);
 				}
 				break;
 
 				case MESSAGE_BAT:
 				{
-					int32_t bat = BATTERY_PERCENTAGE(g_lastConversionResult[BATTERY_READING]);	
+					int32_t bat = BATTERY_PERCENTAGE(g_lastConversionResult[BATTERY_READING]);
 					bat = CLAMP(0, bat, 100);
 					lb_broadcast_num(bat, "!BAT");
 				}
@@ -1978,7 +1981,7 @@ g_temp_time = ds3231_get_epoch(NULL);
 					if(!ds3231_get_temp(&v)) lb_broadcast_num(v, "!TEM");
 				}
 				break;
-				
+
 				case MESSAGE_ALL_INFO:
 				{
 					uint32_t temp;
@@ -1995,12 +1998,12 @@ g_temp_time = ds3231_get_epoch(NULL);
 					cli(); wdt_reset(); /* HW watchdog */ sei();
 					#ifdef INCLUDE_DS3231_SUPPORT
 					    g_temp_time = time(NULL);
-						
+
 						if(g_temp_time != g_tx_epoch_time)
 						{
-							g_temp_time = g_tx_epoch_time;						
+							g_temp_time = g_tx_epoch_time;
 						}
-						
+
 						sprintf(g_tempStr, "%lu", g_temp_time);
 						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
 						cli(); wdt_reset(); /* HW watchdog */ sei();
@@ -2055,14 +2058,14 @@ g_temp_time = ds3231_get_epoch(NULL);
 	}       /* while(1) */
 }/* main */
 
-void initializeTxWithSettings(time_t startTime) 
+void initializeTxWithSettings(time_t startTime)
 {
 	if(startTime > 0)
 	{
 		g_event_start_time = startTime;
 		g_event_enabled = TRUE;
 	}
-	
+
 	// Make sure everything has been initialized
 	if(!g_event_start_time) return;
 	if(!g_on_air_seconds) return;
@@ -2076,29 +2079,29 @@ void initializeTxWithSettings(time_t startTime)
 	//if(!csllsign_speed) return;
 	g_time_to_send_ID_countdown = g_ID_time;
 
-	if(startTime > 0) 
+	if(startTime > 0)
 	{
-		cli(); 
+		cli();
 		g_tx_epoch_time = ds3231_get_epoch(NULL);
 		set_system_time(g_tx_epoch_time); // update system clock
 		sei();
 	}
-	
+
 	g_temp_time = time(NULL);
 	if(g_temp_time != g_tx_epoch_time)
 	{
 		g_temp_time = g_tx_epoch_time;
 	}
-	
+
 	int32_t dif = difftime(g_temp_time, g_event_start_time); // returns arg1 - arg2
-		
+
 	if(dif >= 0) // start time is in the past
 	{
 		BOOL turnOnTransmitter = FALSE;
 		int cyclePeriod = g_on_air_seconds + g_off_air_seconds;
 		int secondsIntoCycle = dif % cyclePeriod;
 		int timeTillTransmit = g_intra_cycle_delay_time - secondsIntoCycle;
-								
+
 		if(timeTillTransmit <= 0) // we should have started transmitting already
 		{
 			if(g_on_air_seconds <= -timeTillTransmit) // we should have finished transmitting in this cycle
@@ -2115,7 +2118,7 @@ void initializeTxWithSettings(time_t startTime)
 		{
 			g_on_the_air = -timeTillTransmit;
 		}
-								
+
 		if(turnOnTransmitter)
 		{
 			cli();
@@ -2143,25 +2146,25 @@ void initializeTxWithSettings(time_t startTime)
 void initializeEEPROMVars(void)
 {
 	uint8_t i;
-	
+
 	if(eeprom_read_byte(&ee_interface_eeprom_initialization_flag) == EEPROM_INITIALIZED_FLAG)
 	{
 		g_event_start_time = eeprom_read_dword((uint32_t*)(&ee_start_time));
 		g_event_finish_time = eeprom_read_dword((uint32_t*)(&ee_finish_time));
-		
+
 		g_pattern_codespeed = eeprom_read_byte(&ee_pattern_codespeed);
 		g_id_codespeed = eeprom_read_byte(&ee_id_codespeed);
 		g_on_air_seconds = eeprom_read_word(&ee_on_air_time);
 		g_off_air_seconds = eeprom_read_word(&ee_off_air_time);
 		g_intra_cycle_delay_time = eeprom_read_word(&ee_intra_cycle_delay_time);
 		g_ID_time = eeprom_read_word(&ee_ID_time);
-		
+
 		for(i=0; i<20; i++)
 		{
 			g_messages_text[STATION_ID][i] = (char)eeprom_read_byte((uint8_t*)(&ee_stationID_text[i]));
 			if(!g_messages_text[STATION_ID][i]) break;
 		}
-		
+
 		for(i=0; i<20; i++)
 		{
 			g_messages_text[PATTERN_TEXT][i] = (char)eeprom_read_byte((uint8_t*)(&ee_pattern_text[i]));
@@ -2172,14 +2175,14 @@ void initializeEEPROMVars(void)
 	{
 		g_event_start_time = EEPROM_START_TIME_DEFAULT;
 		g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
-		
+
 		g_id_codespeed = EEPROM_ID_CODE_SPEED_DEFAULT;
 		g_pattern_codespeed = EEPROM_PATTERN_CODE_SPEED_DEFAULT;
 		g_on_air_seconds = EEPROM_ON_AIR_TIME_DEFAULT;
 		g_off_air_seconds = EEPROM_OFF_AIR_TIME_DEFAULT;
 		g_intra_cycle_delay_time = EEPROM_INTRA_CYCLE_DELAY_TIME_DEFAULT;
 		g_ID_time = EEPROM_ID_TIME_INTERVAL_DEFAULT;
-		
+
 		strncpy(g_messages_text[STATION_ID], EEPROM_STATION_ID_DEFAULT, MAX_PATTERN_TEXT_LENGTH);
 		strncpy(g_messages_text[PATTERN_TEXT], EEPROM_PATTERN_TEXT_DEFAULT, MAX_PATTERN_TEXT_LENGTH);
 
@@ -2193,30 +2196,30 @@ void saveAllEEPROM()
 {
 	int i;
 	wdt_reset();                                    /* HW watchdog */
-	
-	storeEEdwordIfChanged((uint32_t*)&ee_start_time, g_event_start_time);
-	storeEEdwordIfChanged((uint32_t*)&ee_finish_time, g_event_finish_time);
-	
-	storeEEbyteIfChanged(&ee_id_codespeed, g_id_codespeed);
-	storeEEbyteIfChanged(&ee_pattern_codespeed, g_pattern_codespeed);
-	storeEEwordIfChanged(&ee_on_air_time, g_on_air_seconds);
-	storeEEwordIfChanged(&ee_off_air_time, g_off_air_seconds);
-	storeEEwordIfChanged(&ee_intra_cycle_delay_time, g_intra_cycle_delay_time);
-	storeEEwordIfChanged(&ee_ID_time, g_ID_time);
+
+	eeprom_update_dword((uint32_t*)&ee_start_time, g_event_start_time);
+	eeprom_update_dword((uint32_t*)&ee_finish_time, g_event_finish_time);
+
+	eeprom_update_byte(&ee_id_codespeed, g_id_codespeed);
+	eeprom_update_byte(&ee_pattern_codespeed, g_pattern_codespeed);
+	eeprom_update_word(&ee_on_air_time, g_on_air_seconds);
+	eeprom_update_word(&ee_off_air_time, g_off_air_seconds);
+	eeprom_update_word(&ee_intra_cycle_delay_time, g_intra_cycle_delay_time);
+	eeprom_update_word(&ee_ID_time, g_ID_time);
 
 	for(i=0; i<strlen(g_messages_text[STATION_ID]); i++)
 	{
-		storeEEbyteIfChanged((uint8_t*)&ee_stationID_text[i], (uint8_t)g_messages_text[STATION_ID][i]);
+		eeprom_update_byte((uint8_t*)&ee_stationID_text[i], (uint8_t)g_messages_text[STATION_ID][i]);
 	}
 
-	storeEEbyteIfChanged((uint8_t*)&ee_stationID_text[i], 0);
-	
+	eeprom_update_byte((uint8_t*)&ee_stationID_text[i], 0);
+
 	for(i=0; i<strlen(g_messages_text[PATTERN_TEXT]); i++)
 	{
-		storeEEbyteIfChanged((uint8_t*)&ee_pattern_text[i], (uint8_t)g_messages_text[PATTERN_TEXT][i]);
+		eeprom_update_byte((uint8_t*)&ee_pattern_text[i], (uint8_t)g_messages_text[PATTERN_TEXT][i]);
 	}
-	
-	storeEEbyteIfChanged((uint8_t*)&ee_pattern_text[i], 0);
+
+	eeprom_update_byte((uint8_t*)&ee_pattern_text[i], 0);
 }
 
 uint16_t throttleValue(uint8_t speed)
