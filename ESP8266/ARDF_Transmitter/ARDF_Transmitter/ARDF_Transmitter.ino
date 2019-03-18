@@ -293,24 +293,6 @@ void handleRoot()
   g_http_server.send(200, "text/html", "<form action=\"/login\" method=\"POST\"><input type=\"text\" name=\"username\" placeholder=\"Username\"></br><input type=\"password\" name=\"password\" placeholder=\"Password\"></br><input type=\"submit\" value=\"Login\"></form><p>Try 'John Doe' and 'password123' ...</p>");
 }
 
-void handleLogin()
-{ // If a POST request is made to URI /login
-  if ( ! g_http_server.hasArg("username") || ! g_http_server.hasArg("password")
-       || g_http_server.arg("username") == NULL || g_http_server.arg("password") == NULL)
-  { // If the POST request doesn't have username and password data
-    g_http_server.send(400, "text/plain", "400: Invalid Request");         // The request is invalid, so send HTTP status 400
-    return;
-  }
-
-  if (g_http_server.arg("username") == "John Doe" && g_http_server.arg("password") == "password123")
-  { // If both the username and the password are correct
-    g_http_server.send(200, "text/html", "<h1>Welcome, " + g_http_server.arg("username") + "!</h1><p>Login successful</p>");
-  }
-  else
-  { // Username and password don't match
-    g_http_server.send(401, "text/plain", "401: Unauthorized");
-  }
-}
 
 void handleNotFound()
 { // if the requested file or page doesn't exist, return a 404 not found error
@@ -409,7 +391,10 @@ bool setupHTTP_AP()
     /* Start TCP listener on port TCP_PORT */
     g_http_server.on("/", HTTP_GET, handleRoot);     // Call the 'handleRoot' function when a client requests URI "/"
 
-    g_http_server.on("/login", HTTP_POST, handleLogin); // Call the 'handleLogin' function when a POST request is made to URI "/login"
+    g_http_server.on("/upload", HTTP_GET, []() {                 // if the client requests the upload page
+      if (!handleFileRead("/upload.html"))                // send it if it exists
+        g_http_server.send(404, "text/plain", "404: Not Found"); // otherwise, respond with a 404 (Not Found) error
+    });
 
     g_http_server.on("/upload.html", HTTP_GET, []() {                 // if the client requests the upload page
       if (!handleFileRead("/upload.html"))                // send it if it exists
@@ -417,6 +402,11 @@ bool setupHTTP_AP()
     });
 
     g_http_server.on("/upload.html", HTTP_POST, []()
+    { // If a POST request is sent to the /upload.html address,
+      g_http_server.send(200, "text/plain", "");
+    }, handleFileUpload);                       // go to 'handleFileUpload'
+
+    g_http_server.on("/upload", HTTP_POST, []()
     { // If a POST request is sent to the /upload.html address,
       g_http_server.send(200, "text/plain", "");
     }, handleFileUpload);                       // go to 'handleFileUpload'
