@@ -24,9 +24,7 @@
  *
  */
 
-#include "util.h"
-
-
+#include <string.h>
 #include <stdlib.h>
 #include "transmitter.h"
 #include "i2c.h" /* DAC on 80m VGA of Rev X1 Receiver board */
@@ -137,23 +135,23 @@
 
 		return( FREQUENCY_NOT_SPECIFIED);
 	}
-	
+
 	void txGetModulationLevels(uint8_t *high, uint8_t *low)
 	{
 		*high = (uint8_t)g_am_drive_level_high;
 		*low = (uint8_t)g_am_drive_level_low;
 	}
-	
+
 	void txSetModulationLevels(uint8_t *high, uint8_t *low)
 	{
 		if(g_activeBand != BAND_2M) return;
-			
+
 		if(high)
 		{
 			g_am_drive_level_high = MIN(*high, MAX_2M_AM_DRIVE_LEVEL);
 			g_cw_drive_level = MIN(*high, MAX_2M_AM_DRIVE_LEVEL);
 		}
-		
+
 		if(low)
 		{
 			g_am_drive_level_low = MIN(*low, MAX_2M_AM_DRIVE_LEVEL);
@@ -165,7 +163,7 @@
 	{
 		keyTransmitter(OFF);
 		powerToTransmitter(OFF);
-	
+
 		if(band == BAND_80M)
 		{
 			g_activeBand = band;
@@ -190,7 +188,7 @@
 	{
 		return(g_activeBand);
 	}
-	
+
 	void powerToTransmitter(BOOL on)
 	{
 		if(on)
@@ -211,7 +209,7 @@
 			PORTB &= ~((1 << PORTB0) | (1 << PORTB1)); /* Turn off both bands */
 		}
 	}
-	
+
 	void keyTransmitter(BOOL on)
 	{
 		if(on)
@@ -228,7 +226,7 @@
 				{
 					si5351_clock_enable(TX_CLOCK_VHF, SI5351_CLK_ENABLED);
 				}
-			
+
 				g_transmitter_keyed = TRUE;
 			}
 		}
@@ -248,7 +246,7 @@
 			g_transmitter_keyed = FALSE;
 		}
 	}
-	
+
 	void txSetPowerLevel(uint8_t power)
 	{
 		// Prevent possible damage to transmitter
@@ -263,9 +261,9 @@
 			g_80m_power_level = MIN(power, MAX_80M_PWR_SETTING);
 			power = g_80m_power_level;
 		}
-		
+
 		dac081c_set_dac(power, PA_DAC);
-						
+
 		if(power == 0)
 		{
 			PORTB &= ~(1 << PORTB6); /* Turn off Tx power */
@@ -282,7 +280,7 @@
 		while(dac081c_read_dac(&pwr, PA_DAC));
 		return pwr;
 	}
-	
+
 	void txSetModulation(Modulation mode)
 	{
 		if((g_activeBand == BAND_2M) && (mode == MODE_AM))
@@ -298,22 +296,22 @@
 			txSetModulationLevels((uint8_t*)&g_cw_drive_level, NULL);
 		}
 	}
-	
+
 	Modulation txGetModulation(void)
 	{
 		if (g_activeBand == BAND_2M)
 		{
 			return g_2m_modulationFormat;
 		}
-		
+
 		return MODE_INVALID;
 	}
-	
+
 	BOOL txAMModulationEnabled(void)
 	{
 		return g_am_modulation_enabled;
 	}
-	
+
 	BOOL init_transmitter(void)
 	{
 		if(si5351_init(SI5351_CRYSTAL_LOAD_6PF, 0)) return TRUE;
@@ -328,15 +326,15 @@
 
 		si5351_drive_strength(TX_CLOCK_HF_1, SI5351_DRIVE_8MA);
 		si5351_clock_enable(TX_CLOCK_HF_1, SI5351_CLK_DISABLED);
-		
+
 		si5351_drive_strength(TX_CLOCK_VHF, SI5351_DRIVE_8MA);
 		si5351_clock_enable(TX_CLOCK_VHF, SI5351_CLK_DISABLED);
-		
+
 		g_tx_initialized = TRUE;
-		
+
 		return FALSE;
 	}
-	
+
 	void storeTtransmitterValues(void)
 	{
 		saveAllTransmitterEEPROM();
@@ -379,7 +377,7 @@
 
 	void saveAllTransmitterEEPROM(void)
 	{
-		uint8_t table[22] = DEFAULT_80M_POWER_TABLE;
+		uint8_t table[22];
 		eeprom_update_byte(&ee_active_band, g_activeBand);
 		eeprom_update_dword((uint32_t*)&ee_active_2m_frequency, g_2m_frequency);
 		eeprom_update_byte(&ee_2m_power_level, g_2m_power_level);
@@ -391,7 +389,18 @@
 		eeprom_update_byte(&ee_am_drive_level_high, g_am_drive_level_low);
 		eeprom_update_byte(&ee_cw_drive_level, g_cw_drive_level);
 		eeprom_update_byte(&ee_active_2m_modulation, g_2m_modulationFormat);
+		memcpy(table, DEFAULT_80M_POWER_TABLE, sizeof(table));
 		eeprom_write_block(table, ee_80m_power_table, sizeof(table));
+		memcpy(table, DEFAULT_2M_AM_POWER_TABLE, sizeof(table));
+		eeprom_write_block(table, ee_2m_am_power_table, sizeof(table));
+		memcpy(table, DEFAULT_2M_AM_POWER_TABLE, sizeof(table));
+		eeprom_write_block(table, ee_2m_am_drive_high_table, sizeof(table));
+		memcpy(table, DEFAULT_2M_AM_POWER_TABLE, sizeof(table));
+		eeprom_write_block(table, ee_2m_am_drive_low_table, sizeof(table));
+		memcpy(table, DEFAULT_2M_AM_POWER_TABLE, sizeof(table));
+		eeprom_write_block(table, ee_2m_cw_power_table, sizeof(table));
+		memcpy(table, DEFAULT_2M_AM_POWER_TABLE, sizeof(table));
+		eeprom_write_block(table, ee_2m_cw_drive_table, sizeof(table));
 	}
 
 

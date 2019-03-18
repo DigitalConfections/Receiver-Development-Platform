@@ -90,12 +90,12 @@ typedef enum
 #define DEFAULT_RTTY_OFFSET_FREQUENCY 170
 #define DEFAULT_TX_ACTIVE_BAND BAND_80M
 #define DEFAULT_TX_2M_MODULATION MODE_AM
-#define DEFAULT_80M_POWER_TABLE {1, 12, 30, 66, 88, 110, 132, 144, 156, 168, 190, 202, 214, 226, 238, 250, 250, 250, 250, 250, 250, 250}
-#define DEFAULT_2M_AM_POWER_TABLE {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define DEFAULT_2M_AM_DRIVE_LOW_TABLE {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define DEFAULT_2M_AM_DRIVE_HIGH_TABLE {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define DEFAULT_2M_CW_POWER_TABLE {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define DEFAULT_2M_CW_DRIVE_TABLE {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define DEFAULT_80M_POWER_TABLE ((const uint8_t[]){1, 12, 30, 66, 88, 110, 132, 144, 156, 168, 190, 202, 214, 226, 238, 250, 250, 250, 250, 250, 250, 250})
+#define DEFAULT_2M_AM_POWER_TABLE ((const uint8_t[]){0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
+#define DEFAULT_2M_AM_DRIVE_LOW_TABLE ((const uint8_t[]){0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
+#define DEFAULT_2M_AM_DRIVE_HIGH_TABLE ((const uint8_t[]){0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
+#define DEFAULT_2M_CW_POWER_TABLE ((const uint8_t[]){0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
+#define DEFAULT_2M_CW_DRIVE_TABLE ((const uint8_t[]){0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
 
 #define TX_MINIMUM_2M_FREQUENCY 144000000
 #define TX_MAXIMUM_2M_FREQUENCY 148000000
@@ -154,7 +154,7 @@ typedef enum {
 	NOT_USED_TXBIT,
 	T_ENABLE,
 	R_ENABLE
-} TxBit;	
+} TxBit;
 
 #ifdef INCLUDE_TRANSMITTER_SUPPORT
 /**
@@ -164,7 +164,7 @@ typedef enum {
 /**
  */
 	void storeTtransmitterValues(void);
-	
+
 /**
  */
 	void txSetBand(RadioBand band, BOOL enable);
@@ -172,24 +172,24 @@ typedef enum {
 /**
  */
 	RadioBand txGetBand(void);
-	
-/** 
+
+/**
  */
 	void txSetModulation(Modulation mode);
 
-/** 
+/**
  */
 	Modulation txGetModulation(void);
 
-/** 
+/**
  */
 	BOOL txAMModulationEnabled(void);
-	
-/** 
+
+/**
  */
 	void txSetPowerLevel(uint8_t power);
-	
-/** 
+
+/**
  */
 	uint8_t txGetPowerLevel(void);
 
@@ -197,7 +197,7 @@ typedef enum {
 /**
  */
 	BOOL txSetFrequency(Frequency_Hz *freq);
-	
+
 /**
  */
 	Frequency_Hz txGetFrequency(void);
@@ -227,5 +227,6 @@ void txSetModulationLevels(uint8_t *high, uint8_t *low);
 /**
  */
 BOOL txMilliwattsToSettings(uint16_t powerMW, uint8_t* powerLevel, uint8_t* modLevelHigh, uint8_t* modLevelLow);
+
 
 #endif  /* TRANSMITTER_H_ */

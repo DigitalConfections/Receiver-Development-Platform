@@ -88,10 +88,8 @@ static volatile uint8_t g_mod_down = MAX_2M_CW_DRIVE_LEVEL;
 #endif
 
 /* Linkbus variables */
+#ifdef ENABLE_TERMINAL_COMMS
 static BOOL g_terminal_mode = LINKBUS_TERMINAL_MODE_DEFAULT;
-
-#ifdef DEBUG_FUNCTIONS_ENABLE
-static volatile uint16_t g_debug_atten_step = 0;
 #endif
 
 #define MAX_PATTERN_TEXT_LENGTH 20
@@ -126,6 +124,7 @@ static volatile int32_t g_on_the_air = 0;
 static volatile uint16_t g_time_to_send_ID_countdown = 0;
 static volatile uint16_t g_code_throttle = 50;
 static volatile uint8_t g_WiFi_shutdown_seconds = 120;
+static volatile BOOL g_report_seconds = FALSE;
 
 static volatile Frequency_Hz g_transmitter_freq = 0;
 
@@ -224,7 +223,11 @@ void __attribute__((optimize("O1"))) wdt_init(WDReset resetType)
 }
 
 
+#ifdef SELECTIVELY_DISABLE_OPTIMIZATION
+__attribute__((optimize("O0"))) ISR( INT0_vect )
+#else
 ISR( INT0_vect )
+#endif
 {
 #ifdef ENABLE_1_SEC_INTERRUPTS
 
@@ -375,16 +378,24 @@ ISR( INT0_vect )
 					wifi_power(OFF); // power off WiFi
 					g_go_to_sleep = TRUE;
 				}
+				else
+				{
+					g_report_seconds = TRUE;
+				}
 			}
 		}
 	}
 
 
 #else
+
+#ifdef ENABLE_TERMINAL_COMMS
 	if(g_terminal_mode)
 	{
 		lb_send_string("\nError: INT0 occurred!\n");
 	}
+#endif // ENABLE_TERMINAL_COMMS
+
 #endif
 }
 
@@ -568,10 +579,12 @@ ISR( TIMER2_COMPB_vect )
  ************************************************************************/
 ISR( PCINT0_vect )
 {
+#ifdef ENABLE_TERMINAL_COMMS
 	if(g_terminal_mode)
 	{
 		lb_send_string("\nError: PCINT0 occurred!\n");
 	}
+#endif //ENABLE_TERMINAL_COMMS
 }
 
 
@@ -643,10 +656,12 @@ ISR(WDT_vect)
 	{
 		limit--;
 
+#ifdef ENABLE_TERMINAL_COMMS
 		if(g_terminal_mode)
 		{
 			lb_send_WDTError();
 		}
+#endif // ENABLE_TERMINAL_COMMS
 	}
 }
 
@@ -666,7 +681,10 @@ ISR(WDT_vect)
  ************************************************************************/
 ISR(USART_RX_vect)
 {
+#ifdef ENABLE_TERMINAL_COMMS
 	static char textBuff[LINKBUS_MAX_MSG_FIELD_LENGTH];
+#endif // ENABLE_TERMINAL_COMMS
+
 	static LinkbusRxBuffer* buff = NULL;
 	static uint8_t charIndex = 0;
 	static uint8_t field_index = 0;
@@ -687,6 +705,7 @@ ISR(USART_RX_vect)
 		rx_char = toupper(rx_char);
 		SMCR = 0x00; // exit power-down mode
 
+#ifdef ENABLE_TERMINAL_COMMS
 		if(g_terminal_mode)
 		{
 			static uint8_t ignoreCount = 0;
@@ -832,6 +851,8 @@ ISR(USART_RX_vect)
 			}
 		}
 		else
+#endif // ENABLE_TERMINAL_COMMS
+
 		{
 			if((rx_char == '$') || (rx_char == '!'))    /* start of new message = $ */
 			{
@@ -962,10 +983,12 @@ ISR(USART_UDRE_vect)
  ************************************************************************/
 ISR( PCINT2_vect )
 {
+#ifdef ENABLE_TERMINAL_COMMS
 	if(g_terminal_mode)
 	{
 		lb_send_string("\nError: PCINT2 occurred!\n");
 	}
+#endif //ENABLE_TERMINAL_COMMS
 }
 
 
@@ -1089,7 +1112,8 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 	//	PCMSK1 |= (1 << PCINT10);                               /* Enable port C pin change interrupts on pin PC2 */
 	//	PCMSK0 |= (1 << PORTB2);                                /* Do not enable interrupts until HW is ready */
 
-		EICRA  |= ((1 << ISC01) | (1 << ISC00));	/* Configure INT0 for RTC 1-second interrupts */
+//		EICRA  |= ((1 << ISC01) | (1 << ISC00));	/* Configure INT0 rising edge for RTC 1-second interrupts */
+		EICRA  |= (1 << ISC01);	/* Configure INT0 falling edge for RTC 1-second interrupts */
 		EIMSK |= (1 << INT0);
 
 		/* Configure INT1 for antenna connect interrupts */
@@ -1233,7 +1257,10 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
  ************************************************************************/
 int main( void )
 {
+#ifdef ENABLE_TERMINAL_COMMS
 	BOOL err = FALSE;
+#endif // ENABLE_TERMINAL_COMMS
+
 	LinkbusRxBuffer* lb_buff = 0;
 
 	/**
@@ -1269,6 +1296,7 @@ int main( void )
 
 	wdt_reset();                                    /* HW watchdog */
 
+#ifdef ENABLE_TERMINAL_COMMS
 	if(g_terminal_mode)
 	{
 		if(err)
@@ -1286,6 +1314,8 @@ int main( void )
 		}
 	}
 	else
+#endif //ENABLE_TERMINAL_COMMS
+
 	{
 		lb_send_sync();                                 /* send test pattern to help synchronize baud rate with any attached device */
 	}
@@ -1337,6 +1367,22 @@ int main( void )
 			set_ports(POWER_SLEEP);
 		}
 
+		if(g_report_seconds)
+		{
+			g_report_seconds = FALSE;
+			#ifdef INCLUDE_DS3231_SUPPORT
+			g_temp_time = time(NULL);
+
+			if(g_temp_time != g_tx_epoch_time)
+			{
+				g_temp_time = g_tx_epoch_time;
+			}
+
+			sprintf(g_tempStr, "%lu", g_tx_epoch_time);
+			lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
+			#endif
+		}
+
 		if(g_returned_from_sleep)
 		{
 			g_returned_from_sleep = FALSE;
@@ -1355,38 +1401,6 @@ int main( void )
 
 			switch(msg_id)
 			{
-#ifdef DEBUG_FUNCTIONS_ENABLE
-				case MESSAGE_DEBUG:
-				{
-					static BOOL toggle = FALSE;
-//
-//					if(toggle)
-//					{
-//						toggle = FALSE;
-//						g_lb_repeat_readings = FALSE;
-//						g_debug_atten_step = 0;
-//					}
-//					else
-//					{
-//						toggle = TRUE;
-//						g_lb_repeat_readings = TRUE;
-//						g_debug_atten_step = 1;
-//					}
-
-					if(toggle)
-					{
-						toggle = FALSE;
-						g_debug_atten_step = 0;
-					}
-					else
-					{
-						toggle = TRUE;
-						g_debug_atten_step = 1;
-					}
-				}
-				break;
-#endif //DEBUG_FUNCTIONS_ENABLE
-
 				case MESSAGE_DRIVE_LEVEL:
 				{
 					uint8_t setting = 0;
@@ -1442,9 +1456,12 @@ int main( void )
 						linkbus_disable();
 						sei();
 						wifi_power(result);
+
+#ifdef ENABLE_TERMINAL_COMMS
 						g_terminal_mode = !result;
 						wifi_reset(g_terminal_mode);
 						linkbus_setTerminalMode(g_terminal_mode);
+#endif // ENABLE_TERMINAL_COMMS
 
 						if(result == 2)
 						{
@@ -1456,8 +1473,9 @@ int main( void )
 						}
 					}
 
+#ifdef ENABLE_TERMINAL_COMMS
 					if(g_terminal_mode) lb_broadcast_num((uint16_t)result, NULL);
-
+#endif // ENABLE_TERMINAL_COMMS
 				}
 				break;
 
@@ -1658,15 +1676,18 @@ int main( void )
 					{
 						saveAllEEPROM();
 					}
+#ifdef ENABLE_TERMINAL_COMMS
 					else if(g_terminal_mode)
 					{
 						lb_send_string("Usage: SF F|S epoch\n");
 					}
+#endif // ENABLE_TERMINAL_COMMS
 				}
 				break;
 
 				case MESSAGE_CLOCK:
 				{
+#ifdef ENABLE_TERMINAL_COMMS
 					if(g_terminal_mode)
 					{
 						if(lb_buff->fields[FIELD1][0])
@@ -1695,7 +1716,10 @@ int main( void )
 						sprintf(g_tempStr, "%lu", g_temp_time);
 						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
 					}
-					else if(lb_buff->type == LINKBUS_MSG_COMMAND) // ignore replies since, as the time source, we should never be sending queries anyway
+					else
+#endif // ENABLE_TERMINAL_COMMS
+
+					if(lb_buff->type == LINKBUS_MSG_COMMAND) // ignore replies since, as the time source, we should never be sending queries anyway
 					{
 						if(lb_buff->fields[FIELD1][0])
 						{
@@ -1760,10 +1784,12 @@ g_temp_time = ds3231_get_epoch(NULL);
 						}
 					}
 
+#ifdef ENABLE_TERMINAL_COMMS
 					if(g_terminal_mode)  {
 						lb_send_string(g_messages_text[STATION_ID]);
 						lb_send_string("\n");
                     }
+#endif // ENABLE_TERMINAL_COMMS
 				}
 				break;
 
@@ -1804,9 +1830,11 @@ g_temp_time = ds3231_get_epoch(NULL);
 						}
 					}
 
+#ifdef ENABLE_TERMINAL_COMMS
 					if(g_terminal_mode)  {
 						lb_send_value(speed, "spd");
                     }
+#endif // ENABLE_TERMINAL_COMMS
 				}
 				break;
 
@@ -1868,9 +1896,11 @@ g_temp_time = ds3231_get_epoch(NULL);
 						}
 					}
 
+#ifdef ENABLE_TERMINAL_COMMS
 					if(g_terminal_mode) {
 						lb_send_value(time, "t");
 					}
+#endif
 				}
 				break;
 
@@ -1882,10 +1912,12 @@ g_temp_time = ds3231_get_epoch(NULL);
 						saveAllEEPROM();
 					}
 
+#ifdef ENABLE_TERMINAL_COMMS
 					if(g_terminal_mode) {
 						lb_send_string(g_messages_text[PATTERN_TEXT]);
 						lb_send_string("\n");
 					}
+#endif // ENABLE_TERMINAL_COMMS
 				}
 				break;
 
@@ -1950,6 +1982,7 @@ g_temp_time = ds3231_get_epoch(NULL);
 				}
 				break;
 
+#ifdef ENABLE_TERMINAL_COMMS
 				case MESSAGE_TTY:
 				{
 					g_terminal_mode = TRUE;
@@ -1966,6 +1999,7 @@ g_temp_time = ds3231_get_epoch(NULL);
 					linkbus_init(BAUD);
 				}
 				break;
+#endif // ENABLE_TERMINAL_COMMS
 
 				case MESSAGE_BAT:
 				{
@@ -2013,11 +2047,14 @@ g_temp_time = ds3231_get_epoch(NULL);
 
 				default:
 				{
+#ifdef ENABLE_TERMINAL_COMMS
 					if(g_terminal_mode)
 					{
 						lb_send_Help();
 					}
 					else
+#endif // ENABLE_TERMINAL_COMMS
+
 					{
 						linkbus_reset_rx(); /* flush buffer */
 					}
@@ -2025,10 +2062,12 @@ g_temp_time = ds3231_get_epoch(NULL);
 				break;
 			}
 
+#ifdef ENABLE_TERMINAL_COMMS
 			if(g_terminal_mode)
 			{
 				lb_send_NewPrompt();
 			}
+#endif // ENABLE_TERMINAL_COMMS
 
 			lb_buff->id = MESSAGE_EMPTY;
 		}

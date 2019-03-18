@@ -68,7 +68,6 @@
 /* #include <Wire.h> */
 #include "Helpers.h"
 
-
 /* Global variables are always prefixed with g_ */
 
 /*
@@ -459,7 +458,7 @@ void onNewStation(WiFiEventSoftAPModeStationConnected sta_info) {
   }
 
   g_numberOfWebClients = WiFi.softAPgetStationNum();
-  g_numberOfSocketClients = min(g_numberOfWebClients, g_webSocketServer.connectedClients(false));
+  g_numberOfSocketClients = g_webSocketServer.connectedClients(false);
 
   if (!found)
   {
@@ -504,7 +503,7 @@ void onStationDisconnect(WiFiEventSoftAPModeStationDisconnected sta_info) {
   }
 
   g_numberOfWebClients = WiFi.softAPgetStationNum();
-  g_numberOfSocketClients = min(g_numberOfWebClients, g_webSocketServer.connectedClients(false));
+  g_numberOfSocketClients = g_webSocketServer.connectedClients(false);
   Serial.printf(LB_MESSAGE_ESP_SAVE); /* Save any event changes */
 
   if (g_debug_prints_enabled)
@@ -1136,7 +1135,7 @@ void httpWebServerLoop()
     g_webSocketServer.loop();
 
     g_numberOfWebClients = WiFi.softAPgetStationNum();
-    g_numberOfSocketClients = min(g_numberOfWebClients, g_webSocketServer.connectedClients(false));
+    g_numberOfSocketClients = g_webSocketServer.connectedClients(false);
 
     if (g_numberOfWebClients != hold)
     {
@@ -1203,6 +1202,7 @@ void httpWebServerLoop()
     }
 
     g_relativeTimeSeconds = millis() / g_blinkPeriodMillis;
+      
     if (holdTime != g_relativeTimeSeconds)
     {
       holdTime = g_relativeTimeSeconds;
@@ -1269,7 +1269,7 @@ void httpWebServerLoop()
 
       if (g_numberOfSocketClients)
       {
-        if (toggle) Serial.printf(LB_MESSAGE_TIME_REQUEST); // request latest time once per second
+//        if (toggle) Serial.printf(LB_MESSAGE_TIME_REQUEST); // request latest time once per second
 
         if (!(holdTime % 61))
         {
@@ -1963,7 +1963,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
             }
           }
 
-          g_numberOfSocketClients = min(g_numberOfWebClients, g_webSocketServer.connectedClients(false));
+          g_numberOfSocketClients = g_webSocketServer.connectedClients(false);
         }
 
         Serial.printf(LB_MESSAGE_ESP_SAVE); /* Save any event changes */
@@ -1991,7 +1991,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           }
         }
 
-        g_numberOfSocketClients = min(g_numberOfWebClients, g_webSocketServer.connectedClients(false));
+        g_numberOfSocketClients = g_webSocketServer.connectedClients(false);
         //g_ESP_ATMEGA_Comm_State = TX_HTML_PAGE_SERVED;
       }
       break;
@@ -2022,8 +2022,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           {
             Serial.println(String("Time string: \"" + p + "\""));
           }
-          String lbMsg = String(String(LB_MESSAGE_TIME_SET) + p + ";");
-          Serial.printf(stringObjToConstCharString(&lbMsg)); // Send time to Transmitter for synchronization
+            String lbMsg = String(String(LB_MESSAGE_TIME_SET) + p + ";");
+            Serial.printf(stringObjToConstCharString(&lbMsg)); // Send time to Transmitter for synchronization
         }
         else if (msgHeader == SOCK_COMMAND_TX_ROLE)
         {
@@ -2216,6 +2216,21 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
             g_ESP_ATMEGA_Comm_State = TX_RECD_START_EVENT_REQUEST;
           }
         }
+        else if (msgHeader == SOCK_COMMAND_MAC)
+        {
+            for (int i = 0; i < MAX_NUMBER_OF_WEB_CLIENTS; i++)
+            {
+                if ((g_webSocketClient[i].macAddr).length() && (g_webSocketClient[i].socketID < WEBSOCKETS_SERVER_CLIENT_MAX))
+                {
+                    String msg = String( String(SOCK_COMMAND_MAC) + "," + g_webSocketClient[i].macAddr );
+                    g_webSocketServer.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
+                    if (g_debug_prints_enabled)
+                    {
+                        Serial.println(msg);
+                    }
+                }
+            }
+        }
         else if (msgHeader == SOCK_COMMAND_KEY_DOWN)
         {
           String lbMsg = String(LB_MESSAGE_KEY_DOWN);
@@ -2230,6 +2245,13 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         {
           String lbMsg = String(LB_MESSAGE_SLEEP);
           Serial.printf(stringObjToConstCharString(&lbMsg)); // Send ESP message to ATMEGA
+        }
+        else if (msgHeader == SOCK_COMMAND_PASSTHRU)
+        {
+          int firstComma = p.indexOf(',');
+          String lbMsg = (p.substring(firstComma + 1));
+
+          Serial.println(stringObjToConstCharString(&lbMsg));
         }
       }
       break;
@@ -2272,7 +2294,14 @@ bool handleFileRead(String path)
   { // If the file exists, either as a compressed archive, or normal
     if (SPIFFS.exists(pathWithGz))      // If there's a compressed version available
       path += ".gz";                    // Use the compressed verion
-    File file = SPIFFS.open(path, "r"); // Open the file
+      
+    if (SPIFFS.exists(pathWithHTML))
+    {
+        path += ".html";
+        contentType = getContentType(path);
+    }
+
+      File file = SPIFFS.open(path, "r"); // Open the file
     size_t sent = g_http_server.streamFile(file, contentType);  // Send it to the client
     file.close();                       // Close the file again
     if (g_debug_prints_enabled)
@@ -3027,8 +3056,7 @@ void handleLBMessage(String message)
 
     if (g_debug_prints_enabled)
     {
-      Serial.println("TIM msg from ATMEGA!");
-      Serial.println(timeinfo + " epoch = " + String(epoch));
+        Serial.println("T=" + String(epoch));
     }
 
     if (epoch)
@@ -3070,12 +3098,11 @@ void handleLBMessage(String message)
   }
   else if (type == LB_MESSAGE_BATTERY)
   {
-    float temp = payload.toFloat();
+    float temp = payload.toInt();
 
     if (g_debug_prints_enabled)
     {
-      Serial.println("BAT msg from ATMEGA!");
-      Serial.println(" bat charge = " + String(temp));
+      Serial.println("B=" + String(temp));
     }
 
     char dataStr[4];

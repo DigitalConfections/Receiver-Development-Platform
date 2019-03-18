@@ -110,14 +110,10 @@ typedef enum
 
 	/* TTY USER MESSAGES */
 	MESSAGE_ALL_INFO = '?',                         /* Prints all receiver info */
-	
+
 	/* UTILITY MESSAGES */
 	MESSAGE_RESET = 'R' * 100 + 'S' * 10 + 'T',		/* Processor reset */
 	MESSAGE_WIFI = 'W' * 10 + 'I',					/* Enable/disable WiFi */
-
-#ifdef DEBUG_FUNCTIONS_ENABLE
-	MESSAGE_DEBUG = 'D' * 100 + 'B' * 10 + 'G',		/* Used for debug only */
-#endif
 
 	INVALID_MESSAGE = UINT16_MAX					/* This value must never overlap a valid message ID */
 } LBMessageID;
@@ -218,7 +214,7 @@ void linkbus_setTerminalMode(BOOL on);
  */
 void lb_send_FRE(LBMessageType msgType, Frequency_Hz freq, BOOL isMemoryValue);
 
-/** 
+/**
 */
 void lb_send_ESP(LBMessageType msgType, char* msg);
 

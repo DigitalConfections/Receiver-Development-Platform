@@ -34,7 +34,6 @@
  * Set the text that gets displayed to the user */
 #define SW_REVISION "P1.0.0"
 
-//#define DEBUG_FUNCTIONS_ENABLE
 //#define TRANQUILIZE_WATCHDOG
 
 #define PRODUCT_NAME_SHORT "ARDF Tx"
@@ -59,6 +58,7 @@
 /******************************************************
  * Include only the necessary software support */
 #define ENABLE_1_SEC_INTERRUPTS
+//#define ENABLE_TERMINAL_COMMS
 
 /*******************************************************
 * ADC Scale Factors */
@@ -99,7 +99,7 @@ typedef uint16_t BatteryLevel;  /* in milliVolts */
 
 /******************************************************
  * EEPROM definitions */
-#define EEPROM_INITIALIZED_FLAG 0xBA
+#define EEPROM_INITIALIZED_FLAG 0xBB
 #define EEPROM_UNINITIALIZED 0x00
 
 #define EEPROM_STATION_ID_DEFAULT "FOXBOX"

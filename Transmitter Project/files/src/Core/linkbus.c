@@ -245,12 +245,12 @@ void linkbus_init(uint32_t baud)
 void linkbus_disable(void)
 {
 	uint8_t bufferIndex;
-	
+
 	g_bus_disabled = TRUE;
 	UCSR0B = 0;
 	linkbus_end_tx();
 	memset(rx_buffer, 0, sizeof(rx_buffer));
-	
+
 	for(bufferIndex=0; bufferIndex<LINKBUS_NUMBER_OF_TX_MSG_BUFFERS; bufferIndex++)
 	{
 		tx_buffer[bufferIndex][0] = '\0';
@@ -275,7 +275,7 @@ void linkbus_setTerminalMode(BOOL on)
 BOOL linkbus_send_text(char* text)
 {
 	BOOL err = TRUE;
-	
+
 	if(g_bus_disabled) return err;
 
 	if(text)
@@ -316,28 +316,24 @@ void lb_send_Help(void)
 	if(g_bus_disabled) return;
 	if(!g_lb_terminal_mode) return;
 
-#ifdef DEBUG_FUNCTIONS_ENABLE
-	sprintf(g_tempMsgBuff, "\n*** %s Debug Ver. %s ***", PRODUCT_NAME_LONG, SW_REVISION);
-#else
 	sprintf(g_tempMsgBuff, "\n*** %s Ver. %s ***", PRODUCT_NAME_LONG, SW_REVISION);
-#endif
-	
+
 	while(linkbus_send_text(g_tempMsgBuff));
 	while(linkbusTxInProgress());
 
 #ifdef TRANQUILIZE_WATCHDOG
 	sprintf(g_tempMsgBuff, "\nNote: Watchdog disabled in this build!");
-	while(linkbus_send_text(g_tempMsgBuff)); 
+	while(linkbus_send_text(g_tempMsgBuff));
 	while(linkbusTxInProgress());
 #endif // TRANQUILIZE_WATCHDOG
-	
+
 	int rows = sizeof(textHelp)/sizeof(textHelp[0]);
 	for(int i=0; i<rows; i++)
 	{
-		while(linkbus_send_text((char*)textHelp[i])); 
+		while(linkbus_send_text((char*)textHelp[i]));
 		while(linkbusTxInProgress());
 	}
-	
+
 	lb_send_NewLine();
 }
 

@@ -277,45 +277,6 @@
             }
         }
 
-        function eventSelect(selection) {
-            if (g_selectedEvent != selection) {
-                var btext = "EVENT_NAME," + selection;
-                console.log(btext);
-                sendToSocket(btext);
-                g_selectedEvent = selection;
-            }
-        }
-
-        function eventRunSelect(selection) {
-            if (g_selectedEvent != selection) {
-                var btext = "EVENT_NAME," + selection;
-                console.log(btext);
-                sendToSocket(btext);
-                g_selectedEvent = selection;
-            }
-
-            sendTest();
-        }
-
-        function eventStopSelect(selection) {
-            if (g_selectedEvent != selection) {
-                var btext = "EVENT_STOP," + selection;
-                console.log(btext);
-                sendToSocket(btext);
-                g_selectedEvent = selection;
-            }
-
-            sendTest();
-        }
-
-        function sleepAction() {
-            var btn = document.getElementById("sleepButton");
-            var btext = "SLEEP";
-            btn.setAttribute("style", "background-color: #FF0000;");
-            console.log(btext);
-            sendToSocket(btext);
-        }
-
         function keyAction() {
             var btn = document.getElementById("keyButton");
 
@@ -351,6 +312,7 @@
         function eventRow(rowData, isHeader) {
             var row = document.createElement("tr");
             var cellText;
+            var cell0;
 
             console.log("rowData = ", rowData);
 
@@ -358,46 +320,54 @@
                 row.setAttribute("style", "font-family:verdana; font-size:15px; color:Black; font-weight:bold; text-align:center;");
 
                 // create cells in row
-                var cell0 = document.createElement("td");
+                cell0 = document.createElement("td");
                 cell0.setAttribute("border", "1px solid black");
                 row.appendChild(cell0);
 
-                var cell1 = document.createElement("td");
+                cell0 = document.createElement("td");
                 cellText = document.createTextNode(rowData.name);
-                cell1.setAttribute("border", "1px solid black");
-                cell1.appendChild(cellText);
-                row.appendChild(cell1);
+                cell0.setAttribute("border", "1px solid black");
+                cell0.appendChild(cellText);
+                row.appendChild(cell0);
 
-                var cell2 = document.createElement("td");
+                cell0 = document.createElement("td");
                 cellText = document.createTextNode(rowData.version);
-                cell2.setAttribute("border", "1px solid black");
-                cell2.appendChild(cellText);
-                row.appendChild(cell2);
+                cell0.setAttribute("border", "1px solid black");
+                cell0.appendChild(cellText);
+                row.appendChild(cell0);
 
-                var cell3 = document.createElement("td");
+                cell0 = document.createElement("td");
                 cellText = document.createTextNode(rowData.start);
-                cell3.setAttribute("border", "1px solid black");
-                cell3.appendChild(cellText);
-                row.appendChild(cell3);
+                cell0.setAttribute("border", "1px solid black");
+                cell0.appendChild(cellText);
+                row.appendChild(cell0);
 
-                var cell4 = document.createElement("td");
+                cell0 = document.createElement("td");
                 cellText = document.createTextNode(rowData.finish);
-                cell4.setAttribute("border", "1px solid black");
-                cell4.appendChild(cellText);
-                row.appendChild(cell4);
+                cell0.setAttribute("border", "1px solid black");
+                cell0.appendChild(cellText);
+                row.appendChild(cell0);
 
-                var cell5 = document.createElement("td");
+                cell0 = document.createElement("td");
                 cellText = document.createTextNode(rowData.role);
-                cell5.setAttribute("border", "1px solid black");
-                cell5.appendChild(cellText);
-                row.appendChild(cell5);
+                cell0.setAttribute("border", "1px solid black");
+                cell0.appendChild(cellText);
+                row.appendChild(cell0);
 
-                var cell6 = document.createElement("td");
+                cell0 = document.createElement("td");
                 cellText = document.createTextNode(rowData.sleep);
-                cell6.setAttribute("border", "1px solid black");
-                cell6.appendChild(cellText);
-                row.appendChild(cell6);
+                cell0.setAttribute("border", "1px solid black");
+                cell0.appendChild(cellText);
+                row.appendChild(cell0);
+
+                cell0 = document.createElement("td");
+                cellText = document.createTextNode("Send Command");
+                cell0.setAttribute("colspan", "2");
+                cell0.setAttribute("border", "1px solid black");
+                cell0.appendChild(cellText);
+                row.appendChild(cell0);
             } else {
+
                 // create cells in row
                 var btn = document.createElement('input');
                 var entry = rowData.name;
@@ -411,16 +381,15 @@
                     }
                 })(entry);
 
-                var cell0 = document.createElement("td");
+                cell0 = document.createElement("td");
                 cell0.setAttribute("border", "1px solid black");
                 cell0.appendChild(btn);
                 row.appendChild(cell0);
 
 
-
-                // Power Level 0-2000
-                var cell1 = document.createElement("td");
-                cell1.setAttribute("border", "1px solid black");
+                // Power Level mW
+                cell0 = document.createElement("td");
+                cell0.setAttribute("border", "1px solid black");
 
                 var sel = document.createElement('select'),
                     option,
@@ -440,17 +409,17 @@
                     }
 
                     sel.appendChild(option);
-                    console.log("Freq option:", g_powerLevelType[i]);
+                    console.log("Power option:", g_powerLevelType[i]);
                 }
 
 
-                cell1.appendChild(sel);
-                row.appendChild(cell1);
+                cell0.appendChild(sel);
+                row.appendChild(cell0);
 
 
                 // Modulation Format CW or AM
-                var cell2 = document.createElement("td");
-                cell2.setAttribute("border", "1px solid black");
+                cell0 = document.createElement("td");
+                cell0.setAttribute("border", "1px solid black");
 
                 sel = document.createElement('select'),
                     option,
@@ -473,15 +442,13 @@
                     console.log("Modulation Type:", g_modulationType[i]);
                 }
 
-
-                cell2.appendChild(sel);
-                row.appendChild(cell2);
-
+                cell0.appendChild(sel);
+                row.appendChild(cell0);
 
 
                 // Radio Band 80m or 2m
-                cell1 = document.createElement("td");
-                cell1.setAttribute("border", "1px solid black");
+                cell0 = document.createElement("td");
+                cell0.setAttribute("border", "1px solid black");
 
                 sel = document.createElement('select'),
                     option,
@@ -504,28 +471,26 @@
                     console.log("Band:", g_radioBandType[i]);
                 }
 
-
-                cell1.appendChild(sel);
-                row.appendChild(cell1);
-
-
+                cell0.appendChild(sel);
+                row.appendChild(cell0);
 
                 // Set Frequency
-                var cell3 = document.createElement("td");
+                cell0 = document.createElement("td");
                 var b = document.createElement('input');
                 b.setAttribute("type", "button");
                 b.setAttribute("id", "frequencyButton");
                 b.setAttribute("class", "incbutton");
                 b.setAttribute("value", freqDotFormat(g_typeFrequency[0].frequency));
                 b.setAttribute("onclick", "toggleFreqSettings();");
-                cell3.appendChild(b);
+                cell0.appendChild(b);
 
-                row.appendChild(cell3);
+                row.appendChild(cell0);
 
-                var cell7 = document.createElement("td");
+                // Pattern Text
+                cell0 = document.createElement("td");
                 console.log("Pattern:", "PARIS");
-                cell7.setAttribute("border", "1px solid black");
-                cell7.setAttribute("id", "patternSet");
+                cell0.setAttribute("border", "1px solid black");
+                cell0.setAttribute("id", "patternSet");
                 var t = document.createElement("input");
                 t.setAttribute("type", "text");
                 t.setAttribute("id", "patternText");
@@ -534,11 +499,11 @@
                 t.setAttribute("contenteditable", "true");
                 t.setAttribute("oninput", "patternEntered();");
                 t.setAttribute("value", "VVV ");
-                cell7.appendChild(t);
-                row.appendChild(cell7);
+                cell0.appendChild(t);
+                row.appendChild(cell0);
 
+                // Sleep Button
                 btn = document.createElement('input');
-                entry = rowData.name;
                 btn.type = "button";
                 btn.className = "button";
                 btn.id = "sleepButton";
@@ -555,6 +520,35 @@
                 row.appendChild(cell0);
 
 
+                // Linkbus Command Text
+                cell0 = document.createElement("td");
+                cell0.setAttribute("border", "1px solid black");
+                cell0.setAttribute("id", "patternSet");
+                var t = document.createElement("input");
+                t.setAttribute("type", "text");
+                t.setAttribute("id", "commandText");
+                t.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold; text-align:center");
+                t.setAttribute("oninput", "commandEntered();");
+                t.setAttribute("placeholder", "linkbus command");
+                t.setAttribute("contenteditable", "true");
+                cell0.appendChild(t);
+                row.appendChild(cell0);
+
+                btn = document.createElement('input');
+                btn.type = "button";
+                btn.className = "button";
+                btn.id = "sendButton";
+                btn.value = "Send";
+                btn.onclick = (function(entry) {
+                    return function() {
+                        sendAction();
+                    }
+                })(entry);
+
+                cell0 = document.createElement("td");
+                cell0.setAttribute("border", "1px solid black");
+                cell0.appendChild(btn);
+                row.appendChild(cell0);
             }
 
             return row;
@@ -564,27 +558,25 @@
             updateDisplayedLocalTime();
 
             if (g_stillConnected) {
-                if (g_stillConnected) {
-                    g_stillConnected--;
-                    if (g_stillConnected == 0) {
-                        setOverlay("Disconnected");
-                        console.log("g_stillConnected timeout!!");
-                        g_timedOut = true;
-                        g_stillDisconnected = 20;
-                    }
+                g_stillConnected--;
+                if (g_stillConnected == 0) {
+                    setOverlay("Disconnected");
+                    console.log("g_stillConnected timeout!!");
+                    g_timedOut = true;
+                    g_stillDisconnected = 200;
                 }
             } else {
                 if (g_stillDisconnected) {
                     g_stillDisconnected--;
                     if (g_stillDisconnected == 0) {
-                        g_stillDisconnected = 20;
+                        g_stillDisconnected = 200;
                         //                webSocketStart();
                         //                console.log("Disconnected! Started new websocket");
                         console.log("Disconnected!");
                     }
                 }
             }
-        }, 1000);
+        }, 100);
 
         function webSocketStart() {
             var websocketcreated = true;
@@ -624,7 +616,8 @@
                 g_websock.onopen = function(evt) {
                     console.log("websock open");
                     websocketcreated = true;
-                    g_stillConnected = Math.max(20, g_stillConnected);
+                    g_stillConnected = Math.max(200, g_stillConnected);
+                    sendToSocket("MAC");
                 };
 
                 g_websock.onclose = function(evt) {
@@ -651,11 +644,12 @@
                     var str = evt.data;
                     var arr = str.split(",");
 
-                    g_stillConnected = 5;
+                    g_stillConnected = 50;
                     if (g_timedOut) {
                         g_timedOut = false;
-                        setOverlay(null);
                     }
+
+                    setOverlay(null);
 
                     switch (arr[0]) {
 
@@ -762,8 +756,11 @@
 
                         case "SYNC":
                             {
-                                g_transmitterTimeMs = 1000 * arr[1] + 600;
-                                console.log("Tx time rcvd:", g_transmitterTimeMs);
+                                g_transmitterTimeMs = 1000 * arr[1];
+                                //                                console.log("Tx time rcvd:", g_transmitterTimeMs);
+                                var txd = new Date(g_transmitterTimeMs);
+                                document.getElementById("xmtrTime").innerHTML = "TX: " + txd;
+                                updateDisplayedLocalTime()
                             }
                             break;
 
@@ -891,7 +888,7 @@
 
         function start() {
             console.log("At start of start() function!");
-            g_stillConnected = 20;
+            g_stillConnected = 200;
             webSocketStart();
 
             g_selectedEvent = "A";
@@ -991,7 +988,11 @@
             }
 
             // Sync to seconds transition
-            while (d == Date()) {};
+            n = Date();
+            while (d == n) {
+                //               console.log("Syncing...", d, n);
+                n = Date();
+            };
 
             d = new Date();
 
@@ -999,6 +1000,7 @@
             btext = "SYNC," + btext;
             console.log(btext);
             sendToSocket(btext);
+            updateDisplayedLocalTime();
 
             g_timeUpdateTimer = setInterval(function() {
                 if (g_stillConnected) {
@@ -1012,7 +1014,7 @@
                         }
                     }
                 }
-            }, 1000);
+            }, 100);
         }
 
         function sendTest() {
@@ -1056,6 +1058,20 @@
             console.log(btext);
         }
 
+        function sleepAction() {
+            var btn = document.getElementById("sleepButton");
+            var btext = "SLEEP";
+            btn.setAttribute("style", "background-color: #FF0000;");
+            console.log(btext);
+            sendToSocket(btext);
+        }
+
+        function sendAction() {
+            var text = document.getElementById("commandText").value;
+            var btext = "PASS," + text;
+            console.log(btext);
+            sendToSocket(btext);
+        }
 
         function sendPower() {
             var power = document.getElementById("pwrSelect").value;
@@ -1144,10 +1160,24 @@
             }
         }
 
-        function currentRoleIndex() {
-            g_selectedTxType = document.getElementById("roleSelect").value;
-            var indices = g_typeTxNames.find(g_typeTxNames => g_typeTxNames.name == g_selectedTxType).indices;
-            return Number(indices.charAt(0));
+        function commandEntered() {
+            var x = document.getElementById("commandText");
+
+            if (x != null) {
+                var command = x.value.toUpperCase();
+                var isValid = false;
+                var valid = /^[0-9a-zA-Z;,!?$ ]+$/;
+
+                if (command.length > 0) {
+                    x.value = command;
+                    if (command.match(valid) && ((command[0] == '$') || (command[0] == '!'))) {
+                        x.style.color = "blue";
+                        isValid = true;
+                    } else {
+                        x.style.color = "red";
+                    }
+                }
+            }
         }
 
         function modClick() {
@@ -1243,9 +1273,7 @@
 
         function updateDisplayedLocalTime() {
             var d = Date();
-            var txd = new Date(g_transmitterTimeMs);
             document.getElementById("currentTime").innerHTML = "OS: " + d;
-            document.getElementById("xmtrTime").innerHTML = "TX: " + txd;
             updateTextFormatting();
         }
 
@@ -1378,14 +1406,25 @@
 
         function updateTextFormatting() {
             var callsignText = document.getElementById("callText");
-            var callString = "";
+            var string = "";
 
             if (callsignText != null) {
-                callString = String(callsignText.value);
-                if (hasNumber(callString) && hasAlpha(callString) && (callString.length > 2)) {
+                string = String(callsignText.value);
+                if (hasNumber(string) && hasAlpha(string) && (string.length > 2)) {
                     callsignText.style.color = "blue";
                 } else {
                     callsignText.style.color = "red";
+                }
+            }
+
+            var commandText = document.getElementById("patternSet");
+
+            if (commandText != null) {
+                string = String(commandText.value);
+                if ((string[0] == '$') && hasAlpha(string) && (string.length > 2)) {
+                    commandText.style.color = "blue";
+                } else {
+                    commandText.style.color = "red";
                 }
             }
 
@@ -1647,7 +1686,7 @@
 
     <center>
         <h1 id="mainHeading" style="font-family:verdana; font-size:30px; color:Black; text-align:center;">Transmitter Test</h1>
-        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">HTML Ver 0.1.9 - 16 Mar 2019</p>
+        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">HTML Ver 0.2 - 18 Mar 2019</p>
 
         <div>
             <table>
