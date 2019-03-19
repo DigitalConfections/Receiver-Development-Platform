@@ -213,6 +213,8 @@
 
         var g_eventIsRunning = false;
 
+        var g_loading_data = true;
+
         ///////////////////////////////
         // Settings
         var g_eventNumberOfTxTypes = 0; /* Quantity of different "roles": Home, Foxes, Fast Foxes, Slow Foxes, etc. */
@@ -287,6 +289,9 @@
                 console.log(btext);
                 sendToSocket(btext);
                 g_selectedEvent = selection;
+                setOverlay("Loading Events...");
+                g_stillConnected = 200;
+                g_loading_data = true;
             }
         }
 
@@ -316,6 +321,7 @@
         function eventRow(rowData, isHeader) {
             var row = document.createElement("tr");
             var cellText;
+            var cell0;
 
             console.log("rowData = ", rowData);
 
@@ -323,57 +329,57 @@
                 row.setAttribute("style", "font-family:verdana; font-size:15px; color:Black; font-weight:bold; text-align:center;");
 
                 // create cells in row
-                var cell0 = document.createElement("td");
+                cell0 = document.createElement("td");
                 cell0.setAttribute("border", "1px solid black");
                 row.appendChild(cell0);
 
-                var cell1 = document.createElement("td");
+                cell0 = document.createElement("td");
                 cellText = document.createTextNode(rowData.name);
-                cell1.setAttribute("border", "1px solid black");
-                cell1.appendChild(cellText);
-                row.appendChild(cell1);
+                cell0.setAttribute("border", "1px solid black");
+                cell0.appendChild(cellText);
+                row.appendChild(cell0);
 
-                var cell2 = document.createElement("td");
+                cell0 = document.createElement("td");
                 cellText = document.createTextNode(rowData.version);
-                cell2.setAttribute("border", "1px solid black");
-                cell2.appendChild(cellText);
-                row.appendChild(cell2);
+                cell0.setAttribute("border", "1px solid black");
+                cell0.appendChild(cellText);
+                row.appendChild(cell0);
 
-                var cell3 = document.createElement("td");
+                cell0 = document.createElement("td");
                 cellText = document.createTextNode(rowData.start);
-                cell3.setAttribute("border", "1px solid black");
-                cell3.appendChild(cellText);
-                row.appendChild(cell3);
+                cell0.setAttribute("border", "1px solid black");
+                cell0.appendChild(cellText);
+                row.appendChild(cell0);
 
-                var cell4 = document.createElement("td");
+                cell0 = document.createElement("td");
                 cellText = document.createTextNode(rowData.finish);
-                cell4.setAttribute("border", "1px solid black");
-                cell4.appendChild(cellText);
-                row.appendChild(cell4);
+                cell0.setAttribute("border", "1px solid black");
+                cell0.appendChild(cellText);
+                row.appendChild(cell0);
 
-                var cell5 = document.createElement("td");
+                cell0 = document.createElement("td");
                 cellText = document.createTextNode("State");
-                cell5.setAttribute("border", "1px solid black");
-                cell5.appendChild(cellText);
-                row.appendChild(cell5);
+                cell0.setAttribute("border", "1px solid black");
+                cell0.appendChild(cellText);
+                row.appendChild(cell0);
 
-                var cell6 = document.createElement("td");
+                cell0 = document.createElement("td");
                 cellText = document.createTextNode(rowData.role);
-                cell6.setAttribute("border", "1px solid black");
-                cell6.appendChild(cellText);
-                row.appendChild(cell6);
+                cell0.setAttribute("border", "1px solid black");
+                cell0.appendChild(cellText);
+                row.appendChild(cell0);
 
-                var cell7 = document.createElement("td");
+                cell0 = document.createElement("td");
                 cellText = document.createTextNode("Call");
-                cell7.setAttribute("border", "1px solid black");
-                cell7.appendChild(cellText);
-                row.appendChild(cell7);
+                cell0.setAttribute("border", "1px solid black");
+                cell0.appendChild(cellText);
+                row.appendChild(cell0);
 
-                var cell8 = document.createElement("td");
+                cell0 = document.createElement("td");
                 cellText = document.createTextNode("Freq");
-                cell8.setAttribute("border", "1px solid black");
-                cell8.appendChild(cellText);
-                row.appendChild(cell8);
+                cell0.setAttribute("border", "1px solid black");
+                cell0.appendChild(cellText);
+                row.appendChild(cell0);
             } else {
                 // create cells in row
                 var btn = document.createElement('input');
@@ -410,40 +416,40 @@
                     row.setAttribute("style", "font-family:verdana; font-size:15px; color:black; text-align:center;");
                 }
 
-                var cell0 = document.createElement("td");
+                cell0 = document.createElement("td");
                 cell0.setAttribute("border", "1px solid black");
                 cell0.appendChild(btn);
                 row.appendChild(cell0);
 
                 // create cells in row
-                var cell1 = document.createElement("td");
+                cell0 = document.createElement("td");
                 cellText = document.createTextNode(rowData.name);
-                cell1.setAttribute("border", "1px solid black");
+                cell0.setAttribute("border", "1px solid black");
                 if (g_selectedEvent == rowData.name) {
-                    cell1.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold; color:black; text-align:center;");
+                    cell0.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold; color:black; text-align:center;");
                 } else {
-                    cell1.setAttribute("style", "font-family:verdana; font-size:15px; color:black; text-align:center;");
+                    cell0.setAttribute("style", "font-family:verdana; font-size:15px; color:black; text-align:center;");
                 }
-                cell1.appendChild(cellText);
-                row.appendChild(cell1);
+                cell0.appendChild(cellText);
+                row.appendChild(cell0);
 
-                var cell2 = document.createElement("td");
+                cell0 = document.createElement("td");
                 cellText = document.createTextNode(rowData.version);
-                cell2.setAttribute("border", "1px solid black");
+                cell0.setAttribute("border", "1px solid black");
                 if (g_selectedEvent == rowData.name) {
-                    cell2.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold; color:black; text-align:center;");
+                    cell0.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold; color:black; text-align:center;");
                 } else {
-                    cell2.setAttribute("style", "font-family:verdana; font-size:15px; color:black; text-align:center;");
+                    cell0.setAttribute("style", "font-family:verdana; font-size:15px; color:black; text-align:center;");
                 }
-                cell2.appendChild(cellText);
-                row.appendChild(cell2);
+                cell0.appendChild(cellText);
+                row.appendChild(cell0);
 
-                var cell3 = document.createElement("td");
+                cell0 = document.createElement("td");
                 var start = new Date(Number(rowData.start));
                 cellText = document.createTextNode(start);
-                cell3.setAttribute("border", "1px solid black");
+                cell0.setAttribute("border", "1px solid black");
                 if (g_selectedEvent == rowData.name) {
-                    cell3.setAttribute("id", "datetimeStartCell");
+                    cell0.setAttribute("id", "datetimeStartCell");
                     var i = document.createElement("input");
                     i.setAttribute("id", "datetimeStart");
                     i.setAttribute("type", "datetime-local");
@@ -451,16 +457,16 @@
                     i.setAttribute("oninput", "newStartTime();");
                     i.setAttribute("value", epochToLocalDateTimeFormat(rowData.start));
                     console.log("Start time text =", epochToLocalDateTimeFormat(rowData.start));
-                    cell3.appendChild(i);
+                    cell0.appendChild(i);
                 } else {
-                    cell3.appendChild(cellText);
+                    cell0.appendChild(cellText);
                 }
-                row.appendChild(cell3);
+                row.appendChild(cell0);
 
-                var cell4 = document.createElement("td");
-                cell4.setAttribute("border", "1px solid black");
+                cell0 = document.createElement("td");
+                cell0.setAttribute("border", "1px solid black");
                 if (g_selectedEvent == rowData.name) {
-                    cell4.setAttribute("id", "datetimeFinishCell");
+                    cell0.setAttribute("id", "datetimeFinishCell");
                     var i = document.createElement("input");
                     i.setAttribute("id", "datetimeFinish");
                     i.setAttribute("type", "datetime-local");
@@ -468,25 +474,25 @@
                     i.setAttribute("oninput", "newFinishTime();");
                     i.setAttribute("value", epochToLocalDateTimeFormat(rowData.finish));
                     console.log("Start time text =", epochToLocalDateTimeFormat(rowData.finish));
-                    cell4.appendChild(i);
+                    cell0.appendChild(i);
                 } else {
                     var finish = new Date(Number(rowData.finish));
                     cellText = document.createTextNode(finish);
-                    cell4.appendChild(cellText);
+                    cell0.appendChild(cellText);
                 }
-                row.appendChild(cell4);
+                row.appendChild(cell0);
 
-                var cell5 = document.createElement("td");
+                cell0 = document.createElement("td");
                 var stat = statusMessageText(rowData.start, rowData.finish);
                 console.log("Status: ", stat);
                 cellText = document.createTextNode(stat);
-                cell5.setAttribute("border", "1px solid black");
-                cell5.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold; color:black;");
-                cell5.appendChild(cellText);
-                row.appendChild(cell5);
+                cell0.setAttribute("border", "1px solid black");
+                cell0.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold; color:black;");
+                cell0.appendChild(cellText);
+                row.appendChild(cell0);
 
-                var cell6 = document.createElement("td");
-                cell6.setAttribute("border", "1px solid black");
+                cell0 = document.createElement("td");
+                cell0.setAttribute("border", "1px solid black");
                 if (g_selectedEvent == rowData.name) {
 
                     var sel = document.createElement('select'),
@@ -510,18 +516,18 @@
                         console.log("TxType name:", g_typeTxNames[i].name);
                     }
 
-                    cell6.appendChild(sel);
+                    cell0.appendChild(sel);
                 } else {
                     cellText = document.createTextNode(rowData.role);
-                    cell6.appendChild(cellText);
+                    cell0.appendChild(cellText);
                 }
-                row.appendChild(cell6);
+                row.appendChild(cell0);
 
-                var cell7 = document.createElement("td");
+                cell0 = document.createElement("td");
                 console.log("Event Call:", rowData.callsign);
-                cell7.setAttribute("border", "1px solid black");
+                cell0.setAttribute("border", "1px solid black");
                 if (g_selectedEvent == rowData.name) {
-                    cell7.setAttribute("id", "datetimeFinishCell");
+                    cell0.setAttribute("id", "datetimeFinishCell");
                     var t = document.createElement("input");
                     t.setAttribute("type", "text");
                     t.setAttribute("id", "callText");
@@ -530,14 +536,14 @@
                     t.setAttribute("contenteditable", "true");
                     t.setAttribute("oninput", "callSignEntered();");
                     t.setAttribute("value", rowData.callsign);
-                    cell7.appendChild(t);
+                    cell0.appendChild(t);
                 } else {
                     cellText = document.createTextNode(rowData.callsign);
-                    cell7.appendChild(cellText);
+                    cell0.appendChild(cellText);
                 }
-                row.appendChild(cell7);
+                row.appendChild(cell0);
 
-                var cell8 = document.createElement("td");
+                cell0 = document.createElement("td");
                 if (g_selectedEvent == rowData.name) {
                     var b = document.createElement('input');
                     entry = rowData.name;
@@ -546,13 +552,13 @@
                     b.setAttribute("class", "incbutton");
                     b.setAttribute("value", freqDotFormat(rowData.freq));
                     b.setAttribute("onclick", "toggleFreqSettings();");
-                    cell8.appendChild(b);
+                    cell0.appendChild(b);
                 } else {
                     cellText = document.createTextNode(freqDotFormat(rowData.freq));
-                    cell8.appendChild(cellText);
+                    cell0.appendChild(cellText);
                 }
 
-                row.appendChild(cell8);
+                row.appendChild(cell0);
             }
 
             return row;
@@ -562,27 +568,25 @@
             updateDisplayedLocalTime();
 
             if (g_stillConnected) {
-                if (g_stillConnected) {
-                    g_stillConnected--;
-                    if (g_stillConnected == 0) {
-                        setOverlay("Disconnected");
-                        console.log("g_stillConnected timeout!!");
-                        g_timedOut = true;
-                        g_stillDisconnected = 20;
-                    }
+                g_stillConnected--;
+                if (g_stillConnected == 0) {
+                    setOverlay("Disconnected");
+                    console.log("g_stillConnected timeout!!");
+                    g_timedOut = true;
+                    g_stillDisconnected = 200;
                 }
             } else {
                 if (g_stillDisconnected) {
                     g_stillDisconnected--;
                     if (g_stillDisconnected == 0) {
-                        g_stillDisconnected = 20;
+                        g_stillDisconnected = 200;
                         //                webSocketStart();
                         //                console.log("Disconnected! Started new websocket");
                         console.log("Disconnected!");
                     }
                 }
             }
-        }, 1000);
+        }, 100);
 
         function webSocketStart() {
             var websocketcreated = true;
@@ -604,11 +608,11 @@
                     document.getElementById("xmtrTime").innerHTML = "Disconnected";
                     console.log("Unable to create web socket");
                     websocketcreated = false;
-                    setOverlay("Disconnected");
+                    setOverlay("Disconnected\nNo Socket");
                     if (g_numberOfOpenWebSockets) g_numberOfOpenWebSockets--;
                 }
             } else {
-                document.getElementById("xmtrTime").innerHTML = "Disconnected";
+                document.getElementById("xmtrTime").innerHTML = "Disconnected\nNo Socket Host";
                 console.log("No websocket host available.");
                 websocketcreated = false;
                 g_websock = null;
@@ -618,11 +622,12 @@
             if (websocketcreated == true) {
                 document.getElementById("xmtrTime").innerHTML = "Connected";
                 sendToSocket("EVENT_NAME,NEW!");
+                g_loading_data = true;
 
                 g_websock.onopen = function(evt) {
                     console.log("websock open");
                     websocketcreated = true;
-                    g_stillConnected = Math.max(20, g_stillConnected);
+                    g_stillConnected = Math.max(200, g_stillConnected);
                 };
 
                 g_websock.onclose = function(evt) {
@@ -649,11 +654,13 @@
                     var str = evt.data;
                     var arr = str.split(",");
 
-                    g_stillConnected = 5;
+                    g_stillConnected = Math.max(50, g_stillConnected);
                     if (g_timedOut) {
                         g_timedOut = false;
-                        setOverlay(null);
                     }
+
+                    if (!g_loading_data)
+                        setOverlay(null);
 
                     switch (arr[0]) {
 
@@ -697,6 +704,7 @@
 
                                 if (arr[1] == "Done") {
                                     displayEvents(false);
+                                    g_loading_data = false;
                                 } else {
                                     var eventLine = {
                                         name: arr[1],
@@ -765,8 +773,11 @@
 
                         case "SYNC":
                             {
-                                g_transmitterTimeMs = 1000 * arr[1] + 600;
-                                console.log("Tx time rcvd:", g_transmitterTimeMs);
+                                g_transmitterTimeMs = 1000 * arr[1];
+                                //                                console.log("Tx time rcvd:", g_transmitterTimeMs);
+                                var txd = new Date(g_transmitterTimeMs);
+                                document.getElementById("xmtrTime").innerHTML = "TX: " + txd;
+                                updateDisplayedLocalTime()
                             }
                             break;
 
@@ -894,9 +905,8 @@
 
         function start() {
             setOverlay("Loading Events...");
-            g_stillConnected = 20;
+            g_stillConnected = 200;
             webSocketStart();
-
         }
 
         function clamp(min, num, max) {
@@ -954,8 +964,10 @@
             }
 
             // Sync to seconds transition
-            while (d == Date()) {
-                d = Date();
+            n = Date();
+            while (d == n) {
+                //               console.log("Syncing...", d, n);
+                n = Date();
             };
 
             d = new Date();
@@ -964,6 +976,7 @@
             btext = "SYNC," + btext;
             console.log(btext);
             sendToSocket(btext);
+            updateDisplayedLocalTime();
 
             g_timeUpdateTimer = setInterval(function() {
                 if (g_stillConnected) {
@@ -977,7 +990,7 @@
                         }
                     }
                 }
-            }, 1000);
+            }, 100);
         }
 
         function sendTest() {
@@ -1145,9 +1158,7 @@
 
         function updateDisplayedLocalTime() {
             var d = Date();
-            var txd = new Date(g_transmitterTimeMs);
             document.getElementById("currentTime").innerHTML = "OS: " + d;
-            document.getElementById("xmtrTime").innerHTML = "TX: " + txd;
             updateTextFormatting();
         }
 
