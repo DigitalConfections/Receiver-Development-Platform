@@ -230,6 +230,12 @@ void linkbus_reset_rx(void)
 void linkbus_init(uint32_t baud)
 {
 	memset(rx_buffer, 0, sizeof(rx_buffer));
+
+	for(int bufferIndex=0; bufferIndex<LINKBUS_NUMBER_OF_TX_MSG_BUFFERS; bufferIndex++)
+	{
+		tx_buffer[bufferIndex][0] = '\0';
+	}
+
 	/*Set baud rate */
 	uint16_t myubrr = MYUBRR(baud);
 	UBRR0H = (uint8_t)(myubrr >> 8);
@@ -257,6 +263,21 @@ void linkbus_disable(void)
 	}
 }
 
+void linkbus_enable(void)
+{
+	uint8_t bufferIndex;
+
+	g_bus_disabled = FALSE;
+	UCSR0B = (1 << RXEN0) | (1 << TXEN0) | (1 << RXCIE0);
+
+	memset(rx_buffer, 0, sizeof(rx_buffer));
+
+	for(bufferIndex=0; bufferIndex<LINKBUS_NUMBER_OF_TX_MSG_BUFFERS; bufferIndex++)
+	{
+		tx_buffer[bufferIndex][0] = '\0';
+	}
+}
+
 void linkbus_setTerminalMode(BOOL on)
 {
 	g_lb_terminal_mode = on;
@@ -275,6 +296,7 @@ void linkbus_setTerminalMode(BOOL on)
 BOOL linkbus_send_text(char* text)
 {
 	BOOL err = TRUE;
+	uint16_t tries = 200;
 
 	if(g_bus_disabled) return err;
 
@@ -282,11 +304,11 @@ BOOL linkbus_send_text(char* text)
 	{
 		LinkbusTxBuffer* buff = nextEmptyTxBuffer();
 
-		while(!buff)
+		while(!buff && tries)
 		{
-			while(linkbusTxInProgress())
+			while(linkbusTxInProgress() && tries)
 			{
-				;   /* wait until transmit finishes */
+				if(tries) tries--;   /* wait until transmit finishes */
 			}
 			buff = nextEmptyTxBuffer();
 		}

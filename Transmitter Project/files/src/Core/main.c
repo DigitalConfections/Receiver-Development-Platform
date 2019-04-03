@@ -152,8 +152,9 @@ static volatile BOOL g_enableHardwareWDResets = FALSE;
 static volatile BOOL g_am_modulation_enabled = FALSE;
 
 static volatile BOOL g_go_to_sleep = FALSE;
-static volatile BOOL g_returned_from_sleep = FALSE;
+static volatile BOOL g_sleeping = FALSE;
 static volatile uint16_t g_seconds_left_to_sleep = 0;
+static volatile uint16_t g_seconds_to_sleep = 60;
 
 /***********************************************************************
  * Private Function Prototypes
@@ -167,6 +168,7 @@ void wdt_init(WDReset resetType);
 uint16_t throttleValue(uint8_t speed);
 void initializeTxWithSettings(time_t startTime);
 BOOL hw_init(void);
+BOOL rtc_init(void);
 void set_ports(InitActionType initType);
 
 
@@ -229,23 +231,22 @@ __attribute__((optimize("O0"))) ISR( INT0_vect )
 ISR( INT0_vect )
 #endif
 {
-#ifdef ENABLE_1_SEC_INTERRUPTS
-
 	system_tick();
 	g_tx_epoch_time++;
 
-	if(g_go_to_sleep)
+	if(g_sleeping)
 	{
 		if(g_seconds_left_to_sleep) g_seconds_left_to_sleep--;
 
 		if(!g_seconds_left_to_sleep)
 		{
-			g_returned_from_sleep = TRUE;
+			g_go_to_sleep = FALSE;
+			g_sleeping = FALSE;
 		}
-		else
-		{
-			set_ports(POWER_SLEEP);
-		}
+//		else
+//		{
+//			set_ports(POWER_SLEEP);
+//		}
 	}
 	else
 	{
@@ -386,17 +387,12 @@ ISR( INT0_vect )
 		}
 	}
 
-
-#else
-
 #ifdef ENABLE_TERMINAL_COMMS
 	if(g_terminal_mode)
 	{
 		lb_send_string("\nError: INT0 occurred!\n");
 	}
 #endif // ENABLE_TERMINAL_COMMS
-
-#endif
 }
 
 /***********************************************************************
@@ -992,33 +988,28 @@ ISR( PCINT2_vect )
 }
 
 
-BOOL hw_init(void)
+BOOL rtc_init(void)
 {
 	BOOL err = FALSE;
 
-	/**
-	 * Initialize the transmitter */
-	err = init_transmitter();
-
-	/**
-	 * The watchdog must be petted periodically to keep it from barking */
-	wdt_reset();                /* HW watchdog */
+	g_tx_epoch_time = ds3231_get_epoch(&err);
 
 	if(!err)
 	{
-		#ifdef INCLUDE_DS3231_SUPPORT
-			g_tx_epoch_time = ds3231_get_epoch(&err);
-
-			if(!err)
-			{
-				set_system_time(g_tx_epoch_time);
-				#ifdef ENABLE_1_SEC_INTERRUPTS
-					g_wifi_enable_delay = 5;
-					ds3231_1s_sqw(ON);
-				#endif    /* #ifdef ENABLE_1_SEC_INTERRUPTS */
-			}
-		#endif
+		set_system_time(g_tx_epoch_time);
+		g_wifi_enable_delay = 5;
+		ds3231_1s_sqw(ON);
 	}
+
+	return err;
+}
+
+
+BOOL hw_init(void)
+{
+	/**
+	 * Initialize the transmitter */
+	BOOL err = init_transmitter();
 
 	return err;
 }
@@ -1028,6 +1019,7 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 	if(initType == POWER_UP)
 	{
 		SMCR = 0x00; // clear sleep bit
+		PRR = 0x00; // enable all clocks
 
 		/** Hardware rev P1.0
 		 * Set up PortB  */
@@ -1150,8 +1142,6 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 		DDRD = 0x00;
 		PORTD = (1 << PORTD2); /* Allow RTC interrupts to continue */
 
-	//	PORTD &= ~((1 << PORTD6) | (1 << PORTD7));     /* Enable pull-ups on input pins, and set output levels on all outputs */
-
 		/** Hardware rev P1.0
 		 * Set up PortC */
 		// PC0 = ADC - 80M_ANTENNA_CONNECT
@@ -1216,7 +1206,9 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 
 	//	EICRA = 0;
 	//	EIMSK = 0;
-		EICRA  &= ~((1 << ISC01) | (1 << ISC00));	/* Configure INT0 for low level interrupts */
+	//	EICRA  &= ~((1 << ISC01) | (1 << ISC00));	/* Configure INT0 for low level interrupts */
+	//	EIMSK |= (1 << INT0);
+		EICRA  |= (1 << ISC01);	/* Configure INT0 falling edge for RTC 1-second interrupts */
 		EIMSK |= (1 << INT0);
 
 		/* Configure INT1 for antenna connect interrupts */
@@ -1225,12 +1217,14 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 		/**
 		Turn off UART
 		*/
-		linkbus_disable();
+//		linkbus_disable();
 
 		/**
 		Disable Watchdog timer
 		*/
 		wdt_init(WD_DISABLE);
+
+		g_sleeping = TRUE;
 
 		/* Disable brown-out detection
 		**/
@@ -1260,6 +1254,7 @@ int main( void )
 #ifdef ENABLE_TERMINAL_COMMS
 	BOOL err = FALSE;
 #endif // ENABLE_TERMINAL_COMMS
+	BOOL init_hardware = FALSE;
 
 	LinkbusRxBuffer* lb_buff = 0;
 
@@ -1280,18 +1275,7 @@ int main( void )
 	wdt_reset();                                    /* HW watchdog */
 #endif // TRANQUILIZE_WATCHDOG
 
-	/**
-	 * Initialize the transmitter */
-//	err = init_transmitter();
-
-	/**
-	 * The watchdog must be petted periodically to keep it from barking */
-//	wdt_reset();                /* HW watchdog */
-
-//	wifi_power(ON); // power on WiFi
-//	wifi_reset(OFF); // bring WiFi out of reset
-	// Uncomment the two lines above and set a breakpoint after this line to permit serial access to ESP8266 serial lines for programming
-	// You can then set a breakpoint on the line below to keep the serial port from being initialized
+	rtc_init();
 	linkbus_init(BAUD);
 
 	wdt_reset();                                    /* HW watchdog */
@@ -1349,12 +1333,26 @@ int main( void )
 			{
 				if(g_lastConversionResult[BATTERY_READING] > POWER_ON_VOLT_THRESH_MV)  /* Battery measurement indicates sufficient voltage */
 				{
-					if(!hw_init()) // initialize hardware that depends on i2c communications
-					{
-						g_sufficient_power_detected = TRUE;
-					}
+					g_sufficient_power_detected = TRUE;
+					init_hardware = TRUE;
 				}
 			}
+		}
+
+		if(init_hardware)
+		{
+			static BOOL hw_tries = 10;
+
+			if(hw_tries)
+			{
+				hw_tries--;
+				init_hardware = hw_init(); // initialize transmitter and related I2C devices
+			}
+//			else
+//			{
+				/* TODO:  If the transmitter hardware fails to initialize, report the failure to
+				    the user over WiFi. */
+//			}
 		}
 
 		/********************************
@@ -1362,9 +1360,18 @@ int main( void )
 		******************************/
 		if(g_go_to_sleep)
 		{
-			g_go_to_sleep = FALSE;
-			g_seconds_left_to_sleep = 60;
-			set_ports(POWER_SLEEP);
+			init_hardware = FALSE; // ensure failing attempts are canceled
+			g_sufficient_power_detected = FALSE; // init hardware on return from sleep
+			g_seconds_left_to_sleep = g_seconds_to_sleep; // MAX_UINT16;
+			linkbus_disable();
+			while(g_go_to_sleep) set_ports(POWER_SLEEP); // Sleep occurs here
+			set_ports(POWER_UP);
+			linkbus_enable();
+			wdt_init(WD_HW_RESETS); /* enable hardware interrupts */
+			wdt_reset();                    /* HW watchdog */
+			g_i2c_not_timed_out = FALSE;    /* unstick I2C */
+			g_wifi_enable_delay = 2;
+			g_WiFi_shutdown_seconds = 60;
 		}
 
 		if(g_report_seconds)
@@ -1381,15 +1388,6 @@ int main( void )
 			sprintf(g_tempStr, "%lu", g_tx_epoch_time);
 			lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
 			#endif
-		}
-
-		if(g_returned_from_sleep)
-		{
-			g_returned_from_sleep = FALSE;
-			linkbus_init(BAUD);
-			set_ports(POWER_UP);
-			wdt_init(WD_HW_RESETS); /* enable hardware interrupts */
-			g_wifi_enable_delay = 2;
 		}
 
 		/***********************************************************************

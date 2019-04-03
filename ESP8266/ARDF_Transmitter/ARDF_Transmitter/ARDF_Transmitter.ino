@@ -606,7 +606,7 @@ bool setupWiFiAPConnection()
 
     if (tries > 60)
     {
-      err = TRUE;
+      err = true;
       break;
     }
     else if ((tries == 20) || (tries == 40))
@@ -1088,6 +1088,7 @@ void httpWebServerLoop()
 
   bool progButtonPressed = false;
   bool sentComsOFF = false;
+  int debounceProgButton = 3;
 
   if (g_debug_prints_enabled)
   {
@@ -1218,7 +1219,15 @@ void httpWebServerLoop()
           if (toggle)
           {
             pinMode(RED_LED, INPUT);       /* Allow GPIO0 to be read */
-            progButtonPressed = !digitalRead(RED_LED);    /* Read GPIO0 */
+            if(!digitalRead(RED_LED)) {
+                debounceProgButton--;
+                if(!debounceProgButton) {
+                    progButtonPressed = true;
+                    debounceProgButton = 3;
+                }
+            } else {
+                debounceProgButton = 3;
+            }
             pinMode(RED_LED, OUTPUT);
           }
         }
@@ -1230,7 +1239,15 @@ void httpWebServerLoop()
 
           digitalWrite(RED_LED, LOW); /* Turn on red LED */
           pinMode(RED_LED, INPUT);    /* Allow GPIO0 to be read */
-          progButtonPressed = !digitalRead(RED_LED);    /* Read GPIO0 */
+            if(!digitalRead(RED_LED)) {
+                debounceProgButton--;
+                if(!debounceProgButton) {
+                    progButtonPressed = true;
+                    debounceProgButton = 3;
+                }
+            } else {
+                debounceProgButton = 3;
+            }
           pinMode(RED_LED, OUTPUT);
           digitalWrite(RED_LED, HIGH); /* Turn off red LED */
         }
@@ -1242,7 +1259,15 @@ void httpWebServerLoop()
           if (!toggle)
           {
             pinMode(RED_LED, INPUT);       /* Allow GPIO0 to be read */
-            progButtonPressed = !digitalRead(RED_LED);    /* Read GPIO0 */
+            if(!digitalRead(RED_LED)) {
+                debounceProgButton--;
+                if(!debounceProgButton) {
+                    progButtonPressed = true;
+                    debounceProgButton = 3;
+                }
+            } else {
+               debounceProgButton = 3;
+            }
             pinMode(RED_LED, OUTPUT);
           }
         }

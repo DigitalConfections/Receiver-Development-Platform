@@ -170,17 +170,23 @@ typedef struct
 void linkbus_init(uint32_t baud);
 
 /**
+ * Immediately turns off receiver and flushes receive buffer
+ */
+void linkbus_disable(void);
+
+/**
+ * Undoes linkbus_disable()
+ */
+void linkbus_enable(void);
+
+
+/**
  */
 void linkbus_end_tx(void);
 
 /**
  */
 void linkbus_reset_rx(void);
-
-/**
- * Immediately turns off receiver and flushes receive buffer
- */
-void linkbus_disable(void);
 
 /**
  */

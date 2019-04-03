@@ -57,7 +57,6 @@
 
 /******************************************************
  * Include only the necessary software support */
-#define ENABLE_1_SEC_INTERRUPTS
 //#define ENABLE_TERMINAL_COMMS
 
 /*******************************************************
@@ -168,6 +167,7 @@ typedef uint16_t BatteryLevel;  /* in milliVolts */
   })
 
 #define MAX_TIME 4294967295L
+#define MAX_UINT16 65535
 
 typedef enum
 {
