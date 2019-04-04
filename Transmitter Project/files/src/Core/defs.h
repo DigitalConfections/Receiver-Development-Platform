@@ -51,6 +51,7 @@
 #ifdef INCLUDE_DAC081C085_SUPPORT
    #define PA_DAC DAC081C_I2C_SLAVE_ADDR_A0
    #define AM_DAC DAC081C_I2C_SLAVE_ADDR_A1
+   #define BIAS_DAC DAC081C_I2C_SLAVE_ADDR_A2
 #endif
 
 /*******************************************************/

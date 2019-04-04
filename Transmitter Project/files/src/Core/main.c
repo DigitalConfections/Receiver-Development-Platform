@@ -225,6 +225,36 @@ void __attribute__((optimize("O1"))) wdt_init(WDReset resetType)
 }
 
 
+/***********************************************************************
+ * Handle antenna connection interrupts
+ **********************************************************************/
+#ifdef SELECTIVELY_DISABLE_OPTIMIZATION
+__attribute__((optimize("O0"))) ISR( INT1_vect )
+#else
+ISR( INT1_vect )
+#endif
+{
+	if(g_sleeping)
+	{
+		g_seconds_left_to_sleep = 0;
+		g_go_to_sleep = FALSE;
+		g_sleeping = FALSE;
+	}
+
+	if(PINC & (1 << PORTC0)) /* 80m antenna connected */
+	{
+		txSetBand(BAND_80M, OFF);
+	}
+	else if(PINC & (1 << PORTC1)) /* 2m antenna connected */
+	{
+		txSetBand(BAND_2M, OFF);
+	}
+}
+
+
+/***********************************************************************
+ * Handle RTC interrupts
+ **********************************************************************/
 #ifdef SELECTIVELY_DISABLE_OPTIMIZATION
 __attribute__((optimize("O0"))) ISR( INT0_vect )
 #else
@@ -997,7 +1027,6 @@ BOOL rtc_init(void)
 	if(!err)
 	{
 		set_system_time(g_tx_epoch_time);
-		g_wifi_enable_delay = 5;
 		ds3231_1s_sqw(ON);
 	}
 
@@ -1034,7 +1063,6 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 
 		DDRB |= (1 << PORTB0) | (1 << PORTB1) | (1 << PORTB6) | (1 << PORTB7);
 		PORTB |= (1 << PORTB2) | (1 << PORTB7); /* Turn on main power */
-	//	PORTB |= (1 << PORTB2); /* Bring unused port pin high */
 
 		/** Hardware rev P1.0
 		 * Set up PortD */
@@ -1062,25 +1090,8 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 		// PC6 = Reset
 		// PC7 = N/A
 
-		DDRC = 0b00000000;
+		DDRC = 0x00;
 		PORTC = I2C_PINS | (1 << PORTC2) | (1 << PORTC3);
-
-		/**
-		 * PD5 (OC0B) is tone output for AM modulation generation
-		 * TIMER0 */
-	//	OCR0A = 0x04;                                       /* set compare value */
-	//	TCCR0A |= (1 << WGM01);                             /* set CTC (MODE 2) with OCRA */
-	//	TCCR0A |= (1 << COM0B0);							/* Toggle OC0B on Compare Match */
-	//	TCCR0B |= (1 << CS02) | (1 << CS00);                /* 1024 Prescaler */
-	/*	TIMSK0 &= ~(1 << OCIE0B); // disable compare interrupt - disabled by default */
-
-		/**
-		* PB2 (OC1B) is PWM for output power level
-		* TIMER1 is for transmit power PWM */
-	//	OCR1B = DEFAULT_AM_DRIVE_LEVEL; /* Set initial duty cycle */
-	//	TCCR1A |= (1 << WGM10); /* 8-bit Phase Correct PWM mode */
-	//	TCCR1A |= (1 << COM1B1); /* Non-inverting mode */
-	//	TCCR1B |= (1 << CS11) | (1 << CS10); /* Prescaler */
 
 		/**
 		 * TIMER2 is for periodic interrupts */
@@ -1096,7 +1107,7 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 
 		/**
 		 * Set up pin interrupts */
-		/* Enable pin change interrupts PCINT8, PCINT9, */
+		/* Enable pin change interrupts PCINT8 - 80m, PCINT9 - 2m, */
 		// TODO
 
 	//	PCICR |= (1 << PCIE2) | (1 << PCIE1) | (1 << PCIE0);  /* Enable pin change interrupts PCI2, PCI1 and PCI0 */
@@ -1105,11 +1116,8 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 	//	PCMSK0 |= (1 << PORTB2);                                /* Do not enable interrupts until HW is ready */
 
 //		EICRA  |= ((1 << ISC01) | (1 << ISC00));	/* Configure INT0 rising edge for RTC 1-second interrupts */
-		EICRA  |= (1 << ISC01);	/* Configure INT0 falling edge for RTC 1-second interrupts */
-		EIMSK |= (1 << INT0);
-
-		/* Configure INT1 for antenna connect interrupts */
-		// TODO
+		EICRA  |= ((1 << ISC01) | (1 << ISC11));	/* Configure INT0 and INT1 falling edge for RTC 1-second interrupts */
+		EIMSK |= ((1 << INT0) | (1 << INT1));
 	}
 	else
 	{
@@ -1126,7 +1134,6 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 
 		DDRB = 0x00;     /* Set PORTD pin data directions */
 		PORTB = 0x00;
-	//	PORTB &= ~((1 << PORTB0) | (1 << PORTB1) | (1 << PORTB6) | (1 << PORTB7)); /* Turn off main power */
 
 		/** Hardware rev P1.0
 		* Set up PortD */
@@ -1140,7 +1147,7 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 		// PD7 = WIFI_ENABLE
 
 		DDRD = 0x00;
-		PORTD = (1 << PORTD2); /* Allow RTC interrupts to continue */
+		PORTD = ((1 << PORTD2) | (1 << PORTD3)); /* Allow RTC and antenna-connect interrupts to continue */
 
 		/** Hardware rev P1.0
 		 * Set up PortC */
@@ -1154,24 +1161,7 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 		// PC7 = N/A
 
 		DDRC = 0x00;
-		PORTC = 0x00;
-
-		/**
-		* PD5 (OC0B) is tone output for AM modulation generation
-		* TIMER0 */
-	//	OCR0A = 0x04;                                       /* set compare value */
-	//	TCCR0A |= (1 << WGM01);                             /* set CTC (MODE 2) with OCRA */
-	//	TCCR0A |= (1 << COM0B0);							/* Toggle OC0B on Compare Match */
-	//	TCCR0B |= (1 << CS02) | (1 << CS00);                /* 1024 Prescaler */
-	/*	TIMSK0 &= ~(1 << OCIE0B); // disable compare interrupt - disabled by default */
-
-		/**
-		* PB2 (OC1B) is PWM for output power level
-		* TIMER1 is for transmit power PWM */
-	//	OCR1B = DEFAULT_AM_DRIVE_LEVEL; /* Set initial duty cycle */
-	//	TCCR1A |= (1 << WGM10); /* 8-bit Phase Correct PWM mode */
-	//	TCCR1A |= (1 << COM1B1); /* Non-inverting mode */
-	//	TCCR1B |= (1 << CS11) | (1 << CS10); /* Prescaler */
+		PORTC = (1 << PORTC0) | (1 << PORTC1) | (1 << PORTC2) | (1 << PORTC3);
 
 		/**
 		 * TIMER2 is for periodic interrupts */
@@ -1183,12 +1173,10 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 		/**
 		 * Set up ADC */
 		ADMUX &= ~((1 << REFS0) | (1 << REFS1));
-		// ADCSRA &= ~((1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0) | (1 << ADEN));
 		ADCSRA = 0;
 
 		DIDR0 = 0x3f; // disable ADC pins
 		DIDR1 = 0x03; // disable analog inputs
-
 
 		/**
 		* Set up pin interrupts */
@@ -1199,17 +1187,9 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 		PCMSK0 = 0;
 		PCMSK1 = 0;
 		PCMSK2 = 0;
-	//	PCICR |= (1 << PCIE2) | (1 << PCIE1) | (1 << PCIE0);  /* Enable pin change interrupts PCI2, PCI1 and PCI0 */
-	//	PCMSK2 |= 0b10001000;                                   /* Enable port D pin change interrupts */
-	//	PCMSK1 |= (1 << PCINT10);                               /* Enable port C pin change interrupts on pin PC2 */
-	//	PCMSK0 |= (1 << PORTB2);                                /* Do not enable interrupts until HW is ready */
 
-	//	EICRA = 0;
-	//	EIMSK = 0;
-	//	EICRA  &= ~((1 << ISC01) | (1 << ISC00));	/* Configure INT0 for low level interrupts */
-	//	EIMSK |= (1 << INT0);
-		EICRA  |= (1 << ISC01);	/* Configure INT0 falling edge for RTC 1-second interrupts */
-		EIMSK |= (1 << INT0);
+		EICRA  |= ((1 << ISC01) | (1 << ISC11));	/* Configure INT0 and INT1 falling edge for RTC 1-second interrupts */
+		EIMSK |= ((1 << INT0) | (1 << INT1));
 
 		/* Configure INT1 for antenna connect interrupts */
 		// TODO
@@ -1251,9 +1231,8 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
  ************************************************************************/
 int main( void )
 {
-#ifdef ENABLE_TERMINAL_COMMS
-	BOOL err = FALSE;
-#endif // ENABLE_TERMINAL_COMMS
+	BOOL err = TRUE;
+	uint8_t tries = 10;
 	BOOL init_hardware = FALSE;
 
 	LinkbusRxBuffer* lb_buff = 0;
@@ -1275,8 +1254,14 @@ int main( void )
 	wdt_reset();                                    /* HW watchdog */
 #endif // TRANQUILIZE_WATCHDOG
 
-	rtc_init();
+	while(err && tries)
+	{
+		if(tries) tries--;
+		err = rtc_init();
+	}
+
 	linkbus_init(BAUD);
+	g_wifi_enable_delay = 5;
 
 	wdt_reset();                                    /* HW watchdog */
 
@@ -1341,7 +1326,7 @@ int main( void )
 
 		if(init_hardware)
 		{
-			static BOOL hw_tries = 10;
+			static BOOL hw_tries = 10; // give up after too many failures
 
 			if(hw_tries)
 			{
@@ -1351,7 +1336,8 @@ int main( void )
 //			else
 //			{
 				/* TODO:  If the transmitter hardware fails to initialize, report the failure to
-				    the user over WiFi. */
+				    the user over WiFi by sending an appropriate error code. This should be
+				    done for various other failure scenarios as well. */
 //			}
 		}
 

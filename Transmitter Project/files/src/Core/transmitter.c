@@ -29,6 +29,8 @@
 #include "transmitter.h"
 #include "i2c.h" /* DAC on 80m VGA of Rev X1 Receiver board */
 
+#define BUCK_9V 50
+
 #ifdef INCLUDE_TRANSMITTER_SUPPORT
 
 	static volatile BOOL g_tx_initialized = FALSE;
@@ -247,24 +249,28 @@
 		}
 	}
 
-	void txSetPowerLevel(uint8_t power)
+	BOOL txSetPowerLevel(uint8_t power)
 	{
+		BOOL err;
+
 		// Prevent possible damage to transmitter
 		if(g_activeBand == BAND_2M)
 		{
 			g_2m_power_level = MIN(power, MAX_2M_PWR_SETTING);
 			power = g_2m_power_level;
 			// TODO: Set modulation settings for appropriate power level
+			err = dac081c_set_dac(BUCK_9V, PA_DAC); /* set to 9V for the MAAP-011232 */
+			err |= dac081c_set_dac(power, BIAS_DAC); /* set negative bias for correct power output */
 		}
 		else
 		{
 			g_80m_power_level = MIN(power, MAX_80M_PWR_SETTING);
 			power = g_80m_power_level;
+			err = dac081c_set_dac(power, PA_DAC);
 		}
 
-		dac081c_set_dac(power, PA_DAC);
 
-		if(power == 0)
+		if(err || (power == 0))
 		{
 			PORTB &= ~(1 << PORTB6); /* Turn off Tx power */
 		}
@@ -272,6 +278,8 @@
 		{
 			PORTB |= (1 << PORTB6); /* Turn on Tx power */
 		}
+
+		return err;
 	}
 
 	uint8_t txGetPowerLevel(void)
@@ -319,16 +327,16 @@
 		initializeTransmitterEEPROMVars();
 
 		txSetBand(g_activeBand, OFF);    /* sets most tx settings leaving power to transmitter OFF */
-		txSetPowerLevel(0);
+		if(txSetPowerLevel(0)) return TRUE;
 
-		si5351_drive_strength(TX_CLOCK_HF_0, SI5351_DRIVE_8MA);
-		si5351_clock_enable(TX_CLOCK_HF_0, SI5351_CLK_DISABLED);
+		if(si5351_drive_strength(TX_CLOCK_HF_0, SI5351_DRIVE_8MA)) return TRUE;
+		if(si5351_clock_enable(TX_CLOCK_HF_0, SI5351_CLK_DISABLED)) return TRUE;
 
-		si5351_drive_strength(TX_CLOCK_HF_1, SI5351_DRIVE_8MA);
-		si5351_clock_enable(TX_CLOCK_HF_1, SI5351_CLK_DISABLED);
+		if(si5351_drive_strength(TX_CLOCK_HF_1, SI5351_DRIVE_8MA)) return TRUE;
+		if(si5351_clock_enable(TX_CLOCK_HF_1, SI5351_CLK_DISABLED)) return TRUE;
 
-		si5351_drive_strength(TX_CLOCK_VHF, SI5351_DRIVE_8MA);
-		si5351_clock_enable(TX_CLOCK_VHF, SI5351_CLK_DISABLED);
+		if(si5351_drive_strength(TX_CLOCK_VHF, SI5351_DRIVE_8MA)) return TRUE;
+		if(si5351_clock_enable(TX_CLOCK_VHF, SI5351_CLK_DISABLED)) return TRUE;
 
 		g_tx_initialized = TRUE;
 

@@ -187,7 +187,7 @@ typedef enum {
 
 /**
  */
-	void txSetPowerLevel(uint8_t power);
+	BOOL txSetPowerLevel(uint8_t power);
 
 /**
  */

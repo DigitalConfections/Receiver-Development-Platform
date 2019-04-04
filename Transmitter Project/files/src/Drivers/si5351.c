@@ -290,7 +290,7 @@
 
 			err |= si5351_write(SI5351_PLL_INPUT_SOURCE, reg_val);
 		}
-		
+
 		return err;
 	}
 
@@ -310,7 +310,7 @@
 				{
 					break;
 				}
-				
+
 				result = si5351_read(rd.Reg_Addr, &result_data);
 				if(result)
 				{
@@ -420,7 +420,7 @@
 			{
 				return(TRUE);
 			}
-			
+
 			if(freq_Fout > SI5351_CLKOUT_MAX_FREQ)
 			{
 				return(TRUE);
@@ -661,13 +661,13 @@
  * enable - 1 to enable, 0 to disable
  *
  */
-	void si5351_clock_enable(Si5351_clock clk, BOOL enable)
+	BOOL si5351_clock_enable(Si5351_clock clk, BOOL enable)
 	{
 		uint8_t reg_val;
 
 		if(si5351_read(SI5351_OUTPUT_ENABLE_CTRL, &reg_val))
 		{
-			return;
+			return TRUE;
 		}
 
 		if(enable)
@@ -679,7 +679,9 @@
 			reg_val |= (1 << (uint8_t)clk);
 		}
 
-		si5351_write(SI5351_OUTPUT_ENABLE_CTRL, reg_val);
+		if(si5351_write(SI5351_OUTPUT_ENABLE_CTRL, reg_val)) return TRUE;
+
+		return FALSE;
 	}
 
 
@@ -692,14 +694,14 @@
  * drive - Desired drive level
  *
  */
-	void si5351_drive_strength(Si5351_clock clk, Si5351_drive drive)
+	BOOL si5351_drive_strength(Si5351_clock clk, Si5351_drive drive)
 	{
 		uint8_t reg_val;
 		const uint8_t mask = 0x03;
 
 		if(si5351_read(SI5351_CLK0_CTRL + (uint8_t)clk, &reg_val))
 		{
-			return;
+			return TRUE;
 		}
 
 		switch(drive)
@@ -738,7 +740,9 @@
 			break;
 		}
 
-		si5351_write(SI5351_CLK0_CTRL + (uint8_t)clk, reg_val);
+		if(si5351_write(SI5351_CLK0_CTRL + (uint8_t)clk, reg_val)) return TRUE;
+
+		return FALSE;
 	}
 
 /*///////////////////////////////////////////////////////////////////////////////////////////////////////////////////// */
@@ -1190,17 +1194,17 @@
 			{
 				return(0);
 			}
-			
+
 			if(freqVCOB > 900000000)
 			{
 				return(0);
 			}
-			
+
 			if(freq_Fout > SI5351_MULTISYNTH_MAX_FREQ)
 			{
 				return(0);
 			}
-			
+
 			if(freq_Fout < SI5351_MULTISYNTH_MIN_FREQ)
 			{
 				return(0);
