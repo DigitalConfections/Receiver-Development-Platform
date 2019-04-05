@@ -55,6 +55,22 @@
 #endif
 
 /*******************************************************/
+/* Error Codes                                                                   */
+/*******************************************************/
+typedef enum {
+	ERROR_CODE_NO_ERROR = 0x00,
+	ERROR_CODE_SW_LOGIC_ERROR = 0xEE,
+	ERROR_CODE_WD_TIMEOUT = 0xF8,
+	ERROR_CODE_SUPPLY_VOLTAGE_ERROR = 0xF9,
+	ERROR_CODE_BUCK_REG_OUTOFSPEC = 0xFA,
+	ERROR_CODE_CLKGEN_NONRESPONSIVE = 0xFB,
+	ERROR_CODE_RTC_NONRESPONSIVE = 0xFC,
+	ERROR_CODE_DAC3_NONRESPONSIVE = 0xFD,
+	ERROR_CODE_DAC2_NONRESPONSIVE = 0xFE,
+	ERROR_CODE_DAC1_NONRESPONSIVE = 0xFF
+	} EC;
+
+/*******************************************************/
 
 /******************************************************
  * Include only the necessary software support */

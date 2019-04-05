@@ -249,9 +249,10 @@
 		}
 	}
 
-	BOOL txSetPowerLevel(uint8_t power)
+	EC txSetPowerLevel(uint8_t power)
 	{
 		BOOL err;
+		EC code = ERROR_CODE_NO_ERROR;
 
 		// Prevent possible damage to transmitter
 		if(g_activeBand == BAND_2M)
@@ -260,13 +261,16 @@
 			power = g_2m_power_level;
 			// TODO: Set modulation settings for appropriate power level
 			err = dac081c_set_dac(BUCK_9V, PA_DAC); /* set to 9V for the MAAP-011232 */
+			if(err) code = ERROR_CODE_DAC1_NONRESPONSIVE;
 			err |= dac081c_set_dac(power, BIAS_DAC); /* set negative bias for correct power output */
+			if(err) code = ERROR_CODE_DAC2_NONRESPONSIVE;
 		}
 		else
 		{
 			g_80m_power_level = MIN(power, MAX_80M_PWR_SETTING);
 			power = g_80m_power_level;
 			err = dac081c_set_dac(power, PA_DAC);
+			if(err) code = ERROR_CODE_DAC1_NONRESPONSIVE;
 		}
 
 
@@ -279,7 +283,7 @@
 			PORTB |= (1 << PORTB6); /* Turn on Tx power */
 		}
 
-		return err;
+		return code;
 	}
 
 	uint8_t txGetPowerLevel(void)
@@ -320,27 +324,29 @@
 		return g_am_modulation_enabled;
 	}
 
-	BOOL init_transmitter(void)
+	EC init_transmitter(void)
 	{
-		if(si5351_init(SI5351_CRYSTAL_LOAD_6PF, 0)) return TRUE;
+		EC code;
+
+		if((code = si5351_init(SI5351_CRYSTAL_LOAD_6PF, 0))) return code;
 
 		initializeTransmitterEEPROMVars();
 
 		txSetBand(g_activeBand, OFF);    /* sets most tx settings leaving power to transmitter OFF */
-		if(txSetPowerLevel(0)) return TRUE;
+		if((code = txSetPowerLevel(0))) return code;
 
-		if(si5351_drive_strength(TX_CLOCK_HF_0, SI5351_DRIVE_8MA)) return TRUE;
-		if(si5351_clock_enable(TX_CLOCK_HF_0, SI5351_CLK_DISABLED)) return TRUE;
+		if((code = si5351_drive_strength(TX_CLOCK_HF_0, SI5351_DRIVE_8MA))) return code;
+		if((code = si5351_clock_enable(TX_CLOCK_HF_0, SI5351_CLK_DISABLED))) return code;
 
-		if(si5351_drive_strength(TX_CLOCK_HF_1, SI5351_DRIVE_8MA)) return TRUE;
-		if(si5351_clock_enable(TX_CLOCK_HF_1, SI5351_CLK_DISABLED)) return TRUE;
+		if((code = si5351_drive_strength(TX_CLOCK_HF_1, SI5351_DRIVE_8MA))) return code;
+		if((code = si5351_clock_enable(TX_CLOCK_HF_1, SI5351_CLK_DISABLED))) return code;
 
-		if(si5351_drive_strength(TX_CLOCK_VHF, SI5351_DRIVE_8MA)) return TRUE;
-		if(si5351_clock_enable(TX_CLOCK_VHF, SI5351_CLK_DISABLED)) return TRUE;
+		if((code = si5351_drive_strength(TX_CLOCK_VHF, SI5351_DRIVE_8MA))) return code;
+		if((code = si5351_clock_enable(TX_CLOCK_VHF, SI5351_CLK_DISABLED))) return code;
 
 		g_tx_initialized = TRUE;
 
-		return FALSE;
+		return code;
 	}
 
 	void storeTtransmitterValues(void)

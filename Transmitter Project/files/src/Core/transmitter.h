@@ -159,7 +159,7 @@ typedef enum {
 #ifdef INCLUDE_TRANSMITTER_SUPPORT
 /**
  */
-	BOOL init_transmitter(void);
+	EC init_transmitter(void);
 
 /**
  */
@@ -187,7 +187,7 @@ typedef enum {
 
 /**
  */
-	BOOL txSetPowerLevel(uint8_t power);
+	EC txSetPowerLevel(uint8_t power);
 
 /**
  */

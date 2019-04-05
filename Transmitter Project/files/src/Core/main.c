@@ -67,6 +67,7 @@ typedef enum
  * Use "volatile" for globals shared between ISRs and foreground
  ************************************************************************/
 static char g_tempStr[21] = {'\0'};
+static EC g_last_error_code = ERROR_CODE_NO_ERROR;
 
 static volatile BOOL g_powering_off = FALSE;
 
@@ -81,11 +82,6 @@ static volatile BOOL g_initialization_complete = FALSE;
 
 static volatile uint8_t g_mod_up = MAX_2M_CW_DRIVE_LEVEL;
 static volatile uint8_t g_mod_down = MAX_2M_CW_DRIVE_LEVEL;
-
-#ifdef INCLUDE_DS3231_SUPPORT
-	static volatile uint32_t g_temp_time;
-	static volatile uint32_t g_tx_epoch_time; /* kluge to diagnose issue with system clock provided by time.h */
-#endif
 
 /* Linkbus variables */
 #ifdef ENABLE_TERMINAL_COMMS
@@ -167,8 +163,8 @@ void saveAllEEPROM(void);
 void wdt_init(WDReset resetType);
 uint16_t throttleValue(uint8_t speed);
 void initializeTxWithSettings(time_t startTime);
-BOOL hw_init(void);
-BOOL rtc_init(void);
+EC hw_init(void);
+EC rtc_init(void);
 void set_ports(InitActionType initType);
 
 
@@ -262,7 +258,6 @@ ISR( INT0_vect )
 #endif
 {
 	system_tick();
-	g_tx_epoch_time++;
 
 	if(g_sleeping)
 	{
@@ -280,6 +275,8 @@ ISR( INT0_vect )
 	}
 	else
 	{
+		time_t temp_time;
+
 		if(g_event_enabled)
 		{
 			if(g_event_commenced)
@@ -292,14 +289,9 @@ ISR( INT0_vect )
 				{
 					if(g_event_finish_time > 0)
 					{
-						g_temp_time = time(NULL);
+						temp_time = time(NULL);
 
-						if(g_temp_time != g_tx_epoch_time)
-						{
-							g_temp_time = g_tx_epoch_time;
-						}
-
-						if(g_temp_time >= g_event_finish_time)
+						if(temp_time >= g_event_finish_time)
 						{
 							g_on_the_air = 0;
 							g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
@@ -357,14 +349,9 @@ ISR( INT0_vect )
 			}
 			else if(g_event_start_time > 0) /* off the air - waiting for the start time to arrive */
 			{
-				g_temp_time = time(NULL);
+				temp_time = time(NULL);
 
-				if(g_temp_time != g_tx_epoch_time)
-				{
-					g_temp_time = g_tx_epoch_time;
-				}
-
-				if(g_temp_time >= g_event_start_time)
+				if(temp_time >= g_event_start_time)
 				{
 					if(g_intra_cycle_delay_time)
 					{
@@ -681,6 +668,7 @@ ISR(WDT_vect)
 	if(limit)
 	{
 		limit--;
+		g_last_error_code = ERROR_CODE_WD_TIMEOUT;
 
 #ifdef ENABLE_TERMINAL_COMMS
 		if(g_terminal_mode)
@@ -1018,29 +1006,37 @@ ISR( PCINT2_vect )
 }
 
 
-BOOL rtc_init(void)
+EC rtc_init(void)
 {
-	BOOL err = FALSE;
+	uint8_t tries = 10;
+	EC code = ERROR_CODE_SW_LOGIC_ERROR;
 
-	g_tx_epoch_time = ds3231_get_epoch(&err);
-
-	if(!err)
+	while(code && tries--)
 	{
-		set_system_time(g_tx_epoch_time);
-		ds3231_1s_sqw(ON);
+		time_t epoch_time = ds3231_get_epoch(&code);
+
+		if(code == ERROR_CODE_NO_ERROR)
+		{
+			set_system_time(epoch_time);
+			ds3231_1s_sqw(ON);
+		}
+		else
+		{
+			i2c_clearBus();
+		}
 	}
 
-	return err;
+	return code;
 }
 
 
-BOOL hw_init(void)
+EC hw_init(void)
 {
 	/**
 	 * Initialize the transmitter */
-	BOOL err = init_transmitter();
+	EC code = init_transmitter();
 
-	return err;
+	return code;
 }
 
 void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
@@ -1118,6 +1114,8 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 //		EICRA  |= ((1 << ISC01) | (1 << ISC00));	/* Configure INT0 rising edge for RTC 1-second interrupts */
 		EICRA  |= ((1 << ISC01) | (1 << ISC11));	/* Configure INT0 and INT1 falling edge for RTC 1-second interrupts */
 		EIMSK |= ((1 << INT0) | (1 << INT1));
+
+		i2c_init(); // initialize i2c bus
 	}
 	else
 	{
@@ -1231,7 +1229,7 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
  ************************************************************************/
 int main( void )
 {
-	BOOL err = TRUE;
+	EC code = ERROR_CODE_SW_LOGIC_ERROR;
 	uint8_t tries = 10;
 	BOOL init_hardware = FALSE;
 
@@ -1254,11 +1252,13 @@ int main( void )
 	wdt_reset();                                    /* HW watchdog */
 #endif // TRANQUILIZE_WATCHDOG
 
-	while(err && tries)
+	while(code && tries)
 	{
 		if(tries) tries--;
-		err = rtc_init();
+		code = rtc_init();
 	}
+
+	g_last_error_code = code;
 
 	linkbus_init(BAUD);
 	g_wifi_enable_delay = 5;
@@ -1268,7 +1268,7 @@ int main( void )
 #ifdef ENABLE_TERMINAL_COMMS
 	if(g_terminal_mode)
 	{
-		if(err)
+		if(code)
 		{
 			lb_send_NewLine();
 			lb_send_string("Init error!");
@@ -1286,7 +1286,7 @@ int main( void )
 #endif //ENABLE_TERMINAL_COMMS
 
 	{
-		lb_send_sync();                                 /* send test pattern to help synchronize baud rate with any attached device */
+		lb_send_sync();  /* send test pattern to help synchronize baud rate with any attached device */
 	}
 
 	wdt_reset();
@@ -1327,18 +1327,23 @@ int main( void )
 		if(init_hardware)
 		{
 			static BOOL hw_tries = 10; // give up after too many failures
+			code = ERROR_CODE_NO_ERROR;
 
 			if(hw_tries)
 			{
 				hw_tries--;
-				init_hardware = hw_init(); // initialize transmitter and related I2C devices
+				code = hw_init(); // initialize transmitter and related I2C devices
+				init_hardware = (code != ERROR_CODE_NO_ERROR);
 			}
-//			else
-//			{
-				/* TODO:  If the transmitter hardware fails to initialize, report the failure to
+
+			if(code)
+			{
+				/*  If the  hardware fails to initialize, report the failure to
 				    the user over WiFi by sending an appropriate error code. This should be
 				    done for various other failure scenarios as well. */
-//			}
+				g_last_error_code = code;
+
+			}
 		}
 
 		/********************************
@@ -1364,16 +1369,23 @@ int main( void )
 		{
 			g_report_seconds = FALSE;
 			#ifdef INCLUDE_DS3231_SUPPORT
-			g_temp_time = time(NULL);
+				sprintf(g_tempStr, "%lu", time(NULL));
+				lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
+			#endif
+		}
 
-			if(g_temp_time != g_tx_epoch_time)
+		if(g_last_error_code)
+		{
+			static EC last_ec = ERROR_CODE_NO_ERROR;
+
+			if(last_ec != g_last_error_code) // report an error only once
 			{
-				g_temp_time = g_tx_epoch_time;
+				last_ec = g_last_error_code;
+				sprintf(g_tempStr, "%u", last_ec);
+				lb_send_msg(LINKBUS_MSG_COMMAND, MESSAGE_ERRORCODE_LABEL, g_tempStr);
 			}
 
-			sprintf(g_tempStr, "%lu", g_tx_epoch_time);
-			lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
-			#endif
+			g_last_error_code = ERROR_CODE_NO_ERROR;
 		}
 
 		/***********************************************************************
@@ -1676,28 +1688,17 @@ int main( void )
 					{
 						if(lb_buff->fields[FIELD1][0])
 						{ /* Expected format:  2018-03-23T18:00:00 */
-							if((lb_buff->fields[FIELD1][13] == ':') && (lb_buff->fields[FIELD1][16] == ':'))
+							if((lb_buff->fields[FIELD1][10] == 'T') && (lb_buff->fields[FIELD1][13] == ':') && (lb_buff->fields[FIELD1][16] == ':'))
 							{
 								strncpy(g_tempStr, lb_buff->fields[FIELD1], 20);
 								#ifdef INCLUDE_DS3231_SUPPORT
-								ds3231_set_date_time(g_tempStr, RTC_CLOCK);
+									ds3231_set_date_time(g_tempStr, RTC_CLOCK);
 								#endif
 								initializeTxWithSettings(0);
 							}
 						}
-						else
-						{
-							g_tx_epoch_time = ds3231_get_epoch(NULL);
-						}
 
-						g_temp_time = time(NULL);
-
-						if(g_temp_time != g_tx_epoch_time)
-						{
-							g_temp_time = g_tx_epoch_time;
-						}
-
-						sprintf(g_tempStr, "%lu", g_temp_time);
+						sprintf(g_tempStr, "%lu", time(NULL));
 						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
 					}
 					else
@@ -1710,47 +1711,33 @@ int main( void )
 							strncpy(g_tempStr, lb_buff->fields[FIELD1], 20);
 							#ifdef INCLUDE_DS3231_SUPPORT
 								ds3231_set_date_time(g_tempStr, RTC_CLOCK);
-								g_tx_epoch_time = ds3231_get_epoch(NULL);
-								set_system_time(g_tx_epoch_time); // update system clock
-							#endif
+								set_system_time(ds3231_get_epoch(NULL)); // update system clock
+							#endif // INCLUDE_DS3231_SUPPORT
 							initializeTxWithSettings(0);
 						}
 						else
 						{
 							#ifdef INCLUDE_DS3231_SUPPORT
-							g_temp_time = time(NULL);
-
-							if(g_temp_time != g_tx_epoch_time)
-							{
-								g_temp_time = g_tx_epoch_time;
-							}
-
-							sprintf(g_tempStr, "%lu", g_tx_epoch_time);
-							lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
-							#endif
+								sprintf(g_tempStr, "%lu", time(NULL));
+								lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
+							#endif // INCLUDE_DS3231_SUPPORT
 						}
 					}
 					else if(lb_buff->type == LINKBUS_MSG_QUERY)
 					{
-						static volatile int32_t lastTime = 0;
+						static uint32_t lastTime = 0;
 
 						#ifdef INCLUDE_DS3231_SUPPORT
+							uint32_t temp_time = ds3231_get_epoch(NULL);
+							set_system_time(temp_time);
 
-//						g_temp_time	 = time(NULL);
-g_temp_time = ds3231_get_epoch(NULL);
-
-//						if(g_temp_time != g_tx_epoch_time)
-//						{
-//							g_temp_time = g_tx_epoch_time;
-//						}
-
-						if(g_temp_time != lastTime)
-						{
-							sprintf(g_tempStr, "%lu", g_temp_time);
-							lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
-							lastTime = g_temp_time;
-						}
-						#endif
+							if(temp_time != lastTime)
+							{
+								sprintf(g_tempStr, "%lu", temp_time);
+								lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
+								lastTime = temp_time;
+							}
+						#endif // INCLUDE_DS3231_SUPPORT
 					}
 				}
 				break;
@@ -2015,14 +2002,7 @@ g_temp_time = ds3231_get_epoch(NULL);
 					linkbus_setLineTerm("\n\n");
 					cli(); wdt_reset(); /* HW watchdog */ sei();
 					#ifdef INCLUDE_DS3231_SUPPORT
-					    g_temp_time = time(NULL);
-
-						if(g_temp_time != g_tx_epoch_time)
-						{
-							g_temp_time = g_tx_epoch_time;
-						}
-
-						sprintf(g_tempStr, "%lu", g_temp_time);
+						sprintf(g_tempStr, "%lu", time(NULL));
 						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
 						cli(); wdt_reset(); /* HW watchdog */ sei();
 					#endif
@@ -2105,18 +2085,11 @@ void initializeTxWithSettings(time_t startTime)
 	if(startTime > 0)
 	{
 		cli();
-		g_tx_epoch_time = ds3231_get_epoch(NULL);
-		set_system_time(g_tx_epoch_time); // update system clock
+		set_system_time(ds3231_get_epoch(NULL)); // update system clock
 		sei();
 	}
 
-	g_temp_time = time(NULL);
-	if(g_temp_time != g_tx_epoch_time)
-	{
-		g_temp_time = g_tx_epoch_time;
-	}
-
-	int32_t dif = difftime(g_temp_time, g_event_start_time); // returns arg1 - arg2
+	int32_t dif = difftime(time(NULL), g_event_start_time); // returns arg1 - arg2
 
 	if(dif >= 0) // start time is in the past
 	{
