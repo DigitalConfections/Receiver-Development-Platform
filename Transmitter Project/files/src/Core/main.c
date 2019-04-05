@@ -1977,6 +1977,10 @@ int main( void )
 					int32_t bat = BATTERY_PERCENTAGE(g_lastConversionResult[BATTERY_READING]);
 					bat = CLAMP(0, bat, 100);
 					lb_broadcast_num(bat, "!BAT");
+
+					/* The system clock gets re-initialized whenever a battery message is received. This is
+					     just to ensure the two stay closely in sync while the user interface is active */
+					set_system_time(ds3231_get_epoch(NULL)); // update system clock
 				}
 				break;
 
@@ -1987,6 +1991,7 @@ int main( void )
 				}
 				break;
 
+#ifdef ENABLE_TERMINAL_COMMS
 				case MESSAGE_ALL_INFO:
 				{
 					uint32_t temp;
@@ -2008,7 +2013,7 @@ int main( void )
 					#endif
 				}
 				break;
-
+#endif // ENABLE_TERMINAL_COMMS
 				default:
 				{
 #ifdef ENABLE_TERMINAL_COMMS

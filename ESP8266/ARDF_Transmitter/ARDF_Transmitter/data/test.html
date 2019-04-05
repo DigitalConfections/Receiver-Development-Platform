@@ -280,7 +280,7 @@
         function keyAction() {
             var btn = document.getElementById("keyButton");
 
-            if (btn.value == "Send") {
+            if (btn.value == "Xmit") {
                 btn.value = "Stop";
                 btn.setAttribute("style", "background-color: #FF0000;");
                 sendBand();
@@ -301,7 +301,7 @@
                     sendKeyDown();
                 }, 1000);
             } else {
-                btn.value = "Send";
+                btn.value = "Xmit";
                 var btext = "KEY_UP";
                 btn.setAttribute("style", "background-color: #4CAF50;");
                 console.log(btext);
@@ -322,6 +322,8 @@
                 // create cells in row
                 cell0 = document.createElement("td");
                 cell0.setAttribute("border", "1px solid black");
+                cellText = document.createTextNode("Transmitter");
+                cell0.appendChild(cellText);
                 row.appendChild(cell0);
 
                 cell0 = document.createElement("td");
@@ -374,7 +376,7 @@
                 btn.type = "button";
                 btn.className = "button";
                 btn.id = "keyButton";
-                btn.value = "Send";
+                btn.value = "Xmit";
                 btn.onclick = (function(entry) {
                     return function() {
                         keyAction();

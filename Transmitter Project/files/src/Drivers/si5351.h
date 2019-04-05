@@ -449,11 +449,11 @@ Frequency_Hz si5351_get_frequency(Si5351_clock clock);
 
 /**
  */
-BOOL si5351_clock_enable(Si5351_clock, BOOL);
+EC si5351_clock_enable(Si5351_clock, BOOL);
 
 /**
  */
-BOOL si5351_drive_strength(Si5351_clock, Si5351_drive);
+EC si5351_drive_strength(Si5351_clock, Si5351_drive);
 
 /**
  */

@@ -661,14 +661,11 @@
  * enable - 1 to enable, 0 to disable
  *
  */
-	BOOL si5351_clock_enable(Si5351_clock clk, BOOL enable)
+	EC si5351_clock_enable(Si5351_clock clk, BOOL enable)
 	{
 		uint8_t reg_val;
 
-		if(si5351_read(SI5351_OUTPUT_ENABLE_CTRL, &reg_val))
-		{
-			return TRUE;
-		}
+		if(si5351_read(SI5351_OUTPUT_ENABLE_CTRL, &reg_val)) return ERROR_CODE_RTC_NONRESPONSIVE;
 
 		if(enable)
 		{
@@ -679,9 +676,9 @@
 			reg_val |= (1 << (uint8_t)clk);
 		}
 
-		if(si5351_write(SI5351_OUTPUT_ENABLE_CTRL, reg_val)) return TRUE;
+		if(si5351_write(SI5351_OUTPUT_ENABLE_CTRL, reg_val)) return ERROR_CODE_RTC_NONRESPONSIVE;
 
-		return FALSE;
+		return ERROR_CODE_NO_ERROR;
 	}
 
 
@@ -694,14 +691,14 @@
  * drive - Desired drive level
  *
  */
-	BOOL si5351_drive_strength(Si5351_clock clk, Si5351_drive drive)
+	EC si5351_drive_strength(Si5351_clock clk, Si5351_drive drive)
 	{
 		uint8_t reg_val;
 		const uint8_t mask = 0x03;
 
 		if(si5351_read(SI5351_CLK0_CTRL + (uint8_t)clk, &reg_val))
 		{
-			return TRUE;
+			return ERROR_CODE_CLKGEN_NONRESPONSIVE;
 		}
 
 		switch(drive)
@@ -740,9 +737,9 @@
 			break;
 		}
 
-		if(si5351_write(SI5351_CLK0_CTRL + (uint8_t)clk, reg_val)) return TRUE;
+		if(si5351_write(SI5351_CLK0_CTRL + (uint8_t)clk, reg_val)) return ERROR_CODE_CLKGEN_NONRESPONSIVE;
 
-		return FALSE;
+		return ERROR_CODE_NO_ERROR;
 	}
 
 /*///////////////////////////////////////////////////////////////////////////////////////////////////////////////////// */

@@ -3089,6 +3089,24 @@ void handleLBMessage(String message)
       }
     }
   }
+  else if (type == LB_MESSAGE_ERROR_CODE)
+  {
+    String code = payload;
+    EC ec = (EC)payload.toInt();
+
+    if (g_debug_prints_enabled)
+    {
+        Serial.println("err=" + String(code));
+    }
+
+    if (ec)
+    {
+      if (g_numberOfSocketClients) {
+        String msg = String(String(SOCK_COMMAND_ERROR) + "," + code);
+        g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+      }
+    }
+  }
   else if (type == LB_MESSAGE_TEMP)
   {
     int16_t rawtemp = payload.toInt();

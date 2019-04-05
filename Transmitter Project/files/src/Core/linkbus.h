@@ -108,8 +108,10 @@ typedef enum
 	MESSAGE_ESP_COMM = 'E' * 100 + 'S' * 10 + 'P',  /* Communications with ESP8266 controller */
 	MESSAGE_GO = 'G' * 10 + 'O',					/* Start transmitting now without delay */
 
+#ifdef ENABLE_TERMINAL_COMMS
 	/* TTY USER MESSAGES */
 	MESSAGE_ALL_INFO = '?',                         /* Prints all receiver info */
+#endif // ENABLE_TERMINAL_COMMS
 
 	/* UTILITY MESSAGES */
 	MESSAGE_RESET = 'R' * 100 + 'S' * 10 + 'T',		/* Processor reset */
