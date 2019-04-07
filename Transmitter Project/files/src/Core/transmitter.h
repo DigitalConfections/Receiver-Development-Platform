@@ -214,7 +214,7 @@ void keyTransmitter(BOOL on);
 
 /**
  */
-void powerToTransmitter(BOOL on);
+BOOL powerToTransmitter(BOOL on);
 
 /**
  */
@@ -228,5 +228,8 @@ void txSetModulationLevels(uint8_t *high, uint8_t *low);
  */
 BOOL txMilliwattsToSettings(uint16_t powerMW, uint8_t* powerLevel, uint8_t* modLevelHigh, uint8_t* modLevelLow);
 
+/**
+ */
+BOOL txIsAntennaForBand(void);
 
 #endif  /* TRANSMITTER_H_ */

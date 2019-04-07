@@ -33,6 +33,8 @@
 
 #ifdef INCLUDE_TRANSMITTER_SUPPORT
 
+	extern AntConnType g_antenna_connect_state;
+
 	static volatile BOOL g_tx_initialized = FALSE;
 	static volatile Frequency_Hz g_2m_frequency = DEFAULT_TX_2M_FREQUENCY;
 	static volatile Frequency_Hz g_80m_frequency = DEFAULT_TX_80M_FREQUENCY;
@@ -191,10 +193,12 @@
 		return(g_activeBand);
 	}
 
-	void powerToTransmitter(BOOL on)
+	BOOL powerToTransmitter(BOOL on)
 	{
 		if(on)
 		{
+			if(!txIsAntennaForBand()) return TRUE;
+
 			if(g_activeBand == BAND_80M)
 			{
 				PORTB &= ~(1 << PORTB0); /* Turn VHF off */
@@ -210,6 +214,8 @@
 		{
 			PORTB &= ~((1 << PORTB0) | (1 << PORTB1)); /* Turn off both bands */
 		}
+
+		return FALSE;
 	}
 
 	void keyTransmitter(BOOL on)
@@ -499,4 +505,29 @@ BOOL txMilliwattsToSettings(uint16_t powerMW, uint8_t* powerLevel, uint8_t* modL
 	}
 
 	return FALSE;
+}
+
+BOOL txIsAntennaForBand(void)
+{
+	BOOL result = TRUE;
+
+	if(g_antenna_connect_state == ANT_ALL_DISCONNECTED)
+	{
+		result = FALSE;
+	}
+	else if(g_antenna_connect_state != ANT_2M_AND_80M_CONNECTED)
+	{
+		RadioBand b = txGetBand();
+
+		if(b == BAND_80M)
+		{
+			if(g_antenna_connect_state != ANT_80M_CONNECTED) result = FALSE;
+		}
+		else if(b == BAND_2M)
+		{
+			if(g_antenna_connect_state != ANT_2M_CONNECTED) result = FALSE;
+		}
+	}
+
+	return result;
 }

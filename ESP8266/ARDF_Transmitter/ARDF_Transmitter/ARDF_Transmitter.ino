@@ -2008,6 +2008,9 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 
         g_numberOfSocketClients = g_webSocketServer.connectedClients(false);
         //g_ESP_ATMEGA_Comm_State = TX_HTML_PAGE_SERVED;
+          
+        Serial.printf(LB_MESSAGE_TEMP_REQUEST); // request temperature reading
+        Serial.printf(LB_MESSAGE_BATTERY_REQUEST); // request battery level reading
       }
       break;
 
@@ -3051,9 +3054,14 @@ void showSettings()
 
 void handleLBMessage(String message)
 {
+  // e.g., "$EC,247;"
   //  bool isReply = message.charAt(0) == '!';
-  String type = message.substring(1, 4);
-  String payload = message.substring(5, message.indexOf(';'));
+  int firstDelimit = message.indexOf(',');
+  if(firstDelimit < 0) firstDelimit = message.indexOf(';');
+  if(firstDelimit < 0) firstDelimit = 4;
+  String type = message.substring(1, firstDelimit);
+  String payload = "";
+  if(message.indexOf(',') >= 0) payload = message.substring(firstDelimit+1, message.indexOf(';'));
 
   if (type == LB_MESSAGE_ESP)
   {
@@ -3099,7 +3107,7 @@ void handleLBMessage(String message)
         Serial.println("err=" + String(code));
     }
 
-    if (ec)
+//    if (ec)
     {
       if (g_numberOfSocketClients) {
         String msg = String(String(SOCK_COMMAND_ERROR) + "," + code);

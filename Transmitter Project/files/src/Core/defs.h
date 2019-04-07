@@ -60,6 +60,7 @@
 typedef enum {
 	ERROR_CODE_NO_ERROR = 0x00,
 	ERROR_CODE_SW_LOGIC_ERROR = 0xEE,
+	ERROR_CODE_NO_ANTENNA_FOR_BAND = 0xF7,
 	ERROR_CODE_WD_TIMEOUT = 0xF8,
 	ERROR_CODE_SUPPLY_VOLTAGE_ERROR = 0xF9,
 	ERROR_CODE_BUCK_REG_OUTOFSPEC = 0xFA,
@@ -105,6 +106,9 @@ typedef uint16_t BatteryLevel;  /* in milliVolts */
 
 #define POWER_OFF_VOLT_THRESH_MV VOLTS_2_4 /* 2.4 V = 2400 mV */
 #define POWER_ON_VOLT_THRESH_MV VOLTS_3_0  /* 3.0 V = 3000 mV */
+
+#define ANTENNA_DETECT_THRESH 20
+#define ANTENNA_DETECT_DEBOUNCE 50
 
 
 /*******************************************************/
@@ -193,6 +197,15 @@ typedef enum
 	UP = 1,
 	SETTOVALUE
 } IncrType;
+
+typedef enum
+{
+	ANT_CONNECTION_UNDETERMINED,
+	ANT_ALL_DISCONNECTED,
+	ANT_2M_CONNECTED,
+	ANT_80M_CONNECTED,
+	ANT_2M_AND_80M_CONNECTED
+} AntConnType;
 
 typedef enum
 {

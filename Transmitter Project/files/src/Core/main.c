@@ -74,11 +74,14 @@ static volatile BOOL g_powering_off = FALSE;
 static volatile BOOL g_radio_port_changed = FALSE;
 static volatile uint8_t g_wifi_enable_delay = 0;
 
-static volatile uint16_t g_tick_count = 0;
+static volatile uint16_t g_util_tick_countdown = 0;
 static volatile BOOL g_battery_measurements_active = FALSE;
 static volatile uint16_t g_maximum_battery = 0;
 static volatile BatteryType g_battery_type = BATTERY_UNKNOWN;
 static volatile BOOL g_initialization_complete = FALSE;
+
+static volatile BOOL g_antenna_connection_changed = TRUE;
+volatile AntConnType g_antenna_connect_state = ANT_CONNECTION_UNDETERMINED;
 
 static volatile uint8_t g_mod_up = MAX_2M_CW_DRIVE_LEVEL;
 static volatile uint8_t g_mod_down = MAX_2M_CW_DRIVE_LEVEL;
@@ -128,16 +131,22 @@ static volatile Frequency_Hz g_transmitter_freq = 0;
 
 #define BATTERY_READING 0
 #define PA_VOLTAGE_READING 1
+#define V12V_VOLTAGE_READING 2
+#define BAND_80M_ANTENNA 3
+#define BAND_2M_ANTENNA 4
 
+#define BAND_80M_ANT_DETECT ADCH0
+#define BAND_2M_ANT_DETECT ADCH1
+#define V12V_VOLTAGE ADCH2
 #define TX_PA_DRIVE_VOLTAGE ADCH6
 #define BAT_VOLTAGE ADCH7
-#define NUMBER_OF_POLLED_ADC_CHANNELS 2
-static const uint8_t activeADC[NUMBER_OF_POLLED_ADC_CHANNELS] = { BAT_VOLTAGE, TX_PA_DRIVE_VOLTAGE };
+#define NUMBER_OF_POLLED_ADC_CHANNELS 5
+static const uint8_t activeADC[NUMBER_OF_POLLED_ADC_CHANNELS] = { BAT_VOLTAGE, TX_PA_DRIVE_VOLTAGE, V12V_VOLTAGE, BAND_80M_ANT_DETECT, BAND_2M_ANT_DETECT };
 
-static const uint16_t g_adcChannelConversionPeriod_ticks[NUMBER_OF_POLLED_ADC_CHANNELS] = { TIMER2_0_5HZ, TIMER2_0_5HZ };
-static volatile uint16_t g_tickCountdownADCFlag[NUMBER_OF_POLLED_ADC_CHANNELS] = { TIMER2_0_5HZ, TIMER2_0_5HZ };
-static uint16_t g_filterADCValue[NUMBER_OF_POLLED_ADC_CHANNELS] = { 500, 500 };
-static volatile BOOL g_adcUpdated[NUMBER_OF_POLLED_ADC_CHANNELS] = { FALSE, FALSE };
+static const uint16_t g_adcChannelConversionPeriod_ticks[NUMBER_OF_POLLED_ADC_CHANNELS] = { TIMER2_0_5HZ, TIMER2_0_5HZ, TIMER2_0_5HZ, TIMER2_5_8HZ, TIMER2_5_8HZ };
+static volatile uint16_t g_tickCountdownADCFlag[NUMBER_OF_POLLED_ADC_CHANNELS] = { TIMER2_0_5HZ, TIMER2_0_5HZ, TIMER2_0_5HZ, TIMER2_5_8HZ, TIMER2_5_8HZ };
+static uint16_t g_filterADCValue[NUMBER_OF_POLLED_ADC_CHANNELS] = { 500, 500, 500, 500, 500 };
+static volatile BOOL g_adcUpdated[NUMBER_OF_POLLED_ADC_CHANNELS] = { FALSE, FALSE, FALSE, FALSE, FALSE };
 static volatile uint16_t g_lastConversionResult[NUMBER_OF_POLLED_ADC_CHANNELS];
 
 static volatile uint32_t g_PA_voltage = 0;
@@ -150,7 +159,7 @@ static volatile BOOL g_am_modulation_enabled = FALSE;
 static volatile BOOL g_go_to_sleep = FALSE;
 static volatile BOOL g_sleeping = FALSE;
 static volatile uint16_t g_seconds_left_to_sleep = 0;
-static volatile uint16_t g_seconds_to_sleep = 60;
+static volatile uint16_t g_seconds_to_sleep = MAX_UINT16;
 
 /***********************************************************************
  * Private Function Prototypes
@@ -166,6 +175,7 @@ void initializeTxWithSettings(time_t startTime);
 EC hw_init(void);
 EC rtc_init(void);
 void set_ports(InitActionType initType);
+BOOL antennaIsConnected(void);
 
 
 /***********************************************************************
@@ -230,20 +240,21 @@ __attribute__((optimize("O0"))) ISR( INT1_vect )
 ISR( INT1_vect )
 #endif
 {
-	if(g_sleeping)
-	{
-		g_seconds_left_to_sleep = 0;
-		g_go_to_sleep = FALSE;
-		g_sleeping = FALSE;
-	}
+//	if(g_sleeping)
+//	{
+//		g_seconds_left_to_sleep = 0;
+//		g_go_to_sleep = FALSE;
+//		g_sleeping = FALSE;
+//	}
+	BOOL ant = antennaIsConnected();
 
-	if(PINC & (1 << PORTC0)) /* 80m antenna connected */
+	if(!ant) // immediately detect disconnection
 	{
-		txSetBand(BAND_80M, OFF);
-	}
-	else if(PINC & (1 << PORTC1)) /* 2m antenna connected */
-	{
-		txSetBand(BAND_2M, OFF);
+		if(g_antenna_connect_state != ANT_ALL_DISCONNECTED)
+		{
+			g_antenna_connect_state = ANT_ALL_DISCONNECTED;
+			g_antenna_connection_changed = TRUE;
+		}
 	}
 }
 
@@ -257,13 +268,49 @@ __attribute__((optimize("O0"))) ISR( INT0_vect )
 ISR( INT0_vect )
 #endif
 {
+	static BOOL lastAntennaConnectionState = FALSE;
+	static uint8_t antennaReadCount = 3;
+	BOOL ant = antennaIsConnected();
+
+	if(!ant) // immediately detect disconnection
+	{
+		if(g_antenna_connect_state != ANT_ALL_DISCONNECTED)
+		{
+			g_antenna_connect_state = ANT_ALL_DISCONNECTED;
+			g_antenna_connection_changed = TRUE;
+		}
+	}
+	else if(g_antenna_connect_state == ANT_ALL_DISCONNECTED)
+	{
+		if(ant == lastAntennaConnectionState)
+		{
+			if(antennaReadCount)
+			{
+				antennaReadCount--;
+
+				if(!antennaReadCount)
+				{
+					g_antenna_connect_state = ANT_CONNECTION_UNDETERMINED;
+					g_antenna_connection_changed = TRUE;
+					antennaReadCount = 3;
+				}
+			}
+		}
+		else
+		{
+			antennaReadCount = 3;
+		}
+	}
+
+	lastAntennaConnectionState = ant;
+
 	system_tick();
 
 	if(g_sleeping)
 	{
 		if(g_seconds_left_to_sleep) g_seconds_left_to_sleep--;
 
-		if(!g_seconds_left_to_sleep)
+		if(!g_seconds_left_to_sleep || g_antenna_connection_changed)
 		{
 			g_go_to_sleep = FALSE;
 			g_sleeping = FALSE;
@@ -425,7 +472,7 @@ ISR( TIMER2_COMPB_vect )
 	static uint8_t amModulation = 0;
 	BOOL repeat, finished;
 
-	g_tick_count++;
+	if(g_util_tick_countdown) g_util_tick_countdown--;
 
 	static BOOL key = FALSE;
 
@@ -556,6 +603,21 @@ ISR( TIMER2_COMPB_vect )
 			}
 		}
 		else if(indexConversionInProcess == PA_VOLTAGE_READING)
+		{
+			lastResult = holdConversionResult;
+			g_PA_voltage = holdConversionResult;
+		}
+		else if (indexConversionInProcess == V12V_VOLTAGE_READING)
+		{
+			lastResult = holdConversionResult;
+			g_PA_voltage = holdConversionResult;
+		}
+		else if (indexConversionInProcess == BAND_80M_ANTENNA)
+		{
+			lastResult = holdConversionResult;
+			g_PA_voltage = holdConversionResult;
+		}
+		else if (indexConversionInProcess == BAND_2M_ANTENNA)
 		{
 			lastResult = holdConversionResult;
 			g_PA_voltage = holdConversionResult;
@@ -1020,10 +1082,6 @@ EC rtc_init(void)
 			set_system_time(epoch_time);
 			ds3231_1s_sqw(ON);
 		}
-		else
-		{
-			i2c_clearBus();
-		}
 	}
 
 	return code;
@@ -1098,7 +1156,7 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 
 		/**
 		 * Set up ADC */
-		ADMUX |= (1 << REFS0) | (1 << REFS1);
+		ADMUX |= (1 << REFS0) | (1 << REFS1); // Use internal 1.1V reference
 		ADCSRA |= (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0) | (1 << ADEN);
 
 		/**
@@ -1112,7 +1170,7 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 	//	PCMSK0 |= (1 << PORTB2);                                /* Do not enable interrupts until HW is ready */
 
 //		EICRA  |= ((1 << ISC01) | (1 << ISC00));	/* Configure INT0 rising edge for RTC 1-second interrupts */
-		EICRA  |= ((1 << ISC01) | (1 << ISC11));	/* Configure INT0 and INT1 falling edge for RTC 1-second interrupts */
+		EICRA  |= ((1 << ISC01) | (1 << ISC10));	/* Configure INT0 falling edge for RTC 1-second interrupts, and INT1 any logic change */
 		EIMSK |= ((1 << INT0) | (1 << INT1));
 
 		i2c_init(); // initialize i2c bus
@@ -1252,6 +1310,8 @@ int main( void )
 	wdt_reset();                                    /* HW watchdog */
 #endif // TRANQUILIZE_WATCHDOG
 
+	g_antenna_connect_state = antennaIsConnected() ? ANT_CONNECTION_UNDETERMINED : ANT_ALL_DISCONNECTED;
+
 	while(code && tries)
 	{
 		if(tries) tries--;
@@ -1291,7 +1351,8 @@ int main( void )
 
 	wdt_reset();
 
-	while(linkbusTxInProgress())
+	g_util_tick_countdown = 20;
+	while(linkbusTxInProgress() && g_util_tick_countdown)
 	{
 		;                                           /* wait until transmit finishes */
 	}
@@ -1353,7 +1414,7 @@ int main( void )
 		{
 			init_hardware = FALSE; // ensure failing attempts are canceled
 			g_sufficient_power_detected = FALSE; // init hardware on return from sleep
-			g_seconds_left_to_sleep = g_seconds_to_sleep; // MAX_UINT16;
+			g_seconds_left_to_sleep = g_seconds_to_sleep;
 			linkbus_disable();
 			while(g_go_to_sleep) set_ports(POWER_SLEEP); // Sleep occurs here
 			set_ports(POWER_UP);
@@ -1376,16 +1437,91 @@ int main( void )
 
 		if(g_last_error_code)
 		{
-			static EC last_ec = ERROR_CODE_NO_ERROR;
+//			static EC last_ec = ERROR_CODE_NO_ERROR;
 
-			if(last_ec != g_last_error_code) // report an error only once
+//			if(last_ec != g_last_error_code) // report an error only once
 			{
-				last_ec = g_last_error_code;
-				sprintf(g_tempStr, "%u", last_ec);
-				lb_send_msg(LINKBUS_MSG_COMMAND, MESSAGE_ERRORCODE_LABEL, g_tempStr);
+//				last_ec = g_last_error_code;
+				sprintf(g_tempStr, "%u", g_last_error_code);
+				lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ERRORCODE_LABEL, g_tempStr);
 			}
 
 			g_last_error_code = ERROR_CODE_NO_ERROR;
+		}
+
+		if(g_antenna_connection_changed)
+		{
+			static AntConnType lastAntennaConnectState = ANT_CONNECTION_UNDETERMINED;
+			static uint8_t confirmations = 5;
+
+			if(g_antenna_connect_state == ANT_CONNECTION_UNDETERMINED)
+			{
+				if(!g_util_tick_countdown)
+				{
+					AntConnType connection = ANT_CONNECTION_UNDETERMINED;
+
+					if(g_lastConversionResult[BAND_80M_ANTENNA] < ANTENNA_DETECT_THRESH)
+					{
+						connection = ANT_80M_CONNECTED;
+					}
+
+					if(g_lastConversionResult[BAND_2M_ANTENNA] < ANTENNA_DETECT_THRESH)
+					{
+						if(connection == ANT_80M_CONNECTED)
+						{
+							connection = ANT_2M_AND_80M_CONNECTED;
+						}
+						else
+						{
+							connection = ANT_2M_CONNECTED;
+						}
+					}
+
+					if(lastAntennaConnectState == connection)
+					{
+						if(confirmations)
+						{
+							confirmations--;
+							g_util_tick_countdown = ANTENNA_DETECT_DEBOUNCE;
+						}
+						else
+						{
+							g_antenna_connect_state = connection;
+							g_antenna_connection_changed = FALSE;
+
+							if(connection == ANT_80M_CONNECTED)
+							{
+								txSetBand(BAND_80M, OFF);
+
+								/* TODO: re-enable transmitter power and state if it is currently operating */
+							}
+							else if(connection == ANT_2M_CONNECTED)
+							{
+								txSetBand(BAND_2M, OFF);
+
+								/* TODO: re-enable transmitter power and state if it is currently operating */
+							}
+						}
+					}
+					else
+					{
+						confirmations = 5;
+					}
+
+					lastAntennaConnectState = connection;
+				}
+			}
+			else if(g_antenna_connect_state == ANT_ALL_DISCONNECTED)
+			{
+				powerToTransmitter(OFF);
+				g_antenna_connection_changed = FALSE;
+				lastAntennaConnectState = ANT_ALL_DISCONNECTED;
+			}
+			else /* logic error - this should not occur */
+			{
+				powerToTransmitter(OFF);
+				g_antenna_connection_changed = FALSE;
+			}
 		}
 
 		/***********************************************************************
@@ -1409,7 +1545,10 @@ int main( void )
 						if(ud == 'U')
 						{
 							g_mod_up = setting;
+#ifdef ENABLE_TERMINAL_COMMS
 							lb_broadcast_num(setting, "DRI U");
+#endif // ENABLE_TERMINAL_COMMS
+
 							txSetModulationLevels((uint8_t*)&g_mod_up, NULL);
 
 							if(txGetBand() == BAND_2M)
@@ -1423,20 +1562,27 @@ int main( void )
 						else if(ud == 'D')
 						{
 							g_mod_down = setting;
+
+#ifdef ENABLE_TERMINAL_COMMS
 							lb_broadcast_num(setting, "DRI D");
+#endif // ENABLE_TERMINAL_COMMS
 							txSetModulationLevels(NULL, (uint8_t*)&g_mod_down);
 						}
+#ifdef ENABLE_TERMINAL_COMMS
 						else
 						{
 							lb_send_string("DRI U|D 0-255\n");
 						}
+#endif // ENABLE_TERMINAL_COMMS
 					}
+
+#ifdef ENABLE_TERMINAL_COMMS
 					else
 					{
 						sprintf(g_tempStr, "U/D = %d/%d\n", g_mod_up, g_mod_down);
 						lb_send_string(g_tempStr);
 					}
-
+#endif // ENABLE_TERMINAL_COMMS
 				}
 				break;
 
@@ -1518,8 +1664,6 @@ int main( void )
 
 				case MESSAGE_TX_MOD:
 				{
-					Modulation m;
-
 					if(lb_buff->fields[FIELD1][0] == 'A') // AM
 					{
 						txSetModulation(MODE_AM);
@@ -1533,10 +1677,11 @@ int main( void )
 
 					g_am_modulation_enabled = txAMModulationEnabled();
 
-					m = txGetModulation();
-
+#ifdef ENABLE_TERMINAL_COMMS
+					Modulation m = txGetModulation();
 					sprintf(g_tempStr, "MOD=%s\n", m == MODE_AM ? "AM": m == MODE_CW ? "CW":"N/A");
 					lb_send_string(g_tempStr);
+#endif // ENABLE_TERMINAL_COMMS
 				}
 				break;
 
@@ -1577,8 +1722,10 @@ int main( void )
 						saveAllEEPROM();
 					}
 
+#ifdef ENABLE_TERMINAL_COMMS
 					pwr = txGetPowerLevel();
 					lb_send_value(pwr, "POW");
+#endif // ENABLE_TERMINAL_COMMS
 				}
 				break;
 
@@ -1593,19 +1740,26 @@ int main( void )
 				{
 					if(lb_buff->fields[FIELD1][0] == '1')
 					{
-						/* Set the Morse code pattern and speed */
-						cli();
-						BOOL repeat = TRUE;
-						makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
-						g_code_throttle = throttleValue(g_pattern_codespeed);
-						sei();
-						g_event_finish_time = MAX_TIME; // run for a long long time
-						g_on_air_seconds = 9999; // on period is very long
-						g_off_air_seconds = 0; // off period is very short
-						g_on_the_air = 9999; //  start out transmitting
-						g_time_to_send_ID_countdown = 9999; // wait a long time to send the ID
-						g_event_commenced = TRUE; // get things running immediately
-						g_event_enabled = TRUE; // get things running immediately
+						if(!txIsAntennaForBand())
+						{
+							g_last_error_code = ERROR_CODE_NO_ANTENNA_FOR_BAND;
+						}
+						else
+						{
+							/* Set the Morse code pattern and speed */
+							cli();
+							BOOL repeat = TRUE;
+							makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
+							g_code_throttle = throttleValue(g_pattern_codespeed);
+							sei();
+							g_event_finish_time = MAX_TIME; // run for a long long time
+							g_on_air_seconds = 9999; // on period is very long
+							g_off_air_seconds = 0; // off period is very short
+							g_on_the_air = 9999; //  start out transmitting
+							g_time_to_send_ID_countdown = 9999; // wait a long time to send the ID
+							g_event_commenced = TRUE; // get things running immediately
+							g_event_enabled = TRUE; // get things running immediately
+						}
 					}
 					else
 					{
@@ -2229,4 +2383,9 @@ uint16_t throttleValue(uint8_t speed)
 	speed = CLAMP(5, speed, 20);
 	temp = (7042L / (uint16_t)speed) / 10L;
 	return temp;
+}
+
+BOOL antennaIsConnected(void)
+{
+	return !(PIND & (1 << PORTD3));
 }

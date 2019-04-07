@@ -330,6 +330,7 @@ void lb_send_WDTError(void)
 	linkbus_send_text((char*)textWDT);
 }
 
+#ifdef ENABLE_TERMINAL_COMMS
 /***********************************************************************
  * lb_send_Help(void)
  ************************************************************************/
@@ -358,7 +359,7 @@ void lb_send_Help(void)
 
 	lb_send_NewLine();
 }
-
+#endif // ENABLE_TERMINAL_COMMS
 
 /***********************************************************************************
  *  Support for creating and sending various Terminal Mode Linkbus messages is provided below.
