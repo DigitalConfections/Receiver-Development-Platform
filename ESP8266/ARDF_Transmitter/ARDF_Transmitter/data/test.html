@@ -281,6 +281,9 @@
             var btn = document.getElementById("keyButton");
 
             if (btn.value == "Xmit") {
+                var x = document.getElementById("errorreport");
+                if (x != null) x.style.display = "none";
+
                 btn.value = "Stop";
                 btn.setAttribute("style", "background-color: #FF0000;");
                 sendBand();
@@ -654,6 +657,118 @@
                     setOverlay(null);
 
                     switch (arr[0]) {
+                        case "ERR_CODE":
+                            {
+                                var text;
+                                var ec = parseInt(arr[1], 10);
+
+                                switch (ec) {
+                                    //	ERROR_CODE_NO_ERROR = 0x00,
+                                    case 0x00:
+                                        {
+                                            text = "No error"
+                                        }
+                                        break;
+
+                                        //	ERROR_CODE_ILLEGAL_COMMAND_RCVD = 0xCE,
+                                    case 0xCE:
+                                        {
+                                            text = "Illegal command";
+                                        }
+                                        break;
+
+                                        //	ERROR_CODE_SW_LOGIC_ERROR = 0xCF,
+                                    case 0xCF:
+                                        {
+                                            text = "Software logic error";
+                                        }
+                                        break;
+
+                                        //	ERROR_CODE_NO_ANTENNA_FOR_BAND = 0xF7,
+                                    case 0xF7:
+                                        {
+                                            text = "No antenna connected for that band";
+                                            var btn = document.getElementById("keyButton");
+                                            if (btn != null) {
+                                                if (btn.value != "Xmit") {
+                                                    keyAction();
+                                                }
+                                            }
+                                        }
+                                        break;
+
+                                        //	ERROR_CODE_WD_TIMEOUT = 0xF8,
+                                    case 0xF8:
+                                        {
+                                            text = "Watchdog timeout";
+                                        }
+                                        break;
+
+                                        //	ERROR_CODE_SUPPLY_VOLTAGE_ERROR = 0xF9,
+                                    case 0xF9:
+                                        {
+                                            text = "Supply voltage out of range";
+                                        }
+                                        break;
+
+                                        //	ERROR_CODE_BUCK_REG_OUTOFSPEC = 0xFA,
+                                    case 0xFA:
+                                        {
+                                            text = "Power amplifier voltage out of range";
+                                        }
+                                        break;
+
+                                        //	ERROR_CODE_CLKGEN_NONRESPONSIVE = 0xFB,
+                                    case 0xFB:
+                                        {
+                                            text = "Signal generator not responding";
+                                        }
+                                        break;
+
+                                        //	ERROR_CODE_RTC_NONRESPONSIVE = 0xFC,
+                                    case 0xFC:
+                                        {
+                                            text = "Real-time clock not responding";
+                                        }
+                                        break;
+
+                                        //	ERROR_CODE_DAC3_NONRESPONSIVE = 0xFD,
+                                    case 0xFD:
+                                        {
+                                            text = "DAC3 not responding";
+                                        }
+                                        break;
+
+                                        //	ERROR_CODE_DAC2_NONRESPONSIVE = 0xFE,
+                                    case 0xFE:
+                                        {
+                                            text = "DAC2 not responding";
+                                        }
+                                        break;
+
+                                        //	ERROR_CODE_DAC1_NONRESPONSIVE = 0xFF
+                                    case 0xFF:
+                                        {
+                                            text = "DAC1 not responding";
+                                        }
+                                        break;
+
+                                    default:
+                                        {
+                                            text = "Undefined error - update file system"
+                                        }
+                                        break;
+                                }
+
+                                var e = "Error: " + text;
+                                var elem = document.getElementById("errorreport");
+                                if (elem != null) {
+                                    elem.innerHTML = e;
+                                    elem.setAttribute("style", "font-family:verdana; font-size:25px; color:Red; font-weight:bold; text-align:center;");
+                                }
+                                console.log("Error Code:" + arr[1]);
+                            }
+                            break;
 
                         case "EVENT_NAME":
                             {
@@ -945,8 +1060,7 @@
 
             if (msg === g_lastSocketTxMessage) {
                 if (msg != "TEST") {
-                    console.log("Repeated command ignored!");
-                    return;
+                    console.log("Note: Repeated command sent to transmitter (", msg, ")");
                 }
             }
 
@@ -1069,6 +1183,9 @@
         }
 
         function sendAction() {
+            var x = document.getElementById("errorreport");
+            if (x != null) x.style.display = "none";
+
             var text = document.getElementById("commandText").value;
             var btext = "PASS," + text;
             console.log(btext);
@@ -1169,10 +1286,11 @@
                 var command = x.value.toUpperCase();
                 var isValid = false;
                 var valid = /^[0-9a-zA-Z;,!?$ ]+$/;
+                var lastChar = command.substr(command.length - 1);
 
                 if (command.length > 0) {
                     x.value = command;
-                    if (command.match(valid) && ((command[0] == '$') || (command[0] == '!'))) {
+                    if (command.match(valid) && ((command[0] == '$') || (command[0] == '!')) && (lastChar == ';')) {
                         x.style.color = "blue";
                         isValid = true;
                     } else {
@@ -1187,23 +1305,35 @@
         }
 
         function bandClick() {
-            sendBand();
-            var band = document.getElementById("bandSelect").value;
-            var freqButton = document.getElementById("frequencyButton");
-            var modulationSet = document.getElementById("modSelect");
+            var btn = document.getElementById("keyButton");
 
-            hideFreqSet1();
+            if ((btn != null) && btn.value != "Xmit") {
+                var band = document.getElementById("bandSelect");
 
-            if (band == "80") {
-                g_eventRadioBand = "80m"
-                updateFreqButtonText();
-                freqButton.value = freqDotFormat(g_typeFrequency[0].frequency);
-                modulationSet.value = "CW";
+                if (g_eventRadioBand == "80m") {
+                    band.value = "80";
+                } else {
+                    band.value = "2";
+                }
             } else {
-                g_eventRadioBand = "2m";
-                updateFreqButtonText()
-                freqButton.value = freqDotFormat(g_typeFrequency[1].frequency);
-                modulationSet.value = "AM";
+                sendBand();
+                var band = document.getElementById("bandSelect").value;
+                var freqButton = document.getElementById("frequencyButton");
+                var modulationSet = document.getElementById("modSelect");
+
+                hideFreqSet1();
+
+                if (band == "80") {
+                    g_eventRadioBand = "80m"
+                    updateFreqButtonText();
+                    freqButton.value = freqDotFormat(g_typeFrequency[0].frequency);
+                    modulationSet.value = "CW";
+                } else {
+                    g_eventRadioBand = "2m";
+                    updateFreqButtonText()
+                    freqButton.value = freqDotFormat(g_typeFrequency[1].frequency);
+                    modulationSet.value = "AM";
+                }
             }
         }
 
@@ -1275,8 +1405,11 @@
 
         function updateDisplayedLocalTime() {
             var d = Date();
-            document.getElementById("currentTime").innerHTML = "OS: " + d;
-            updateTextFormatting();
+            var el = document.getElementById("currentTime");
+            if (el != null) {
+                el.innerHTML = "OS: " + d;
+                updateTextFormatting();
+            }
         }
 
         function newStartTime() {
@@ -1726,6 +1859,13 @@
                 </tr>
             </table>
 
+            <table>
+                <tr>
+                    <td style="text-align:right;">
+                        <p id="errorreport" style="display:none;"></p>
+                    </td>
+                </tr>
+            </table>
 
             <table border="1" id="eventTable"></table>
 

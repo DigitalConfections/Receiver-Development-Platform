@@ -2168,6 +2168,7 @@ int main( void )
 				}
 				break;
 #endif // ENABLE_TERMINAL_COMMS
+
 				default:
 				{
 #ifdef ENABLE_TERMINAL_COMMS
@@ -2180,6 +2181,7 @@ int main( void )
 
 					{
 						linkbus_reset_rx(); /* flush buffer */
+						g_last_error_code = ERROR_CODE_ILLEGAL_COMMAND_RCVD;
 					}
 				}
 				break;
