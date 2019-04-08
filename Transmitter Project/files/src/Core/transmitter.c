@@ -79,7 +79,6 @@
  */
 
 	void saveAllTransmitterEEPROM(void);
-	void initializeTransmitterEEPROMVars(void);
 
 /*
  *       This function sets the VFO frequency (CLK0 of the Si5351) based on the intended receive frequency passed in by the parameter (freq),
@@ -257,28 +256,39 @@
 
 	EC txSetPowerLevel(uint8_t power)
 	{
-		BOOL err;
+		BOOL err = FALSE;
 		EC code = ERROR_CODE_NO_ERROR;
 
-		// Prevent possible damage to transmitter
-		if(g_activeBand == BAND_2M)
+		if(!txIsAntennaForBand()) // no antenna attached
 		{
-			g_2m_power_level = MIN(power, MAX_2M_PWR_SETTING);
-			power = g_2m_power_level;
-			// TODO: Set modulation settings for appropriate power level
-			err = dac081c_set_dac(BUCK_9V, PA_DAC); /* set to 9V for the MAAP-011232 */
-			if(err) code = ERROR_CODE_DAC1_NONRESPONSIVE;
-			err |= dac081c_set_dac(power, BIAS_DAC); /* set negative bias for correct power output */
-			if(err) code = ERROR_CODE_DAC2_NONRESPONSIVE;
-		}
-		else
-		{
-			g_80m_power_level = MIN(power, MAX_80M_PWR_SETTING);
-			power = g_80m_power_level;
-			err = dac081c_set_dac(power, PA_DAC);
-			if(err) code = ERROR_CODE_DAC1_NONRESPONSIVE;
+			if(power > 0)
+			{
+				code = ERROR_CODE_NO_ANTENNA_PREVENTS_POWER_SETTING;
+				err = TRUE;
+			}
 		}
 
+		if(!err)
+		{
+			// Prevent possible damage to transmitter
+			if(g_activeBand == BAND_2M)
+			{
+				g_2m_power_level = MIN(power, MAX_2M_PWR_SETTING);
+				power = g_2m_power_level;
+				// TODO: Set modulation settings for appropriate power level
+				err = dac081c_set_dac(BUCK_9V, PA_DAC); /* set to 9V for the MAAP-011232 */
+				if(err) code = ERROR_CODE_DAC1_NONRESPONSIVE;
+				err |= dac081c_set_dac(power, BIAS_DAC); /* set negative bias for correct power output */
+				if(err) code = ERROR_CODE_DAC2_NONRESPONSIVE;
+			}
+			else
+			{
+				g_80m_power_level = MIN(power, MAX_80M_PWR_SETTING);
+				power = g_80m_power_level;
+				err = dac081c_set_dac(power, PA_DAC);
+				if(err) code = ERROR_CODE_DAC1_NONRESPONSIVE;
+			}
+		}
 
 		if(err || (power == 0))
 		{
@@ -355,7 +365,7 @@
 		return code;
 	}
 
-	void storeTtransmitterValues(void)
+	void storeTransmitterValues(void)
 	{
 		saveAllTransmitterEEPROM();
 	}
@@ -507,6 +517,8 @@ BOOL txMilliwattsToSettings(uint16_t powerMW, uint8_t* powerLevel, uint8_t* modL
 	return FALSE;
 }
 
+/**
+ */
 BOOL txIsAntennaForBand(void)
 {
 	BOOL result = TRUE;

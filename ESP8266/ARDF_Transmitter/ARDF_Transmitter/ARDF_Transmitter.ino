@@ -1345,7 +1345,7 @@ void httpWebServerLoop()
             g_ESP_ATMEGA_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
           }
           break;
-
+              
         case TX_HTML_REFRESH_EVENTS:
           {
             if (g_activeEvent != NULL) g_activeEvent->writeEventFile(); /* save any changes made to the active event */
@@ -1764,7 +1764,7 @@ void httpWebServerLoop()
             */
             switch (serialIndex)
             {
-              case 0:
+              case 0: // send finish time
                 {
                   tx = g_activeEvent->getTxSlotIndex();
                   role = g_activeEvent->getTxRoleIndex();
@@ -1775,49 +1775,48 @@ void httpWebServerLoop()
 
                   //                Serial.println("r=" + String(role) + "; s=" + String(tx));
 
-                  /* Note: message order matters! */
                   /* Finish time should be sent first */
                   lbMsg = String(LB_MESSAGE_STARTFINISH_SET_FINISH + String(convertTimeStringToEpoch(g_activeEvent->getEventFinishDateTime())) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              case 1:
+              case 1: // Message pattern
                 {
                   lbMsg = String(LB_MESSAGE_PATTERN_SET + (*txData).pattern + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              case 2:
+              case 2: // Off time
                 {
                   lbMsg = String(LB_MESSAGE_TIME_INTERVAL_SET0 + String((*txData).offTime) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
-
-              case 3:
+                    
+              case 3: // On time
                 {
                   lbMsg = String(LB_MESSAGE_TIME_INTERVAL_SET1 + String((*txData).onTime) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              case 4:
+              case 4: // Offset time
                 {
                   lbMsg = String(LB_MESSAGE_TIME_INTERVAL_SETD + String((*txData).delayTime) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              case 5:
+              case 5: // Station ID transmit interval
                 {
                   lbMsg = String(LB_MESSAGE_TIME_INTERVAL_SETID + String(g_activeEvent->getIDIntervalForRole(role)) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              case 6:
+              case 6: // Event band
                 {
                   String b;
 
@@ -1835,58 +1834,60 @@ void httpWebServerLoop()
                 }
                 break;
 
-              case 7:
+              case 7: // Transmit power for role
                 {
                   lbMsg = String(LB_MESSAGE_TX_POWER_SET + String(g_activeEvent->getPowerlevelForRole(role)) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              case 8:
+              case 8: // Modulation format
                 {
                   lbMsg = String(LB_MESSAGE_TX_MOD_SET + String(g_activeEvent->getEventModulation()) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              case 9:
+              case 9: // Frequency for role
                 {
                   lbMsg = String(LB_MESSAGE_TX_FREQ_SET + String(g_activeEvent->getFrequencyForRole(role)) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              case 10:
+              case 10: // Station ID
                 {
                   lbMsg = String(LB_MESSAGE_CALLSIGN_SET + g_activeEvent->getCallsign() + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              case 11:
+              case 11: // Message code speed
                 {
                   lbMsg = String(LB_MESSAGE_CODE_SPEED_SETPAT + String(g_activeEvent->getCodeSpeedForRole(role)) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              case 12:
+              case 12: // ID code speed
                 {
                   lbMsg = String(LB_MESSAGE_CODE_SPEED_SETID + g_activeEvent->getCallsignSpeed() + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              case 13:
+              case 13: // Start time
                 {
-                  /* Start time must be sent last */
+                  /* Start time is sent last */
                   lbMsg = String(LB_MESSAGE_STARTFINISH_SET_START + String(convertTimeStringToEpoch(g_activeEvent->getEventStartDateTime())) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              default:
+              default: // Have ATMega save everything in EEPROM
                 {
+                  lbMsg = String(LB_MESSAGE_PERM);
+                  Serial.println(stringObjToConstCharString(&lbMsg));
                   g_ESP_ATMEGA_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
                 }
                 break;

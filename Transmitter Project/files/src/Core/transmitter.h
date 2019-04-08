@@ -163,7 +163,7 @@ typedef enum {
 
 /**
  */
-	void storeTtransmitterValues(void);
+	void storeTransmitterValues(void);
 
 /**
  */
@@ -229,7 +229,12 @@ void txSetModulationLevels(uint8_t *high, uint8_t *low);
 BOOL txMilliwattsToSettings(uint16_t powerMW, uint8_t* powerLevel, uint8_t* modLevelHigh, uint8_t* modLevelLow);
 
 /**
+Returns TRUE if an antenna for the active band is connected to the transmitter
  */
 BOOL txIsAntennaForBand(void);
+
+/**
+ */
+void initializeTransmitterEEPROMVars(void);
 
 #endif  /* TRANSMITTER_H_ */

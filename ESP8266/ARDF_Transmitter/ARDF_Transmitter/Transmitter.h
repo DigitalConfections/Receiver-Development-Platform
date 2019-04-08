@@ -158,9 +158,10 @@ typedef enum {
 // LinkBus Messages
 #define LB_MESSAGE_ERROR_CODE "EC"
 #define LB_MESSAGE_STATUS_CODE "SC"
+#define LB_MESSAGE_PERM "$P;"
 #define LB_MESSAGE_ESP "ESP"
 #define LB_MESSAGE_ESP_WAKEUP "$ESP,0;" /* Wake up from reset */
-//#define LB_MESSAGE_ESP_ACTIVE "$ESP,1;" /* Ready with active event data */
+#define LB_MESSAGE_ESP_ACTIVE "$ESP,1;" /* Ready with active event data */
 #define LB_MESSAGE_ESP_SAVE "$ESP,2;" /* Save settings changes to file (keeps power up) */
 //#define LB_MESSAGE_ESP_SHUTDOWN "$ESP,3;" /* Shut down in 3 seconds */
 #define LB_MESSAGE_ESP_KEEPALIVE "$ESP,Z;" /* Keep alive for 2 minutes */

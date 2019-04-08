@@ -105,6 +105,7 @@ static uint16_t EEMEM ee_intra_cycle_delay_time;
 static uint16_t EEMEM ee_ID_time;
 static time_t EEMEM ee_start_time;
 static time_t EEMEM ee_finish_time;
+static BOOL EEMEM ee_event_enabled;
 
 static char g_messages_text[2][MAX_PATTERN_TEXT_LENGTH] = {"\0", "\0"};
 static volatile uint8_t g_id_codespeed = EEPROM_ID_CODE_SPEED_DEFAULT;
@@ -116,7 +117,7 @@ static volatile int16_t g_intra_cycle_delay_time = EEPROM_INTRA_CYCLE_DELAY_TIME
 static volatile int16_t g_ID_time = EEPROM_ID_TIME_INTERVAL_DEFAULT; /* amount of time between ID/callsign transmissions */
 static volatile time_t g_event_start_time = EEPROM_START_TIME_DEFAULT;
 static volatile time_t g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
-static volatile BOOL g_event_enabled = FALSE;
+static volatile BOOL g_event_enabled = EEPROM_EVENT_ENABLED_DEFAULT; /* indicates that the command to begin executing the event was received */
 static volatile BOOL g_event_commenced = FALSE;
 
 static volatile int32_t g_on_the_air = 0;
@@ -167,7 +168,7 @@ static volatile uint16_t g_seconds_to_sleep = MAX_UINT16;
  * These functions are available only within this file
  ************************************************************************/
 
-void initializeEEPROMVars(void);
+void initializeEEPROMVars(BOOL skipEventEnabled);
 void saveAllEEPROM(void);
 void wdt_init(WDReset resetType);
 uint16_t throttleValue(uint8_t speed);
@@ -176,6 +177,7 @@ EC hw_init(void);
 EC rtc_init(void);
 void set_ports(InitActionType initType);
 BOOL antennaIsConnected(void);
+void initializeAllEventSettings(BOOL disableEvent);
 
 
 /***********************************************************************
@@ -1298,7 +1300,7 @@ int main( void )
 
 	/**
 	 * Initialize internal EEPROM if needed */
-	initializeEEPROMVars();
+	initializeEEPROMVars(FALSE);
 
 	/**
 	 * Initialize port pins and timers */
@@ -1643,11 +1645,19 @@ int main( void )
 						/* WiFi is awake. Send it the current time */
 						sprintf(g_tempStr, "%lu", time(NULL));
 						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
+
+						if(!g_event_enabled) // no enabled event is stored in EEPROM
+						{
+							// Ask the ESP for the next scheduled event
+							sprintf(g_tempStr, "%lu", time(NULL));
+							lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ESP_LABEL, "1");
+						}
 					}
 					else if(f1 == '1')
 					{
 						/* ESP8266 is ready with event data */
-						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ESP_LABEL, "1");
+						// Prepare to receive event configuration settings
+						g_event_enabled = FALSE;
 					}
 					else if(f1 == '2') /* ESP module needs continuous power to save data */
 					{
@@ -1735,7 +1745,7 @@ int main( void )
 
 				case MESSAGE_PERM:
 				{
-					storeTtransmitterValues();
+					storeTransmitterValues();
 					saveAllEEPROM();
 				}
 				break;
@@ -1777,36 +1787,30 @@ int main( void )
 									g_last_error_code = ERROR_CODE_NO_ANTENNA_FOR_BAND;
 								}
 							}
-							else if (f1 == '2')
+							else if (f1 == '2') // enables an event stored in EEPROM
 							{
-								/* This command launches an event at its scheduled start time */
+								/* This command configures the transmitter to launch an event at its scheduled start time */
 								SC status;
-								EC err;
+								EC ec;
 
-								if(!g_event_start_time) g_event_start_time = time(NULL);
 								g_event_enabled = FALSE;
 
-								if(txIsAntennaForBand())
+								ec = activateEventUsingCurrentSettings(&status);
+
+								if(!ec)
 								{
-									err = activateEventUsingCurrentSettings(&status);
-
-									if(!err)
+									if(status)
 									{
-										g_event_enabled = TRUE;
+										g_last_status_code = status;
+									}
 
-										if(status)
-										{
-											g_last_status_code = status;
-										}
-									}
-									else
-									{
-										g_last_error_code = err;
-									}
+									g_event_enabled = TRUE;
+									saveAllEEPROM();            /* Make sure all  event values get saved */
+									storeTransmitterValues();
 								}
 								else
 								{
-									g_last_error_code = ERROR_CODE_NO_ANTENNA_FOR_BAND;
+									g_last_error_code = ec;
 								}
 							}
 						}
@@ -1819,15 +1823,8 @@ int main( void )
 						keyTransmitter(OFF);
 						powerToTransmitter(OFF);
 
-						if(lb_buff->fields[FIELD1][0] == '+')
-						{
-							set_ports(POWER_UP);
-						}
-						else if(lb_buff->fields[FIELD1][0] == 'S') // sleep
-						{
-							set_ports(POWER_SLEEP);
-						}
-
+						// Restore saved event settings
+						initializeAllEventSettings(FALSE);
 						g_last_status_code = STATUS_CODE_REPORT_IDLE;
 					}
 				}
@@ -1847,11 +1844,9 @@ int main( void )
 						if(mtime)
 						{
 							g_event_start_time = mtime;
-							g_event_enabled = TRUE;
 							cli();
 							set_system_time(ds3231_get_epoch(NULL)); // update system clock
 							sei();
-							activateEventUsingCurrentSettings(NULL);
 						}
 					}
 					else if(lb_buff->fields[FIELD1][0] == 'F')
@@ -1862,21 +1857,6 @@ int main( void )
 						}
 
 						if(mtime) g_event_finish_time = mtime;
-
-						cli();
-						g_event_enabled = FALSE;  // enabled when starttime is set
-						g_event_commenced = FALSE; // commences when starttime is reached
-						g_on_the_air = 0; // turn off all transmissions
-						sei();
-						g_event_start_time = 0;
-						g_on_air_seconds = 0;
-						g_off_air_seconds = 0;
-						g_intra_cycle_delay_time = 0;
-						g_messages_text[PATTERN_TEXT][0] = '\0';
-						g_pattern_codespeed = EEPROM_PATTERN_CODE_SPEED_DEFAULT;
-						g_ID_time = 0;
-
-						keyTransmitter(OFF);
 					}
 
 					if(mtime)
@@ -1905,7 +1885,6 @@ int main( void )
 								#ifdef INCLUDE_DS3231_SUPPORT
 									ds3231_set_date_time(g_tempStr, RTC_CLOCK);
 								#endif
-								activateEventUsingCurrentSettings(NULL);
 							}
 						}
 
@@ -1924,7 +1903,6 @@ int main( void )
 								ds3231_set_date_time(g_tempStr, RTC_CLOCK);
 								set_system_time(ds3231_get_epoch(NULL)); // update system clock
 							#endif // INCLUDE_DS3231_SUPPORT
-							activateEventUsingCurrentSettings(NULL);
 						}
 						else
 						{
@@ -2257,66 +2235,75 @@ int main( void )
 
 EC activateEventUsingCurrentSettings(SC* statusCode)
 {
-	// Make sure everything has been initialized
+	// Make sure everything has been sanely initialized
 	if(!g_event_start_time) return ERROR_CODE_EVENT_MISSING_START_TIME;
 	if(!g_on_air_seconds) return ERROR_CODE_EVENT_MISSING_TRANSMIT_DURATION;
-	//if(!g_off_air_seconds) return;
-	if(g_messages_text[PATTERN_TEXT][0] == '\0') return ERROR_CODE_EVENT_NOT_CONFIGURED;
-	if(!g_pattern_codespeed) return ERROR_CODE_EVENT_NOT_CONFIGURED;
-	//if(!g_transmitter_freq) return;
-	//if(!modulation_format) return;
-	//if(!power_level) return;
-	//if(!callsign) return;
-	//if(!csllsign_speed) return;
-	g_time_to_send_ID_countdown = g_ID_time;
+	if(g_intra_cycle_delay_time > (g_off_air_seconds + g_on_air_seconds)) return ERROR_CODE_EVENT_TIMING_ERROR;
+	if(g_messages_text[PATTERN_TEXT][0] == '\0') return ERROR_CODE_EVENT_PATTERN_NOT_SPECIFIED;
+	if(!g_pattern_codespeed) return ERROR_CODE_EVENT_PATTERN_CODE_SPEED_NOT_SPECIFIED;
+	if((g_messages_text[STATION_ID][0] != '\0') && (!g_id_codespeed || !g_ID_time)) return ERROR_CODE_EVENT_STATION_ID_ERROR;
 
-	int32_t dif = difftime(time(NULL), g_event_start_time); // returns arg1 - arg2
+	g_time_to_send_ID_countdown = g_ID_time; // countdown will not commence until event commences
 
-	if(dif >= 0) // start time is in the past
+	if(g_event_start_time < g_event_finish_time) // the event never ends
 	{
-		BOOL turnOnTransmitter = FALSE;
-		int cyclePeriod = g_on_air_seconds + g_off_air_seconds;
-		int secondsIntoCycle = dif % cyclePeriod;
-		int timeTillTransmit = g_intra_cycle_delay_time - secondsIntoCycle;
+		g_event_finish_time = MAX_TIME;
+	}
 
-		if(timeTillTransmit <= 0) // we should have started transmitting already
-		{
-			if(g_on_air_seconds <= -timeTillTransmit) // we should have finished transmitting in this cycle
-			{
-				g_on_the_air = -(cyclePeriod + timeTillTransmit);
-				if(statusCode) *statusCode = STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT;
-			}
-			else // we should be transmitting right now
-			{
-				g_on_the_air = g_on_air_seconds + timeTillTransmit;
-				turnOnTransmitter = TRUE;
-				if(statusCode) *statusCode = STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING;
-			}
-		}
-		else // not yet time time to transmit in this cycle
-		{
-			g_on_the_air = -timeTillTransmit;
-			if(statusCode) *statusCode = STATUS_CODE_WAITING_FOR_EVENT_START;
-		}
+	if(g_event_finish_time < time(NULL)) // the event has already finished
+	{
+		if(statusCode) *statusCode = STATUS_CODE_EVENT_FINISHED;
+	}
+	else
+	{
+		int32_t dif = difftime(time(NULL), g_event_start_time); // returns arg1 - arg2
 
-		if(turnOnTransmitter)
+		if(dif >= 0) // start time is in the past
 		{
-			cli();
-			BOOL repeat = TRUE;
-			makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
-			g_code_throttle = throttleValue(g_pattern_codespeed);
-			sei();
+			BOOL turnOnTransmitter = FALSE;
+			int cyclePeriod = g_on_air_seconds + g_off_air_seconds;
+			int secondsIntoCycle = dif % cyclePeriod;
+			int timeTillTransmit = g_intra_cycle_delay_time - secondsIntoCycle;
+
+			if(timeTillTransmit <= 0) // we should have started transmitting already
+			{
+				if(g_on_air_seconds <= -timeTillTransmit) // we should have finished transmitting in this cycle
+				{
+					g_on_the_air = -(cyclePeriod + timeTillTransmit);
+					if(statusCode) *statusCode = STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT;
+				}
+				else // we should be transmitting right now
+				{
+					g_on_the_air = g_on_air_seconds + timeTillTransmit;
+					turnOnTransmitter = TRUE;
+					if(statusCode) *statusCode = STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING;
+				}
+			}
+			else // not yet time time to transmit in this cycle
+			{
+				g_on_the_air = -timeTillTransmit;
+				if(statusCode) *statusCode = STATUS_CODE_WAITING_FOR_EVENT_START;
+			}
+
+			if(turnOnTransmitter)
+			{
+				cli();
+				BOOL repeat = TRUE;
+				makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
+				g_code_throttle = throttleValue(g_pattern_codespeed);
+				sei();
+			}
+			else
+			{
+				keyTransmitter(OFF);
+			}
+
+			g_event_commenced = TRUE;
 		}
-		else
+		else // start time is in the future
 		{
 			keyTransmitter(OFF);
 		}
-
-		g_event_commenced = TRUE;
-	}
-	else // start time is in the future
-	{
-		keyTransmitter(OFF);
 	}
 
 	return ERROR_CODE_NO_ERROR;
@@ -2325,7 +2312,7 @@ EC activateEventUsingCurrentSettings(SC* statusCode)
 /**********************
 **********************/
 
-void initializeEEPROMVars(void)
+void initializeEEPROMVars(BOOL skipEventEnabled)
 {
 	uint8_t i;
 
@@ -2334,6 +2321,7 @@ void initializeEEPROMVars(void)
 		g_event_start_time = eeprom_read_dword((uint32_t*)(&ee_start_time));
 		g_event_finish_time = eeprom_read_dword((uint32_t*)(&ee_finish_time));
 
+		if(!skipEventEnabled) g_event_enabled = eeprom_read_byte(&ee_event_enabled);
 		g_pattern_codespeed = eeprom_read_byte(&ee_pattern_codespeed);
 		g_id_codespeed = eeprom_read_byte(&ee_id_codespeed);
 		g_on_air_seconds = eeprom_read_word(&ee_on_air_time);
@@ -2357,6 +2345,8 @@ void initializeEEPROMVars(void)
 	{
 		g_event_start_time = EEPROM_START_TIME_DEFAULT;
 		g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
+
+		if(!skipEventEnabled) g_event_enabled = EEPROM_EVENT_ENABLED_DEFAULT;
 
 		g_id_codespeed = EEPROM_ID_CODE_SPEED_DEFAULT;
 		g_pattern_codespeed = EEPROM_PATTERN_CODE_SPEED_DEFAULT;
@@ -2382,6 +2372,7 @@ void saveAllEEPROM()
 	eeprom_update_dword((uint32_t*)&ee_start_time, g_event_start_time);
 	eeprom_update_dword((uint32_t*)&ee_finish_time, g_event_finish_time);
 
+	eeprom_update_byte(&ee_event_enabled, g_event_enabled);
 	eeprom_update_byte(&ee_id_codespeed, g_id_codespeed);
 	eeprom_update_byte(&ee_pattern_codespeed, g_pattern_codespeed);
 	eeprom_update_word(&ee_on_air_time, g_on_air_seconds);
@@ -2415,4 +2406,20 @@ uint16_t throttleValue(uint8_t speed)
 BOOL antennaIsConnected(void)
 {
 	return !(PIND & (1 << PORTD3));
+}
+
+void initializeAllEventSettings(BOOL disableEvent)
+{
+	if(disableEvent)
+	{
+		cli();
+		g_event_enabled = FALSE;  // enabled by WiFi - Stored
+		g_event_commenced = FALSE; // commences when starttime is reached - not stored
+		g_on_the_air = 0; // turn off any ongoing transmission - not stored
+		sei();
+		keyTransmitter(OFF); // turn off the transmit signal
+	}
+
+	initializeEEPROMVars(disableEvent);
+	initializeTransmitterEEPROMVars();
 }
