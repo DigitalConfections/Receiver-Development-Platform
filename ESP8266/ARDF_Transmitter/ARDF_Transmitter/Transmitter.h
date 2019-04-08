@@ -87,11 +87,16 @@
 #define TX_MAX_ALLOWED_FREQUENCY_HZ 148000000
 #define TX_MIN_ALLOWED_FREQUENCY_HZ 3500000
 
-// Error Codes
+/*******************************************************/
+/* Error Codes                                                                   */
+/*******************************************************/
 typedef enum {
 	ERROR_CODE_NO_ERROR = 0x00,
-    ERROR_CODE_ILLEGAL_COMMAND = 0xCE,
-	ERROR_CODE_SW_LOGIC_ERROR = 0xCF,
+	ERROR_CODE_EVENT_MISSING_TRANSMIT_DURATION = 0xCB,
+	ERROR_CODE_EVENT_MISSING_START_TIME = 0xCC,
+	ERROR_CODE_EVENT_NOT_CONFIGURED = 0xCD,
+    ERROR_CODE_ILLEGAL_COMMAND_RCVD = 0xCE,
+    ERROR_CODE_SW_LOGIC_ERROR = 0xCF,
 	ERROR_CODE_NO_ANTENNA_FOR_BAND = 0xF7,
 	ERROR_CODE_WD_TIMEOUT = 0xF8,
 	ERROR_CODE_SUPPLY_VOLTAGE_ERROR = 0xF9,
@@ -103,8 +108,23 @@ typedef enum {
 	ERROR_CODE_DAC1_NONRESPONSIVE = 0xFF
 	} EC;
 
+/*******************************************************/
+/* Status Codes                                                                 */
+/*******************************************************/
+typedef enum {
+	STATUS_CODE_IDLE = 0x00,
+	STATUS_CODE_RETURNED_FROM_SLEEP = 0xF9,
+	STATUS_CODE_BEGINNING_XMSN_THIS_CYCLE = 0xFA,
+	STATUS_CODE_SENDING_ID = 0xFB,
+	STATUS_CODE_EVENT_FINISHED = 0xFC,
+	STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING = 0xFD,
+	STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT = 0xFE,
+	STATUS_CODE_WAITING_FOR_EVENT_START = 0xFF
+	} SC;
+
 // Websocket Command Messages
 #define SOCK_COMMAND_ERROR "ERR_CODE" 
+#define SOCK_COMMAND_STATUS "STATUS"
 #define SOCK_COMMAND_EVENT_NAME "EVENT_NAME" /* read only */
 #define SOCK_COMMAND_EVENT_FILE_VERSION "FILE_VERSION" /* read only */
 #define SOCK_COMMAND_EVENT_DATA "EVENT_DATA" /* read only */
@@ -137,11 +157,12 @@ typedef enum {
 
 // LinkBus Messages
 #define LB_MESSAGE_ERROR_CODE "EC"
+#define LB_MESSAGE_STATUS_CODE "SC"
 #define LB_MESSAGE_ESP "ESP"
 #define LB_MESSAGE_ESP_WAKEUP "$ESP,0;" /* Wake up from reset */
-#define LB_MESSAGE_ESP_ACTIVE "$ESP,1;" /* Ready with active event data */
+//#define LB_MESSAGE_ESP_ACTIVE "$ESP,1;" /* Ready with active event data */
 #define LB_MESSAGE_ESP_SAVE "$ESP,2;" /* Save settings changes to file (keeps power up) */
-#define LB_MESSAGE_ESP_SHUTDOWN "$ESP,3;" /* Shut down in 3 seconds */
+//#define LB_MESSAGE_ESP_SHUTDOWN "$ESP,3;" /* Shut down in 3 seconds */
 #define LB_MESSAGE_ESP_KEEPALIVE "$ESP,Z;" /* Keep alive for 2 minutes */
 #define LB_MESSAGE_TIME "TIM"
 #define LB_MESSAGE_TIME_SET "$TIM," /* Prefix for sending RTC time setting to ATMEGA */

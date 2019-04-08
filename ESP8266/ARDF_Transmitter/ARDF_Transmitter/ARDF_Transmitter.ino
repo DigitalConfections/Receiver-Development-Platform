@@ -1316,8 +1316,10 @@ void httpWebServerLoop()
               if (g_activeEvent == NULL) g_activeEvent = new Event(g_debug_prints_enabled);
               g_activeEvent->readEventFile(g_eventList[0].path);
               g_activeEventIndex = 0;
-              String lbMsg = String(LB_MESSAGE_ESP_ACTIVE);
+              // String lbMsg = String(LB_MESSAGE_ESP_ACTIVE);
               //              Serial.printf(stringObjToConstCharString(&lbMsg)); // Send ESP message to ATMEGA
+
+                /* TODO: configure the transmitter for the scheduled event, then shut down WiFi */
             }
             else
             {

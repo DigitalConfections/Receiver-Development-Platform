@@ -32,7 +32,7 @@
 
 /******************************************************
  * Set the text that gets displayed to the user */
-#define SW_REVISION "P1.0.0"
+#define SW_REVISION "P1.0.1"
 
 //#define TRANQUILIZE_WATCHDOG
 
@@ -47,6 +47,7 @@
    #define INCLUDE_DS3231_SUPPORT // Maxim RTC
    #define INCLUDE_TRANSMITTER_SUPPORT
    #define INCLUDE_DAC081C085_SUPPORT
+//   #define ENABLE_PIN_CHANGE_INTERRUPT_1
 
 #ifdef INCLUDE_DAC081C085_SUPPORT
    #define PA_DAC DAC081C_I2C_SLAVE_ADDR_A0
@@ -59,6 +60,10 @@
 /*******************************************************/
 typedef enum {
 	ERROR_CODE_NO_ERROR = 0x00,
+	ERROR_CODE_REPORT_NO_ERROR = 0x01,
+	ERROR_CODE_EVENT_MISSING_TRANSMIT_DURATION = 0xCB,
+	ERROR_CODE_EVENT_MISSING_START_TIME = 0xCC,
+	ERROR_CODE_EVENT_NOT_CONFIGURED = 0xCD,
     ERROR_CODE_ILLEGAL_COMMAND_RCVD = 0xCE,
     ERROR_CODE_SW_LOGIC_ERROR = 0xCF,
 	ERROR_CODE_NO_ANTENNA_FOR_BAND = 0xF7,
@@ -71,6 +76,21 @@ typedef enum {
 	ERROR_CODE_DAC2_NONRESPONSIVE = 0xFE,
 	ERROR_CODE_DAC1_NONRESPONSIVE = 0xFF
 	} EC;
+
+/*******************************************************/
+/* Status Codes                                                                 */
+/*******************************************************/
+typedef enum {
+	STATUS_CODE_IDLE = 0x00,
+	STATUS_CODE_REPORT_IDLE = 0x01,
+	STATUS_CODE_RETURNED_FROM_SLEEP = 0xF9,
+	STATUS_CODE_BEGINNING_XMSN_THIS_CYCLE = 0xFA,
+	STATUS_CODE_SENDING_ID = 0xFB,
+	STATUS_CODE_EVENT_FINISHED = 0xFC,
+	STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING = 0xFD,
+	STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT = 0xFE,
+	STATUS_CODE_WAITING_FOR_EVENT_START = 0xFF
+	} SC;
 
 /*******************************************************/
 

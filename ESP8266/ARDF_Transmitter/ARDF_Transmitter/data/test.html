@@ -284,6 +284,9 @@
                 var x = document.getElementById("errorreport");
                 if (x != null) x.style.display = "none";
 
+                x = document.getElementById("statusreport");
+                if (x != null) x.style.display = "none";
+
                 btn.value = "Stop";
                 btn.setAttribute("style", "background-color: #FF0000;");
                 sendBand();
@@ -657,6 +660,85 @@
                     setOverlay(null);
 
                     switch (arr[0]) {
+                        case "STATUS":
+                            {
+                                var text;
+                                var sc = parseInt(arr[1], 10);
+
+                                switch (sc) {
+
+                                    case 0x00: // STATUS_CODE_IDLE = 0x00
+                                    case 0x01: // STATUS_CODE_REPORT_IDLE = 0x01;
+                                        {
+                                            text = "";
+                                        }
+                                        break;
+
+                                    case 0xF9: // STATUS_CODE_RETURNED_FROM_SLEEP = 0xF9
+                                        {
+                                            text = "Transmitter returned from sleep";
+                                        }
+                                        break;
+
+                                    case 0xFA: // STATUS_CODE_BEGINNING_XMSN_THIS_CYCLE = 0xFA
+                                        {
+                                            text = "Transmitter will transmit this cycle";
+                                        }
+                                        break;
+
+                                    case 0xFB: // STATUS_CODE_SENDING_ID = 0xFB
+                                        {
+                                            text = "Transmitter sending ID";
+                                        }
+                                        break;
+
+                                    case 0xFC: // STATUS_CODE_EVENT_FINISHED = 0xFC
+                                        {
+                                            text = "Event has completed";
+                                        }
+                                        break;
+
+                                    case 0xFD: // STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING = 0xFD
+                                        {
+                                            text = "Transmitter on the air";
+                                        }
+                                        break;
+
+                                    case 0xFE: // STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT = 0xFE
+                                        {
+                                            text = "Transmitter waiting for time slot";
+                                        }
+                                        break;
+
+                                    case 0xFF: // STATUS_CODE_WAITING_FOR_EVENT_START = 0xFF
+                                        {
+                                            text = "Transmitter waiting for event start";
+                                        }
+                                        break;
+
+                                    default:
+                                        {
+                                            text = "Undefined status - update file system";
+                                        }
+                                        break;
+                                }
+
+                                if (text.length) {
+                                    var e = "State: " + text;
+                                    var elem = document.getElementById("statusreport");
+                                    if (elem != null) {
+                                        elem.innerHTML = e;
+                                        elem.setAttribute("style", "font-family:verdana; font-size:25px; color:Black; font-weight:bold; text-align:center;");
+                                    }
+                                } else {
+                                    var x = document.getElementById("statusreport");
+                                    if (x != null) x.style.display = "none";
+
+                                }
+                                console.log("Status Code:" + arr[1]);
+                            }
+                            break;
+
                         case "ERR_CODE":
                             {
                                 var text;
@@ -670,22 +752,38 @@
                                         }
                                         break;
 
-                                        //	ERROR_CODE_ILLEGAL_COMMAND_RCVD = 0xCE,
-                                    case 0xCE:
+                                    case 0xCB: // ERROR_CODE_EVENT_MISSING_TRANSMIT_DURATION
+                                        {
+                                            text = "No transmit duration specified for the transmitter's role";
+                                        }
+                                        break;
+
+                                    case 0xCC: // ERROR_CODE_EVENT_MISSING_START_TIME
+                                        {
+                                            text = "No start time specified for the event";
+                                        }
+                                        break;
+
+                                    case 0xCD: // ERROR_CODE_EVENT_NOT_CONFIGURED
+                                        {
+                                            text = "Transmitter not fully configured for the event";
+                                        }
+                                        break;
+
+
+                                    case 0xCE: // ERROR_CODE_ILLEGAL_COMMAND_RCVD = 0xCE
                                         {
                                             text = "Illegal command";
                                         }
                                         break;
 
-                                        //	ERROR_CODE_SW_LOGIC_ERROR = 0xCF,
-                                    case 0xCF:
+                                    case 0xCF: // ERROR_CODE_SW_LOGIC_ERROR = 0xCF
                                         {
                                             text = "Software logic error";
                                         }
                                         break;
 
-                                        //	ERROR_CODE_NO_ANTENNA_FOR_BAND = 0xF7,
-                                    case 0xF7:
+                                    case 0xF7: // ERROR_CODE_NO_ANTENNA_FOR_BAND = 0xF7
                                         {
                                             text = "No antenna connected for that band";
                                             var btn = document.getElementById("keyButton");
@@ -1184,6 +1282,9 @@
 
         function sendAction() {
             var x = document.getElementById("errorreport");
+            if (x != null) x.style.display = "none";
+
+            x = document.getElementById("statusreport");
             if (x != null) x.style.display = "none";
 
             var text = document.getElementById("commandText").value;
@@ -1863,6 +1964,14 @@
                 <tr>
                     <td style="text-align:right;">
                         <p id="errorreport" style="display:none;"></p>
+                    </td>
+                </tr>
+            </table>
+
+            <table>
+                <tr>
+                    <td style="text-align:right;">
+                        <p id="statusreport" style="display:none;"></p>
                     </td>
                 </tr>
             </table>

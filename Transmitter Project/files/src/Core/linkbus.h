@@ -123,6 +123,7 @@ typedef enum
 #define MESSAGE_TIME_LABEL "TIM"
 #define MESSAGE_ESP_LABEL "ESP"
 #define MESSAGE_ERRORCODE_LABEL "EC"
+#define MESSAGE_STATUSCODE_LABEL "SC"
 
 typedef enum
 {

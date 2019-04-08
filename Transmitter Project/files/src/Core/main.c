@@ -67,11 +67,11 @@ typedef enum
  * Use "volatile" for globals shared between ISRs and foreground
  ************************************************************************/
 static char g_tempStr[21] = {'\0'};
-static EC g_last_error_code = ERROR_CODE_NO_ERROR;
+static volatile EC g_last_error_code = ERROR_CODE_NO_ERROR;
+static volatile SC g_last_status_code = STATUS_CODE_IDLE;
 
 static volatile BOOL g_powering_off = FALSE;
 
-static volatile BOOL g_radio_port_changed = FALSE;
 static volatile uint8_t g_wifi_enable_delay = 0;
 
 static volatile uint16_t g_util_tick_countdown = 0;
@@ -171,7 +171,7 @@ void initializeEEPROMVars(void);
 void saveAllEEPROM(void);
 void wdt_init(WDReset resetType);
 uint16_t throttleValue(uint8_t speed);
-void initializeTxWithSettings(time_t startTime);
+EC activateEventUsingCurrentSettings(SC* statusCode);
 EC hw_init(void);
 EC rtc_init(void);
 void set_ports(InitActionType initType);
@@ -345,6 +345,7 @@ ISR( INT0_vect )
 							keyTransmitter(OFF);
 							g_event_enabled = FALSE;
 							g_event_commenced = FALSE;
+							g_last_status_code = STATUS_CODE_EVENT_FINISHED;
 						}
 					}
 
@@ -356,6 +357,7 @@ ISR( INT0_vect )
 						{
 							if(g_on_the_air == g_time_needed_for_ID) // wait until the end of a transmission
 							{
+								g_last_status_code = STATUS_CODE_SENDING_ID;
 								g_time_to_send_ID_countdown = g_ID_time;
 								g_code_throttle = throttleValue(g_id_codespeed);
 								repeat = FALSE;
@@ -386,6 +388,7 @@ ISR( INT0_vect )
 
 						if(!g_on_the_air) // off-the-air time has expired
 						{
+							g_last_status_code = STATUS_CODE_BEGINNING_XMSN_THIS_CYCLE;
 							g_on_the_air = g_on_air_seconds;
 							g_code_throttle = throttleValue(g_pattern_codespeed);
 							BOOL repeat = TRUE;
@@ -662,7 +665,7 @@ ISR( PCINT0_vect )
 #endif //ENABLE_TERMINAL_COMMS
 }
 
-
+#ifdef ENABLE_PIN_CHANGE_INTERRUPT_1
 /***********************************************************************
  * Pin Change Interrupt Request 1 ISR
  *
@@ -703,7 +706,7 @@ ISR( PCINT0_vect )
 			}
 		}
 	}
-
+#endif // ENABLE_PIN_CHANGE_INTERRUPT_1
 
 /***********************************************************************
  * Watchdog Timeout ISR
@@ -1424,6 +1427,7 @@ int main( void )
 			g_i2c_not_timed_out = FALSE;    /* unstick I2C */
 			g_wifi_enable_delay = 2;
 			g_WiFi_shutdown_seconds = 60;
+			g_last_status_code = STATUS_CODE_RETURNED_FROM_SLEEP;
 		}
 
 		if(g_report_seconds)
@@ -1437,16 +1441,16 @@ int main( void )
 
 		if(g_last_error_code)
 		{
-//			static EC last_ec = ERROR_CODE_NO_ERROR;
-
-//			if(last_ec != g_last_error_code) // report an error only once
-			{
-//				last_ec = g_last_error_code;
-				sprintf(g_tempStr, "%u", g_last_error_code);
-				lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ERRORCODE_LABEL, g_tempStr);
-			}
-
+			sprintf(g_tempStr, "%u", g_last_error_code);
+			lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ERRORCODE_LABEL, g_tempStr);
 			g_last_error_code = ERROR_CODE_NO_ERROR;
+		}
+
+		if(g_last_status_code)
+		{
+			sprintf(g_tempStr, "%u", g_last_status_code);
+			lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_STATUSCODE_LABEL, g_tempStr);
+			g_last_status_code = STATUS_CODE_IDLE;
 		}
 
 		if(g_antenna_connection_changed)
@@ -1738,7 +1742,9 @@ int main( void )
 
 				case MESSAGE_GO:
 				{
-					if(lb_buff->fields[FIELD1][0] == '1')
+					char f1 = lb_buff->fields[FIELD1][0];
+
+					if((f1 == '1') || (f1 == '2'))
 					{
 						if(!txIsAntennaForBand())
 						{
@@ -1746,19 +1752,63 @@ int main( void )
 						}
 						else
 						{
-							/* Set the Morse code pattern and speed */
-							cli();
-							BOOL repeat = TRUE;
-							makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
-							g_code_throttle = throttleValue(g_pattern_codespeed);
-							sei();
-							g_event_finish_time = MAX_TIME; // run for a long long time
-							g_on_air_seconds = 9999; // on period is very long
-							g_off_air_seconds = 0; // off period is very short
-							g_on_the_air = 9999; //  start out transmitting
-							g_time_to_send_ID_countdown = 9999; // wait a long time to send the ID
-							g_event_commenced = TRUE; // get things running immediately
-							g_event_enabled = TRUE; // get things running immediately
+							if(f1 == '1') // Xmit immediately using current settings
+							{
+								if(txIsAntennaForBand())
+								{
+									/* Set the Morse code pattern and speed */
+									cli();
+									BOOL repeat = TRUE;
+									makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
+									g_code_throttle = throttleValue(g_pattern_codespeed);
+									sei();
+									g_event_start_time = 1; // have it start a long time ago
+									g_event_finish_time = MAX_TIME; // run for a long long time
+									g_on_air_seconds = 9999; // on period is very long
+									g_off_air_seconds = 0; // off period is very short
+									g_on_the_air = 9999; //  start out transmitting
+									g_time_to_send_ID_countdown = 9999; // wait a long time to send the ID
+									g_event_commenced = TRUE; // get things running immediately
+									g_event_enabled = TRUE; // get things running immediately
+									g_last_status_code = STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING;
+								}
+								else
+								{
+									g_last_error_code = ERROR_CODE_NO_ANTENNA_FOR_BAND;
+								}
+							}
+							else if (f1 == '2')
+							{
+								/* This command launches an event at its scheduled start time */
+								SC status;
+								EC err;
+
+								if(!g_event_start_time) g_event_start_time = time(NULL);
+								g_event_enabled = FALSE;
+
+								if(txIsAntennaForBand())
+								{
+									err = activateEventUsingCurrentSettings(&status);
+
+									if(!err)
+									{
+										g_event_enabled = TRUE;
+
+										if(status)
+										{
+											g_last_status_code = status;
+										}
+									}
+									else
+									{
+										g_last_error_code = err;
+									}
+								}
+								else
+								{
+									g_last_error_code = ERROR_CODE_NO_ANTENNA_FOR_BAND;
+								}
+							}
 						}
 					}
 					else
@@ -1777,6 +1827,8 @@ int main( void )
 						{
 							set_ports(POWER_SLEEP);
 						}
+
+						g_last_status_code = STATUS_CODE_REPORT_IDLE;
 					}
 				}
 				break;
@@ -1794,7 +1846,12 @@ int main( void )
 
 						if(mtime)
 						{
-							initializeTxWithSettings(mtime);
+							g_event_start_time = mtime;
+							g_event_enabled = TRUE;
+							cli();
+							set_system_time(ds3231_get_epoch(NULL)); // update system clock
+							sei();
+							activateEventUsingCurrentSettings(NULL);
 						}
 					}
 					else if(lb_buff->fields[FIELD1][0] == 'F')
@@ -1848,7 +1905,7 @@ int main( void )
 								#ifdef INCLUDE_DS3231_SUPPORT
 									ds3231_set_date_time(g_tempStr, RTC_CLOCK);
 								#endif
-								initializeTxWithSettings(0);
+								activateEventUsingCurrentSettings(NULL);
 							}
 						}
 
@@ -1867,7 +1924,7 @@ int main( void )
 								ds3231_set_date_time(g_tempStr, RTC_CLOCK);
 								set_system_time(ds3231_get_epoch(NULL)); // update system clock
 							#endif // INCLUDE_DS3231_SUPPORT
-							initializeTxWithSettings(0);
+							activateEventUsingCurrentSettings(NULL);
 						}
 						else
 						{
@@ -1965,59 +2022,58 @@ int main( void )
 
 				case MESSAGE_TIME_INTERVAL:
 				{
-					uint16_t time = g_on_air_seconds;
+					uint16_t time = 0;
 
 					if(lb_buff->fields[FIELD1][0] == '0')
 					{
+#ifdef ENABLE_TERMINAL_COMMS
 						time = g_off_air_seconds;
+#endif // ENABLE_TERMINAL_COMMS
+
 						if(lb_buff->fields[FIELD2][0])
 						{
 							time = atol(lb_buff->fields[FIELD2]);
 							g_off_air_seconds = time;
 							saveAllEEPROM();
 						}
-						else
-						{
-							time = g_off_air_seconds;
-						}
 					}
 					else if(lb_buff->fields[FIELD1][0] == '1')
 					{
+#ifdef ENABLE_TERMINAL_COMMS
+						time = g_on_air_seconds;
+#endif // ENABLE_TERMINAL_COMMS
+
 						if(lb_buff->fields[FIELD2][0])
 						{
 							time = atol(lb_buff->fields[FIELD2]);
 							g_on_air_seconds = time;
 							saveAllEEPROM();
 						}
-						else
-						{
-							time = g_on_air_seconds;
-						}
 					}
 					else if(lb_buff->fields[FIELD1][0] == 'I')
 					{
+#ifdef ENABLE_TERMINAL_COMMS
+						time = g_ID_time;
+#endif // ENABLE_TERMINAL_COMMS
+
 						if(lb_buff->fields[FIELD2][0])
 						{
 							time = atol(lb_buff->fields[FIELD2]);
 							g_ID_time = time;
 							saveAllEEPROM();
 						}
-						else
-						{
-							time = g_ID_time;
-						}
 					}
 					else if(lb_buff->fields[FIELD1][0] == 'D')
 					{
+#ifdef ENABLE_TERMINAL_COMMS
+						time = g_intra_cycle_delay_time;
+#endif // ENABLE_TERMINAL_COMMS
+
 						if(lb_buff->fields[FIELD2][0])
 						{
 							time = atol(lb_buff->fields[FIELD2]);
 							g_intra_cycle_delay_time = time;
 							saveAllEEPROM();
-						}
-						else
-						{
-							time = g_intra_cycle_delay_time;
 						}
 					}
 
@@ -2025,7 +2081,7 @@ int main( void )
 					if(g_terminal_mode) {
 						lb_send_value(time, "t");
 					}
-#endif
+#endif //  ENABLE_TERMINAL_COMMS
 				}
 				break;
 
@@ -2048,27 +2104,27 @@ int main( void )
 
 				case MESSAGE_SET_FREQ:
 				{
-						BOOL isMem = FALSE;
+					BOOL isMem = FALSE;
 
-						if(lb_buff->fields[FIELD1][0])
-						{
-							Frequency_Hz f = atol(lb_buff->fields[FIELD1]); // Prevent optimizer from breaking this
+					if(lb_buff->fields[FIELD1][0])
+					{
+						Frequency_Hz f = atol(lb_buff->fields[FIELD1]); // Prevent optimizer from breaking this
 
-							Frequency_Hz ff = f;
-							if(txSetFrequency(&ff))
-							{
-								g_transmitter_freq = ff;
-							}
-						}
-						else
+						Frequency_Hz ff = f;
+						if(txSetFrequency(&ff))
 						{
-							g_transmitter_freq = txGetFrequency();
+							g_transmitter_freq = ff;
 						}
+					}
+					else
+					{
+						g_transmitter_freq = txGetFrequency();
+					}
 
-						if(g_transmitter_freq)
-						{
-							lb_send_FRE(LINKBUS_MSG_REPLY, g_transmitter_freq, isMem);
-						}
+					if(g_transmitter_freq)
+					{
+						lb_send_FRE(LINKBUS_MSG_REPLY, g_transmitter_freq, isMem);
+					}
 				}
 				break;
 
@@ -2196,59 +2252,23 @@ int main( void )
 
 			lb_buff->id = MESSAGE_EMPTY;
 		}
-
-
-			/* ////////////////////////////////////
-			 * Handle Receiver interrupts (e.g., trigger button presses) */
-			if(g_radio_port_changed)
-			{
-				g_radio_port_changed = FALSE;
-
-//				uint8_t portPins;
-//				mcp23017_readPort(&portPins);
-
-				/* Take appropriate action for the pin change */
-				/*			if((~portPins) & 0b00010000)
-				 *			{
-				 *			} */
-			}
-
-			/* ////////////////////////////////////
-			 * Handle periodic tasks triggered by the tick count */
-//			if(hold_tick_count != g_tick_count)
-//			{
-//				hold_tick_count = g_tick_count;
-//			}
 	}       /* while(1) */
 }/* main */
 
-void initializeTxWithSettings(time_t startTime)
+EC activateEventUsingCurrentSettings(SC* statusCode)
 {
-	if(startTime > 0)
-	{
-		g_event_start_time = startTime;
-		g_event_enabled = TRUE;
-	}
-
 	// Make sure everything has been initialized
-	if(!g_event_start_time) return;
-	if(!g_on_air_seconds) return;
+	if(!g_event_start_time) return ERROR_CODE_EVENT_MISSING_START_TIME;
+	if(!g_on_air_seconds) return ERROR_CODE_EVENT_MISSING_TRANSMIT_DURATION;
 	//if(!g_off_air_seconds) return;
-	if(g_messages_text[PATTERN_TEXT][0] == '\0') return;
-	if(!g_pattern_codespeed) return;
+	if(g_messages_text[PATTERN_TEXT][0] == '\0') return ERROR_CODE_EVENT_NOT_CONFIGURED;
+	if(!g_pattern_codespeed) return ERROR_CODE_EVENT_NOT_CONFIGURED;
 	//if(!g_transmitter_freq) return;
 	//if(!modulation_format) return;
 	//if(!power_level) return;
 	//if(!callsign) return;
 	//if(!csllsign_speed) return;
 	g_time_to_send_ID_countdown = g_ID_time;
-
-	if(startTime > 0)
-	{
-		cli();
-		set_system_time(ds3231_get_epoch(NULL)); // update system clock
-		sei();
-	}
 
 	int32_t dif = difftime(time(NULL), g_event_start_time); // returns arg1 - arg2
 
@@ -2264,16 +2284,19 @@ void initializeTxWithSettings(time_t startTime)
 			if(g_on_air_seconds <= -timeTillTransmit) // we should have finished transmitting in this cycle
 			{
 				g_on_the_air = -(cyclePeriod + timeTillTransmit);
+				if(statusCode) *statusCode = STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT;
 			}
 			else // we should be transmitting right now
 			{
 				g_on_the_air = g_on_air_seconds + timeTillTransmit;
 				turnOnTransmitter = TRUE;
+				if(statusCode) *statusCode = STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING;
 			}
 		}
 		else // not yet time time to transmit in this cycle
 		{
 			g_on_the_air = -timeTillTransmit;
+			if(statusCode) *statusCode = STATUS_CODE_WAITING_FOR_EVENT_START;
 		}
 
 		if(turnOnTransmitter)
@@ -2295,6 +2318,8 @@ void initializeTxWithSettings(time_t startTime)
 	{
 		keyTransmitter(OFF);
 	}
+
+	return ERROR_CODE_NO_ERROR;
 }
 
 /**********************
