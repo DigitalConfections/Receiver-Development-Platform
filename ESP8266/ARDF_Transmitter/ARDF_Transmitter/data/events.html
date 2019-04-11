@@ -240,6 +240,8 @@
         }]; /* Event data to display in a table header */
 
         var g_selectedEvent = "";
+        var g_selectedEventStart = 0;
+        var g_selectedEventFinish = 0;
 
         ///////////////////////////////
 
@@ -284,6 +286,12 @@
         }
 
         function eventSelect(selection) {
+            var x = document.getElementById("errorreport");
+            if (x != null) x.style.display = "none";
+
+            x = document.getElementById("statusreport");
+            if (x != null) x.style.display = "none";
+
             if (g_selectedEvent != selection) {
                 var btext = "EVENT_NAME," + selection;
                 console.log(btext);
@@ -296,6 +304,12 @@
         }
 
         function eventRunSelect(selection) {
+            var x = document.getElementById("errorreport");
+            if (x != null) x.style.display = "none";
+
+            x = document.getElementById("statusreport");
+            if (x != null) x.style.display = "none";
+
             if (g_selectedEvent != selection) {
                 var btext = "EVENT_NAME," + selection;
                 console.log(btext);
@@ -386,6 +400,7 @@
                 var entry = rowData.name;
                 btn.type = "button";
                 btn.className = "button";
+                btn.id = "runButton";
                 if (g_selectedEvent == rowData.name) {
                     //          btn.style = "font-family:verdana; font-size:17px; color:blue; font-weight:bold; text-align:center;");
                     if (g_eventIsRunning) {
@@ -449,6 +464,8 @@
                 cellText = document.createTextNode(start);
                 cell0.setAttribute("border", "1px solid black");
                 if (g_selectedEvent == rowData.name) {
+                    g_selectedEventStart = rowData.start;
+                    g_selectedEventFinish = rowData.finish;
                     cell0.setAttribute("id", "datetimeStartCell");
                     var i = document.createElement("input");
                     i.setAttribute("id", "datetimeStart");
@@ -456,7 +473,7 @@
                     i.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold; color:blue;");
                     i.setAttribute("oninput", "newStartTime();");
                     i.setAttribute("value", epochToLocalDateTimeFormat(rowData.start));
-                    console.log("Start time text =", epochToLocalDateTimeFormat(rowData.start));
+                    console.log("Start time text =", i.value);
                     cell0.appendChild(i);
                 } else {
                     cell0.appendChild(cellText);
@@ -473,7 +490,7 @@
                     i.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold; color:blue;");
                     i.setAttribute("oninput", "newFinishTime();");
                     i.setAttribute("value", epochToLocalDateTimeFormat(rowData.finish));
-                    console.log("Start time text =", epochToLocalDateTimeFormat(rowData.finish));
+                    console.log("Finish time text =", i.value);
                     cell0.appendChild(i);
                 } else {
                     var finish = new Date(Number(rowData.finish));
@@ -483,8 +500,12 @@
                 row.appendChild(cell0);
 
                 cell0 = document.createElement("td");
-                var stat = statusMessageText(rowData.start, rowData.finish);
-                console.log("Status: ", stat);
+                var stat = "*";
+                if (g_selectedEvent == rowData.name) {
+                    stat = statusMessageText(rowData.start, rowData.finish);
+                    cell0.setAttribute("id", "statusCell");
+                    console.log("Status: ", stat);
+                }
                 cellText = document.createTextNode(stat);
                 cell0.setAttribute("border", "1px solid black");
                 cell0.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold; color:black;");
@@ -574,6 +595,7 @@
                     console.log("g_stillConnected timeout!!");
                     g_timedOut = true;
                     g_stillDisconnected = 200;
+                    g_loading_data = false;
                 }
             } else {
                 if (g_stillDisconnected) {
@@ -663,6 +685,253 @@
                         setOverlay(null);
 
                     switch (arr[0]) {
+                        case "STATUS":
+                            {
+                                var text;
+                                var sc = parseInt(arr[1], 10);
+
+                                switch (sc) {
+
+                                    case 0x00: // STATUS_CODE_IDLE = 0x00
+                                    case 0x01: // STATUS_CODE_REPORT_IDLE = 0x01
+                                        {
+                                            text = "";
+                                        }
+                                        break;
+
+                                    case 0xEC: // STATUS_CODE_RECEIVING_EVENT_DATA = 0xEC
+                                        {
+                                            text = "Transmitter ready to receive event data";
+                                        }
+                                        break;
+
+                                    case 0xED: // STATUS_CODE_RETURNED_FROM_SLEEP = 0xED
+                                        {
+                                            text = "Transmitter returned from sleep";
+                                        }
+                                        break;
+
+                                    case 0xEE: // STATUS_CODE_BEGINNING_XMSN_THIS_CYCLE = 0xEE
+                                        {
+                                            text = "Transmitter will transmit this cycle";
+                                        }
+                                        break;
+
+                                    case 0xEF: // STATUS_CODE_SENDING_ID = 0xEF
+                                        {
+                                            text = "Transmitter sending ID";
+                                        }
+                                        break;
+
+                                    case 0xFB: // STATUS_CODE_EVENT_NEVER_ENDS = 0xFB
+                                        {
+                                            text = "Event never ends";
+                                        }
+                                        break;
+
+                                    case 0xFC: // STATUS_CODE_EVENT_FINISHED = 0xFC
+                                        {
+                                            text = "Event has completed";
+                                        }
+                                        break;
+
+                                    case 0xFD: // STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING = 0xFD
+                                        {
+                                            text = "Transmitter on the air";
+                                        }
+                                        break;
+
+                                    case 0xFE: // STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT = 0xFE
+                                        {
+                                            text = "Transmitter waiting for time slot";
+                                        }
+                                        break;
+
+                                    case 0xFF: // STATUS_CODE_WAITING_FOR_EVENT_START = 0xFF
+                                        {
+                                            text = "Transmitter waiting for event start";
+                                        }
+                                        break;
+
+                                    default:
+                                        {
+                                            text = "Undefined status - update file system";
+                                        }
+                                        break;
+                                }
+
+                                if (text.length) {
+                                    var e = "State: " + text;
+                                    var elem = document.getElementById("statusreport");
+                                    if (elem != null) {
+                                        elem.innerHTML = e;
+                                        elem.setAttribute("style", "font-family:verdana; font-size:25px; color:Black; font-weight:bold; text-align:center;");
+                                    }
+                                } else {
+                                    var x = document.getElementById("statusreport");
+                                    if (x != null) x.style.display = "none";
+
+                                }
+                                console.log("Status Code:" + arr[1]);
+                            }
+                            break;
+
+
+                        case "ERR_CODE":
+                            {
+                                var text;
+                                var ec = parseInt(arr[1], 10);
+
+                                switch (ec) {
+                                    case 0x00: //	ERROR_CODE_NO_ERROR = 0x00
+                                        {
+                                            text = "No error";
+                                        }
+                                        break;
+
+                                    case 0xC7: // ERROR_CODE_EVENT_STATION_ID_ERROR = 0xC7
+                                        {
+                                            text = "Station callsign error";
+                                        }
+                                        break;
+
+                                    case 0xC8: // ERROR_CODE_EVENT_PATTERN_CODE_SPEED_NOT_SPECIFIED = 0xC8
+                                        {
+                                            text = "Pattern code speed not specified";
+                                        }
+                                        break;
+
+                                    case 0xC9: // ERROR_CODE_EVENT_PATTERN_NOT_SPECIFIED = 0xC9
+                                        {
+                                            text = "Morse code pattern not specified";
+                                        }
+                                        break;
+
+                                    case 0xCA: // ERROR_CODE_EVENT_TIMING_ERROR = 0xCA
+                                        {
+                                            text = "Timing parameters invalid";
+                                        }
+                                        break;
+
+                                    case 0xCB: // ERROR_CODE_EVENT_MISSING_TRANSMIT_DURATION
+                                        {
+                                            text = "No transmit duration specified for the transmitter's role";
+                                        }
+                                        break;
+
+                                    case 0xCC: // ERROR_CODE_EVENT_MISSING_START_TIME
+                                        {
+                                            text = "No start time specified for the event";
+                                        }
+                                        break;
+
+                                    case 0xCD: // ERROR_CODE_EVENT_NOT_CONFIGURED
+                                        {
+                                            text = "Transmitter not fully configured for the event";
+                                        }
+                                        break;
+
+                                    case 0xCE: // ERROR_CODE_ILLEGAL_COMMAND_RCVD = 0xCE
+                                        {
+                                            text = "Illegal command";
+                                        }
+                                        break;
+
+                                    case 0xCF: // ERROR_CODE_SW_LOGIC_ERROR = 0xCF
+                                        {
+                                            text = "Software logic error";
+                                        }
+                                        break;
+
+                                    case 0xF6: // ERROR_CODE_NO_ANTENNA_PREVENTS_POWER_SETTING = 0xF6
+                                        {
+                                            text = "Missing antenna prevents setting transmit power";
+                                        }
+                                        break;
+
+                                    case 0xF7: // ERROR_CODE_NO_ANTENNA_FOR_BAND = 0xF7
+                                        {
+                                            text = "No antenna connected for that band";
+                                            var btn = document.getElementById("runButton");
+                                            if (btn != null) {
+                                                if (btn.value != "run") {
+                                                    eventStopSelect();
+                                                }
+                                            }
+                                        }
+                                        break;
+
+                                        //	ERROR_CODE_WD_TIMEOUT = 0xF8,
+                                    case 0xF8:
+                                        {
+                                            text = "Watchdog timeout";
+                                        }
+                                        break;
+
+                                        //	ERROR_CODE_SUPPLY_VOLTAGE_ERROR = 0xF9
+                                    case 0xF9:
+                                        {
+                                            text = "Supply voltage out of range";
+                                        }
+                                        break;
+
+                                        //	ERROR_CODE_BUCK_REG_OUTOFSPEC = 0xFA
+                                    case 0xFA:
+                                        {
+                                            text = "Power amplifier voltage out of range";
+                                        }
+                                        break;
+
+                                        //	ERROR_CODE_CLKGEN_NONRESPONSIVE = 0xFB
+                                    case 0xFB:
+                                        {
+                                            text = "Signal generator not responding";
+                                        }
+                                        break;
+
+                                        //	ERROR_CODE_RTC_NONRESPONSIVE = 0xFC
+                                    case 0xFC:
+                                        {
+                                            text = "Real-time clock not responding";
+                                        }
+                                        break;
+
+                                        //	ERROR_CODE_DAC3_NONRESPONSIVE = 0xFD
+                                    case 0xFD:
+                                        {
+                                            text = "DAC3 not responding";
+                                        }
+                                        break;
+
+                                        //	ERROR_CODE_DAC2_NONRESPONSIVE = 0xFE
+                                    case 0xFE:
+                                        {
+                                            text = "DAC2 not responding";
+                                        }
+                                        break;
+
+                                    case 0xFF: //	ERROR_CODE_DAC1_NONRESPONSIVE = 0xFF
+                                        {
+                                            text = "DAC1 not responding";
+                                        }
+                                        break;
+
+                                    default:
+                                        {
+                                            text = "Undefined error - update file system"
+                                        }
+                                        break;
+                                }
+
+                                var e = "Error: " + text;
+                                var elem = document.getElementById("errorreport");
+                                if (elem != null) {
+                                    elem.innerHTML = e;
+                                    elem.setAttribute("style", "font-family:verdana; font-size:25px; color:Red; font-weight:bold; text-align:center;");
+                                }
+                                console.log("Error Code:" + arr[1]);
+                            }
+                            break;
 
                         case "EVENT_NAME":
                             {
@@ -1198,6 +1467,7 @@
             var time = local.getFullYear() + "-" + mon + "-" + day + "T" + hour + ":" + min;
 
             dtText.value = time;
+            g_selectedEventStart = local.getTime();
         }
 
         function epochToLocalDateTimeFormat(epoch_ms) {
@@ -1246,6 +1516,7 @@
             var min = ("0" + local.getMinutes()).slice(-2);
             var time = local.getFullYear() + "-" + mon + "-" + day + "T" + hour + ":" + min;
             dtText.value = time;
+            g_selectedEventFinish = local.getTime();
         }
 
         function hasNumber(myString) {
@@ -1258,30 +1529,60 @@
 
         function statusMessageText(startTimeEpoch, finishTimeEpoch) {
             var statusMsg;
-            var s = startTimeEpoch;
+            var s = (new Date(startTimeEpoch)).getTime();
             var n = (new Date).getTime();
-            var f = finishTimeEpoch;
+            var f = (new Date(finishTimeEpoch)).getTime();
 
             if (s > 946684800000) s /= 1000;
             if (n > 946684800000) n /= 1000;
             if (f > 946684800000) f /= 1000;
 
-            if (n > s) {
-                if (n > f) {
-                    statusMsg = "Finished";
-                } else {
-                    statusMsg = "Ongoing";
-                }
+            if ((n > s) && (f < s)) {
+                statusMsg = "Running\nForever";
+            } else if ((n > s) && (n < f)) {
+                statusMsg = "Running";
+            } else if ((n > s) && (n >= f)) {
+                statusMsg = "Finished";
             } else {
-                statusMsg = "Scheduled";
+                statusMsg = "Starts";
 
-                var del = (s - n) / 60;
-                del = del.toFixed();
+                var del = (s - n);
+                //del = del.toFixed();
 
-                if (del > 10) {
-                    statusMsg = "In " + del + "m";
+                if (del > 3600) {
+                    var h = del / 3600;
+                    del = (del % 3600) / 60;
+                    h = h.toFixed();
+                    del = del.toFixed();
+                    statusMsg += " in "
+                    h + "h" + del + "m";
+                } else if (del > 60) {
+                    del /= 60;
+                    del = del.toFixed();
+                    statusMsg += " in " + del + "m";
                 } else {
-                    statusMsg = "Starting";
+                    del = del.toFixed();
+                    statusMsg += " in " + del + "s";
+                }
+
+                if (f < s) {
+                    statusMsg += "Runs\nForever";
+                } else {
+                    del = (f - s);
+                    if (del > 3600) {
+                        var h = Math.floor(del / 3600);
+                        del = (del % 3600) / 60;
+                        h = h.toFixed();
+                        del = del.toFixed();
+                        statusMsg += " Runs " + h + "h" + del + "m";
+                    } else if (del > 60) {
+                        del /= 60;
+                        del = Math.floor(del.toFixed());
+                        statusMsg += " Runs " + del + "m";
+                    } else {
+                        del = del.toFixed();
+                        statusMsg += " Runs " + del + "s";
+                    }
                 }
             }
 
@@ -1304,6 +1605,12 @@
 
             if (g_stillConnected == 0) {
                 setOverlay("Disconnected");
+            }
+
+            if (g_selectedEvent) {
+                var stat = statusMessageText(g_selectedEventStart, g_selectedEventFinish);
+                var statusEl = document.getElementById("statusCell");
+                if (statusEl != null) statusEl.innerHTML = stat;
             }
 
             var freq1 = document.getElementById("freq1Text");
@@ -2140,6 +2447,21 @@
                 </tr>
             </table>
 
+            <table>
+                <tr>
+                    <td style="text-align:right;">
+                        <p id="errorreport" style="display:none;"></p>
+                    </td>
+                </tr>
+            </table>
+
+            <table>
+                <tr>
+                    <td style="text-align:right;">
+                        <p id="statusreport" style="display:none;"></p>
+                    </td>
+                </tr>
+            </table>
 
             <table border="1" id="eventTable"></table>
 

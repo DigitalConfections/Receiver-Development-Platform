@@ -44,9 +44,6 @@ typedef enum {
 	RTC_ALARM2
 } ClockSetting;
 
-#ifdef INCLUDE_DS3231_SUPPORT
-
-
 /**
  *  Reads hours, minutes and seconds from the DS3231 and returns them in the memory location pointed to by
  *  the first two arguments.
@@ -63,7 +60,7 @@ void ds3231_read_date_time(int32_t* val, char* buffer, TimeFormat format);
  *  Reads time from the DS3231 and returns the epoch
  */
 time_t ds3231_get_epoch(BOOL *result);
-	
+
 
 /**
  *  Set year, month, date, day, hours, minutes and seconds of the DS3231 to the time passed in the argument.
@@ -71,7 +68,7 @@ time_t ds3231_get_epoch(BOOL *result);
  * ClockSetting setting = clock or alarm to be set
  */
 	void ds3231_set_date_time(char * dateString, ClockSetting setting);
-	
+
 /**
  * Returns day of week given any date
  * year = 20xx
@@ -81,7 +78,7 @@ time_t ds3231_get_epoch(BOOL *result);
  */
 //const uint8_t wd(int year, int month, int day);
 
-	
+
 /**
  *
  */
@@ -91,7 +88,5 @@ time_t ds3231_get_epoch(BOOL *result);
  *  Turn on/off 1-second square wave on the INT/SQW pin.
  */
 	void ds3231_1s_sqw(BOOL enable);
-
-#endif  /* #ifdef INCLUDE_DS3231_SUPPORT */
 
 #endif  /* DS3231_H_ */

@@ -92,11 +92,17 @@
 /*******************************************************/
 typedef enum {
 	ERROR_CODE_NO_ERROR = 0x00,
+	ERROR_CODE_REPORT_NO_ERROR = 0x01,
+	ERROR_CODE_EVENT_STATION_ID_ERROR = 0xC7,
+	ERROR_CODE_EVENT_PATTERN_CODE_SPEED_NOT_SPECIFIED = 0xC8,
+	ERROR_CODE_EVENT_PATTERN_NOT_SPECIFIED = 0xC9,
+	ERROR_CODE_EVENT_TIMING_ERROR = 0xCA,
 	ERROR_CODE_EVENT_MISSING_TRANSMIT_DURATION = 0xCB,
 	ERROR_CODE_EVENT_MISSING_START_TIME = 0xCC,
 	ERROR_CODE_EVENT_NOT_CONFIGURED = 0xCD,
     ERROR_CODE_ILLEGAL_COMMAND_RCVD = 0xCE,
     ERROR_CODE_SW_LOGIC_ERROR = 0xCF,
+	ERROR_CODE_NO_ANTENNA_PREVENTS_POWER_SETTING = 0xF6,
 	ERROR_CODE_NO_ANTENNA_FOR_BAND = 0xF7,
 	ERROR_CODE_WD_TIMEOUT = 0xF8,
 	ERROR_CODE_SUPPLY_VOLTAGE_ERROR = 0xF9,
@@ -113,9 +119,11 @@ typedef enum {
 /*******************************************************/
 typedef enum {
 	STATUS_CODE_IDLE = 0x00,
-	STATUS_CODE_RETURNED_FROM_SLEEP = 0xF9,
-	STATUS_CODE_BEGINNING_XMSN_THIS_CYCLE = 0xFA,
-	STATUS_CODE_SENDING_ID = 0xFB,
+	STATUS_CODE_REPORT_IDLE = 0x01,
+	STATUS_CODE_RETURNED_FROM_SLEEP = 0xED,
+	STATUS_CODE_BEGINNING_XMSN_THIS_CYCLE = 0xEE,
+	STATUS_CODE_SENDING_ID = 0xEF,
+	STATUS_CODE_EVENT_NEVER_ENDS = 0xFB,
 	STATUS_CODE_EVENT_FINISHED = 0xFC,
 	STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING = 0xFD,
 	STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT = 0xFE,
@@ -197,6 +205,8 @@ typedef enum {
 #define LB_MESSAGE_TIME_INTERVAL_SETID "$T,I," /* Prefix for sending time interval (sec) for station identification to ATMEGA */
 #define LB_MESSAGE_WIFI_COMS_OFF "$WI,2;" /* Tell ATMEGA to disable linkbus to support ESP8266 programming (no exit without power cycle) */
 #define LB_MESSAGE_KEY_DOWN "$GO,1;" /* Tell ATMEGA to key transmitter continuously */
+#define LB_MESSAGE_ACTIVATE_EVENT "$GO,2;" /* Tell ATMEGA to execute the event as it has been configured */
+#define LB_MESSAGE_PREP_FOR_NEW_EVENT "$GO,0;" /* Tell ATMEGA to prepare to receive event data */
 #define LB_MESSAGE_KEY_UP "$GO,0;" /* Tell ATMEGA to stop continuous transmit */
 #define LB_MESSAGE_SLEEP "$GO,S;" /* Tell ATMEGA to put all circuits to sleep (no exit without power cycle) */
 

@@ -88,6 +88,7 @@ typedef enum {
 typedef enum {
 	STATUS_CODE_IDLE = 0x00,
 	STATUS_CODE_REPORT_IDLE = 0x01,
+	STATUS_CODE_RECEIVING_EVENT_DATA = 0xEC,
 	STATUS_CODE_RETURNED_FROM_SLEEP = 0xED,
 	STATUS_CODE_BEGINNING_XMSN_THIS_CYCLE = 0xEE,
 	STATUS_CODE_SENDING_ID = 0xEF,
@@ -136,6 +137,8 @@ typedef uint16_t BatteryLevel;  /* in milliVolts */
 
 #define ANTENNA_DETECT_THRESH 20
 #define ANTENNA_DETECT_DEBOUNCE 50
+
+#define NUMBER_OF_ESSENTIAL_EVENT_PARAMETERS 14
 
 
 /*******************************************************/

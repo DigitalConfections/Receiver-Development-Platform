@@ -289,8 +289,8 @@ String connectionStatus ( int which )
 // This routine is executed when you open its IP in browser
 //===============================================================
 void handleRoot()
-{ // When URI / is requested, send a web page with a button to toggle the LED
-  g_http_server.send(200, "text/html", "<form action=\"/login\" method=\"POST\"><input type=\"text\" name=\"username\" placeholder=\"Username\"></br><input type=\"password\" name=\"password\" placeholder=\"Password\"></br><input type=\"submit\" value=\"Login\"></form><p>Try 'John Doe' and 'password123' ...</p>");
+{ 
+  g_http_server.send(200, "text/html", "<p>Available pages:</p> <p>   73.73.73.73/test.html<p> <p>   73.73.73.73/events.html<p> <p>   73.73.73.73/upload.html<p>");
 }
 
 
@@ -1764,7 +1764,15 @@ void httpWebServerLoop()
             */
             switch (serialIndex)
             {
-              case 0: // send finish time
+              case 0: // Prepare ATMEGA to receive event data
+                {
+                  lbMsg = String(LB_MESSAGE_PREP_FOR_NEW_EVENT);
+                  Serial.println(stringObjToConstCharString(&lbMsg));
+                  g_blinkPeriodMillis = 100;
+                }
+                break;
+                    
+              case 1: // send finish time
                 {
                   tx = g_activeEvent->getTxSlotIndex();
                   role = g_activeEvent->getTxRoleIndex();
@@ -1781,42 +1789,42 @@ void httpWebServerLoop()
                 }
                 break;
 
-              case 1: // Message pattern
+              case 2: // Message pattern
                 {
                   lbMsg = String(LB_MESSAGE_PATTERN_SET + (*txData).pattern + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              case 2: // Off time
+              case 3: // Off time
                 {
                   lbMsg = String(LB_MESSAGE_TIME_INTERVAL_SET0 + String((*txData).offTime) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
                     
-              case 3: // On time
+              case 4: // On time
                 {
                   lbMsg = String(LB_MESSAGE_TIME_INTERVAL_SET1 + String((*txData).onTime) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              case 4: // Offset time
+              case 5: // Offset time
                 {
                   lbMsg = String(LB_MESSAGE_TIME_INTERVAL_SETD + String((*txData).delayTime) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              case 5: // Station ID transmit interval
+              case 6: // Station ID transmit interval
                 {
                   lbMsg = String(LB_MESSAGE_TIME_INTERVAL_SETID + String(g_activeEvent->getIDIntervalForRole(role)) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              case 6: // Event band
+              case 7: // Event band
                 {
                   String b;
 
@@ -1834,61 +1842,68 @@ void httpWebServerLoop()
                 }
                 break;
 
-              case 7: // Transmit power for role
+              case 8: // Transmit power for role
                 {
                   lbMsg = String(LB_MESSAGE_TX_POWER_SET + String(g_activeEvent->getPowerlevelForRole(role)) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              case 8: // Modulation format
+              case 9: // Modulation format
                 {
                   lbMsg = String(LB_MESSAGE_TX_MOD_SET + String(g_activeEvent->getEventModulation()) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              case 9: // Frequency for role
+              case 10: // Frequency for role
                 {
                   lbMsg = String(LB_MESSAGE_TX_FREQ_SET + String(g_activeEvent->getFrequencyForRole(role)) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              case 10: // Station ID
+              case 11: // Station ID
                 {
                   lbMsg = String(LB_MESSAGE_CALLSIGN_SET + g_activeEvent->getCallsign() + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              case 11: // Message code speed
+              case 12: // Message code speed
                 {
                   lbMsg = String(LB_MESSAGE_CODE_SPEED_SETPAT + String(g_activeEvent->getCodeSpeedForRole(role)) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              case 12: // ID code speed
+              case 13: // ID code speed
                 {
                   lbMsg = String(LB_MESSAGE_CODE_SPEED_SETID + g_activeEvent->getCallsignSpeed() + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
 
-              case 13: // Start time
+              case 14: // Start time
                 {
                   /* Start time is sent last */
                   lbMsg = String(LB_MESSAGE_STARTFINISH_SET_START + String(convertTimeStringToEpoch(g_activeEvent->getEventStartDateTime())) + ";");
                   Serial.println(stringObjToConstCharString(&lbMsg));
                 }
                 break;
-
-              default: // Have ATMega save everything in EEPROM
+                    
+              case 15: // Perm - Have ATMega save everything in EEPROM
                 {
                   lbMsg = String(LB_MESSAGE_PERM);
                   Serial.println(stringObjToConstCharString(&lbMsg));
+                }
+
+              default: // Tell ATMEGA to begin executing the event
+                {
+                  lbMsg = String(LB_MESSAGE_ACTIVATE_EVENT);
+                  Serial.println(stringObjToConstCharString(&lbMsg));
                   g_ESP_ATMEGA_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
+                  g_blinkPeriodMillis = 500;
                 }
                 break;
             }
@@ -3058,7 +3073,6 @@ void showSettings()
 void handleLBMessage(String message)
 {
   // e.g., "$EC,247;"
-  //  bool isReply = message.charAt(0) == '!';
   int firstDelimit = message.indexOf(',');
   if(firstDelimit < 0) firstDelimit = message.indexOf(';');
   if(firstDelimit < 0) firstDelimit = 4;
@@ -3068,6 +3082,14 @@ void handleLBMessage(String message)
 
   if (type == LB_MESSAGE_ESP)
   {
+    if (payload.equals("1")) // Atmega is asking to receive the next active event
+    {
+        if(g_numberOfScheduledEvents && (g_activeEvent != NULL))
+        {
+            Serial.printf(LB_MESSAGE_ESP_KEEPALIVE); // Send ESP keep-alive message to ATMEGA
+            g_ESP_ATMEGA_Comm_State = TX_RECD_START_EVENT_REQUEST;
+        }
+    }
     if (payload.equals("2"))
     {
       if (g_activeEvent != NULL) g_activeEvent->writeEventFile(); /* save any changes */
@@ -3103,19 +3125,29 @@ void handleLBMessage(String message)
   else if (type == LB_MESSAGE_ERROR_CODE)
   {
     String code = payload;
-    EC ec = (EC)payload.toInt();
 
     if (g_debug_prints_enabled)
     {
         Serial.println("err=" + String(code));
     }
 
-//    if (ec)
-    {
       if (g_numberOfSocketClients) {
         String msg = String(String(SOCK_COMMAND_ERROR) + "," + code);
         g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
       }
+  }
+  else if (type == LB_MESSAGE_STATUS_CODE)
+  {
+    String code = payload;
+
+    if (g_debug_prints_enabled)
+    {
+        Serial.println("status=" + String(code));
+    }
+
+      if (g_numberOfSocketClients) {
+        String msg = String(String(SOCK_COMMAND_STATUS) + "," + code);
+        g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
     }
   }
   else if (type == LB_MESSAGE_TEMP)

@@ -659,6 +659,7 @@
 
                     setOverlay(null);
 
+
                     switch (arr[0]) {
                         case "STATUS":
                             {
@@ -674,21 +675,27 @@
                                         }
                                         break;
 
-                                    case 0xF9: // STATUS_CODE_RETURNED_FROM_SLEEP = 0xF9
+                                    case 0xED: // STATUS_CODE_RETURNED_FROM_SLEEP = 0xED
                                         {
                                             text = "Transmitter returned from sleep";
                                         }
                                         break;
 
-                                    case 0xFA: // STATUS_CODE_BEGINNING_XMSN_THIS_CYCLE = 0xFA
+                                    case 0xEE: // STATUS_CODE_BEGINNING_XMSN_THIS_CYCLE = 0xEE
                                         {
                                             text = "Transmitter will transmit this cycle";
                                         }
                                         break;
 
-                                    case 0xFB: // STATUS_CODE_SENDING_ID = 0xFB
+                                    case 0xEF: // STATUS_CODE_SENDING_ID = 0xEF
                                         {
                                             text = "Transmitter sending ID";
+                                        }
+                                        break;
+
+                                    case 0xFB: // STATUS_CODE_EVENT_NEVER_ENDS = 0xFB
+                                        {
+                                            text = "Event never ends";
                                         }
                                         break;
 
@@ -739,6 +746,7 @@
                             }
                             break;
 
+
                         case "ERR_CODE":
                             {
                                 var text;
@@ -748,7 +756,31 @@
                                     //	ERROR_CODE_NO_ERROR = 0x00,
                                     case 0x00:
                                         {
-                                            text = "No error"
+                                            text = "No error";
+                                        }
+                                        break;
+
+                                    case 0xC7: // ERROR_CODE_EVENT_STATION_ID_ERROR = 0xC7
+                                        {
+                                            text = "Station callsign error";
+                                        }
+                                        break;
+
+                                    case 0xC8: // ERROR_CODE_EVENT_PATTERN_CODE_SPEED_NOT_SPECIFIED = 0xC8
+                                        {
+                                            text = "Pattern code speed not specified";
+                                        }
+                                        break;
+
+                                    case 0xC9: // ERROR_CODE_EVENT_PATTERN_NOT_SPECIFIED = 0xC9
+                                        {
+                                            text = "Morse code pattern not specified";
+                                        }
+                                        break;
+
+                                    case 0xCA: // ERROR_CODE_EVENT_TIMING_ERROR = 0xCA
+                                        {
+                                            text = "Timing parameters invalid";
                                         }
                                         break;
 
@@ -770,7 +802,6 @@
                                         }
                                         break;
 
-
                                     case 0xCE: // ERROR_CODE_ILLEGAL_COMMAND_RCVD = 0xCE
                                         {
                                             text = "Illegal command";
@@ -780,6 +811,12 @@
                                     case 0xCF: // ERROR_CODE_SW_LOGIC_ERROR = 0xCF
                                         {
                                             text = "Software logic error";
+                                        }
+                                        break;
+
+                                    case 0xF6: // ERROR_CODE_NO_ANTENNA_PREVENTS_POWER_SETTING = 0xF6
+                                        {
+                                            text = "Missing antenna prevents setting transmit power";
                                         }
                                         break;
 

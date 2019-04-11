@@ -25,8 +25,6 @@
 
 #include "defs.h"
 
-#ifdef INCLUDE_DS3231_SUPPORT
-
    #include "ds3231.h"
    #include <util/twi.h>
    #include <stdio.h>
@@ -294,7 +292,3 @@ void ds3231_set_date_time(char * dateString, ClockSetting setting) /* "2018-03-2
 			i2c_device_write(DS3231_I2C_SLAVE_ADDR, RTC_CONTROL, &byte, 1);
 		}
 	}
-
-
-#endif  /* #ifdef INCLUDE_DS3231_SUPPORT */
-
