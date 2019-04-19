@@ -225,12 +225,12 @@
             freq: "Frequency",
             pattern: "Pattern",
             callsign: "ID",
-            sleep: "Sleep",
+            sleep: "WiFi Off",
             codespeed: ""
         }]; /* Event data to display in a table header */
 
         var g_modulationType = ["CW", "AM"];
-        var g_powerLevelType = ["0", "10", "50", "100", "200", "300", "400", "500", "600", "700", "800", "900", "1000", "1100", "1200", "1300", "1400", "1500", "1600", "1700", "1800", "1900", "2000"];
+        var g_powerLevelType = ["0", "100", "200", "300", "400", "500", "600", "700", "800", "900", "1000", "1100", "1200", "1300", "1400", "1500", "1600", "1700", "1800", "1900", "2000", "2100", "2200"];
         var g_radioBandType = ["80", "2"];
 
         var g_typeFrequency = [{
@@ -289,7 +289,10 @@
 
                 btn.value = "Stop";
                 btn.setAttribute("style", "background-color: #FF0000;");
-                sendBand();
+                sendClear();
+                setTimeout(function() {
+                    sendBand();
+                }, 100);
                 setTimeout(function() {
                     sendPower();
                 }, 200);
@@ -510,15 +513,15 @@
                 cell0.appendChild(t);
                 row.appendChild(cell0);
 
-                // Sleep Button
+                // WiFi Off Button
                 btn = document.createElement('input');
                 btn.type = "button";
                 btn.className = "button";
-                btn.id = "sleepButton";
-                btn.value = "Sleep";
+                btn.id = "wifiOffButton";
+                btn.value = "WiFi Off";
                 btn.onclick = (function(entry) {
                     return function() {
-                        sleepAction();
+                        wifiOffAction();
                     }
                 })(entry);
 
@@ -626,6 +629,10 @@
                     websocketcreated = true;
                     g_stillConnected = Math.max(200, g_stillConnected);
                     sendToSocket("MAC");
+                    setTimeout(function() {
+                        sendBand();
+                    }, 100);
+
                 };
 
                 g_websock.onclose = function(evt) {
@@ -659,7 +666,6 @@
 
                     setOverlay(null);
 
-
                     switch (arr[0]) {
                         case "STATUS":
                             {
@@ -672,6 +678,30 @@
                                     case 0x01: // STATUS_CODE_REPORT_IDLE = 0x01;
                                         {
                                             text = "";
+                                        }
+                                        break;
+
+                                    case 0xE9: // STATUS_CODE_NO_ANT_ATTACHED = 0xE9
+                                        {
+                                            text = "No antennas attached";
+                                        }
+                                        break;
+
+                                    case 0xEA: // STATUS_CODE_2M_ANT_ATTACHED = 0xEA
+                                        {
+                                            text = "2m antenna attached";
+                                        }
+                                        break;
+
+                                    case 0xEB: // STATUS_CODE_80M_ANT_ATTACHED = 0xEB
+                                        {
+                                            text = "80m antenna attached";
+                                        }
+                                        break;
+
+                                    case 0xEC: // STATUS_CODE_RECEIVING_EVENT_DATA = 0xEC
+                                        {
+                                            text = "Transmitter ready to receive event data";
                                         }
                                         break;
 
@@ -1167,7 +1197,7 @@
                 start: "Band",
                 finish: "Frequency",
                 role: "Pattern",
-                sleep: "Sleep"
+                sleep: "WiFi Off"
             }];
 
             var eventLine = {
@@ -1268,9 +1298,10 @@
             }, 100);
         }
 
-        function sendTest() {
-            sendToSocket("TEST");
-            console.log("Test message sent to socket.");
+        function executeEvent() {
+            sendToSocket("CLEAR");
+            sendToSocket("EXECUTE");
+            console.log("Execute message sent to socket.");
 
         }
 
@@ -1309,9 +1340,9 @@
             console.log(btext);
         }
 
-        function sleepAction() {
-            var btn = document.getElementById("sleepButton");
-            var btext = "SLEEP";
+        function wifiOffAction() {
+            var btn = document.getElementById("wifiOffButton");
+            var btext = "WIFI_OFF";
             btn.setAttribute("style", "background-color: #FF0000;");
             console.log(btext);
             sendToSocket(btext);
@@ -1344,6 +1375,11 @@
             sendToSocket(msgText);
             console.log(msgText);
         }
+
+        function sendClear() {
+            sendToSocket("CLEAR");
+            console.log("CLEAR");
+        };
 
 
         function sendModulation() {
@@ -1401,6 +1437,10 @@
                 var isValid = false;
                 var valid = /^[0-9a-zA-Z<| ]+$/;
 
+                if (pattern.length > 20) {
+                    pattern = pattern.substr(0, 20);
+                }
+
                 if (pattern.length > 0) {
                     x.value = pattern;
                     if (pattern.match(valid)) {
@@ -1454,6 +1494,12 @@
                     band.value = "2";
                 }
             } else {
+                var x = document.getElementById("errorreport");
+                if (x != null) x.style.display = "none";
+
+                x = document.getElementById("statusreport");
+                if (x != null) x.style.display = "none";
+
                 sendBand();
                 var band = document.getElementById("bandSelect").value;
                 var freqButton = document.getElementById("frequencyButton");
@@ -1476,6 +1522,12 @@
         }
 
         function pwrClick() {
+            var x = document.getElementById("errorreport");
+            if (x != null) x.style.display = "none";
+
+            x = document.getElementById("statusreport");
+            if (x != null) x.style.display = "none";
+
             sendPower();
         }
 

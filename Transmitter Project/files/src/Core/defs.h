@@ -47,7 +47,9 @@
    #define INCLUDE_DS3231_SUPPORT // Maxim RTC
    #define INCLUDE_TRANSMITTER_SUPPORT
    #define INCLUDE_DAC081C085_SUPPORT
+//   #define ENABLE_PIN_CHANGE_INTERRUPT_0
 //   #define ENABLE_PIN_CHANGE_INTERRUPT_1
+//   #define ENABLE_PIN_CHANGE_INTERRUPT_2
 
 #ifdef INCLUDE_DAC081C085_SUPPORT
    #define PA_DAC DAC081C_I2C_SLAVE_ADDR_A0
@@ -61,6 +63,7 @@
 typedef enum {
 	ERROR_CODE_NO_ERROR = 0x00,
 	ERROR_CODE_REPORT_NO_ERROR = 0x01,
+	ERROR_CODE_2M_BIAS_SET_TOO_RAPIDLY = 0xC6,
 	ERROR_CODE_EVENT_STATION_ID_ERROR = 0xC7,
 	ERROR_CODE_EVENT_PATTERN_CODE_SPEED_NOT_SPECIFIED = 0xC8,
 	ERROR_CODE_EVENT_PATTERN_NOT_SPECIFIED = 0xC9,
@@ -88,6 +91,9 @@ typedef enum {
 typedef enum {
 	STATUS_CODE_IDLE = 0x00,
 	STATUS_CODE_REPORT_IDLE = 0x01,
+	STATUS_CODE_NO_ANT_ATTACHED = 0xE9,
+	STATUS_CODE_2M_ANT_ATTACHED = 0xEA,
+	STATUS_CODE_80M_ANT_ATTACHED = 0xEB,
 	STATUS_CODE_RECEIVING_EVENT_DATA = 0xEC,
 	STATUS_CODE_RETURNED_FROM_SLEEP = 0xED,
 	STATUS_CODE_BEGINNING_XMSN_THIS_CYCLE = 0xEE,
@@ -100,11 +106,6 @@ typedef enum {
 	} SC;
 
 /*******************************************************/
-
-/******************************************************
- * Include only the necessary software support */
-//#define ENABLE_TERMINAL_COMMS
-
 /*******************************************************
 * ADC Scale Factors */
 /* Battery voltage should be read when +12V supply is enabled and all transmitters are fully powered off */
@@ -149,7 +150,7 @@ typedef uint16_t BatteryLevel;  /* in milliVolts */
 
 /******************************************************
  * EEPROM definitions */
-#define EEPROM_INITIALIZED_FLAG 0xBA
+#define EEPROM_INITIALIZED_FLAG 0xA7
 #define EEPROM_UNINITIALIZED 0x00
 
 #define EEPROM_STATION_ID_DEFAULT "FOXBOX"

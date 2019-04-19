@@ -78,25 +78,22 @@ static volatile uint16_t g_util_tick_countdown = 0;
 static volatile BOOL g_battery_measurements_active = FALSE;
 static volatile uint16_t g_maximum_battery = 0;
 static volatile BatteryType g_battery_type = BATTERY_UNKNOWN;
-static volatile BOOL g_initialization_complete = FALSE;
 
 static volatile BOOL g_antenna_connection_changed = TRUE;
 volatile AntConnType g_antenna_connect_state = ANT_CONNECTION_UNDETERMINED;
+static volatile uint16_t g_2m_bias_delay = 0;
 
-static volatile uint8_t g_mod_up = MAX_2M_CW_DRIVE_LEVEL;
-static volatile uint8_t g_mod_down = MAX_2M_CW_DRIVE_LEVEL;
+EC (*g_txTask)(void) = NULL; /* allows the transmitter to specify functions to run in the foreground */
+volatile uint8_t g_mod_up = MAX_2M_CW_DRIVE_LEVEL;
+volatile uint8_t g_mod_down = MAX_2M_CW_DRIVE_LEVEL;
 
 /* Linkbus variables */
-#ifdef ENABLE_TERMINAL_COMMS
-static BOOL g_terminal_mode = LINKBUS_TERMINAL_MODE_DEFAULT;
-#endif
-
 #define MAX_PATTERN_TEXT_LENGTH 20
 
 static BOOL EEMEM ee_interface_eeprom_initialization_flag = EEPROM_UNINITIALIZED;
 
-static char EEMEM ee_stationID_text[MAX_PATTERN_TEXT_LENGTH];
-static char EEMEM ee_pattern_text[MAX_PATTERN_TEXT_LENGTH];
+static char EEMEM ee_stationID_text[MAX_PATTERN_TEXT_LENGTH+1];
+static char EEMEM ee_pattern_text[MAX_PATTERN_TEXT_LENGTH+1];
 static uint8_t EEMEM ee_pattern_codespeed;
 static uint8_t EEMEM ee_id_codespeed;
 static uint16_t EEMEM ee_on_air_time;
@@ -107,7 +104,7 @@ static time_t EEMEM ee_start_time;
 static time_t EEMEM ee_finish_time;
 static BOOL EEMEM ee_event_enabled;
 
-static char g_messages_text[2][MAX_PATTERN_TEXT_LENGTH] = {"\0", "\0"};
+static char g_messages_text[2][MAX_PATTERN_TEXT_LENGTH+1] = {"\0", "\0"};
 static volatile uint8_t g_id_codespeed = EEPROM_ID_CODE_SPEED_DEFAULT;
 static volatile uint8_t g_pattern_codespeed = EEPROM_PATTERN_CODE_SPEED_DEFAULT;
 static volatile uint16_t g_time_needed_for_ID = 0;
@@ -156,7 +153,7 @@ static volatile uint32_t g_PA_voltage = 0;
 extern volatile BOOL g_i2c_not_timed_out;
 static volatile BOOL g_sufficient_power_detected = FALSE;
 static volatile BOOL g_enableHardwareWDResets = FALSE;
-static volatile BOOL g_am_modulation_enabled = FALSE;
+extern BOOL g_am_modulation_enabled;
 
 static volatile BOOL g_go_to_sleep = FALSE;
 static volatile BOOL g_sleeping = FALSE;
@@ -463,13 +460,6 @@ ISR( INT0_vect )
 			}
 		}
 	}
-
-#ifdef ENABLE_TERMINAL_COMMS
-	if(g_terminal_mode)
-	{
-		lb_send_string("\nError: INT0 occurred!\n");
-	}
-#endif // ENABLE_TERMINAL_COMMS
 }
 
 /***********************************************************************
@@ -486,6 +476,7 @@ ISR( TIMER2_COMPB_vect )
 	BOOL repeat, finished;
 
 	if(g_util_tick_countdown) g_util_tick_countdown--;
+	if(g_2m_bias_delay) g_2m_bias_delay--;
 
 	static BOOL key = FALSE;
 
@@ -509,7 +500,7 @@ ISR( TIMER2_COMPB_vect )
 						key = makeMorse(NULL, &repeat, &finished);
 					}
 
-					if(key) powerToTransmitter(ON);
+					if(key) powerToTransmitterDriver(ON);
 				}
 			}
 			else
@@ -524,7 +515,7 @@ ISR( TIMER2_COMPB_vect )
 			{
 				key = OFF;
 				keyTransmitter(OFF);
-				powerToTransmitter(OFF);
+				powerToTransmitterDriver(OFF);
 				g_last_status_code = STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT;
 			}
 		}
@@ -645,6 +636,189 @@ ISR( TIMER2_COMPB_vect )
 
 
 /***********************************************************************
+ * Watchdog Timeout ISR
+ *
+ * The Watchdog timer helps prevent lockups due to hardware problems.
+ * It is especially helpful in this application for preventing I2C bus
+ * errors from locking up the foreground process.
+ ************************************************************************/
+ISR(WDT_vect)
+{
+	static uint8_t limit = 10;
+
+	g_i2c_not_timed_out = FALSE;    /* unstick I2C */
+	saveAllEEPROM();                /* Make sure changed values get saved */
+
+	/* Don't allow an unlimited number of WD interrupts to occur without enabling
+	 * hardware resets. But a limited number might be required during hardware
+	 * initialization. */
+	if(!g_enableHardwareWDResets && limit)
+	{
+		WDTCSR |= (1 << WDIE);  /* this prevents hardware resets from occurring */
+	}
+
+	if(limit)
+	{
+		limit--;
+		g_last_error_code = ERROR_CODE_WD_TIMEOUT;
+	}
+}
+
+
+/***********************************************************************
+ * USART Rx Interrupt ISR
+ *
+ * This ISR is responsible for reading characters from the USART
+ * receive buffer to implement the Linkbus.
+ *
+ *      Message format:
+ *              $id,f1,f2... fn;
+ *              where
+ *                      id = Linkbus MessageID
+ *                      fn = variable length fields
+ *                      ; = end of message flag
+ ************************************************************************/
+ISR(USART_RX_vect)
+{
+	static LinkbusRxBuffer* buff = NULL;
+	static uint8_t charIndex = 0;
+	static uint8_t field_index = 0;
+	static uint8_t field_len = 0;
+	static uint32_t msg_ID = 0;
+	static BOOL receiving_msg = FALSE;
+	uint8_t rx_char;
+
+	rx_char = UDR0;
+
+	if(!buff)
+	{
+		buff = nextEmptyRxBuffer();
+	}
+
+	if(buff)
+	{
+		rx_char = toupper(rx_char);
+		SMCR = 0x00; // exit power-down mode
+
+		if((rx_char == '$') || (rx_char == '!'))    /* start of new message = $ */
+		{
+			charIndex = 0;
+			buff->type = (rx_char == '!') ? LINKBUS_MSG_REPLY : LINKBUS_MSG_COMMAND;
+			field_len = 0;
+			msg_ID = LINKBUS_MSG_UNKNOWN;
+			receiving_msg = TRUE;
+
+			/* Empty the field buffers */
+			for(field_index = 0; field_index < LINKBUS_MAX_MSG_NUMBER_OF_FIELDS; field_index++)
+			{
+				buff->fields[field_index][0] = '\0';
+			}
+
+			field_index = 0;
+		}
+		else if(receiving_msg)
+		{
+			if((rx_char == ',') || (rx_char == ';') || (rx_char == '?'))    /* new field = ,; end of message = ; */
+			{
+				/* if(field_index == 0) // message ID received */
+				if(field_index > 0)
+				{
+					buff->fields[field_index - 1][field_len] = 0;
+				}
+
+				field_index++;
+				field_len = 0;
+
+				if(rx_char == ';')
+				{
+					if(charIndex > LINKBUS_MIN_MSG_LENGTH)
+					{
+						buff->id = msg_ID;
+					}
+					receiving_msg = FALSE;
+				}
+				else if(rx_char == '?')
+				{
+					buff->type = LINKBUS_MSG_QUERY;
+					if(charIndex > LINKBUS_MIN_MSG_LENGTH)
+					{
+						buff->id = msg_ID;
+					}
+					receiving_msg = FALSE;
+				}
+
+				if(!receiving_msg)
+				{
+					buff = 0;
+				}
+			}
+			else
+			{
+				if(field_index == 0)    /* message ID received */
+				{
+					msg_ID = msg_ID * 10 + rx_char;
+				}
+				else
+				{
+					buff->fields[field_index - 1][field_len++] = rx_char;
+				}
+			}
+		}
+		else if(rx_char == 0x0D)    /* Handle carriage return */
+		{
+			buff->id = LINKBUS_MSG_UNKNOWN;
+			charIndex = LINKBUS_MAX_MSG_LENGTH;
+			field_len = 0;
+			msg_ID = LINKBUS_MSG_UNKNOWN;
+			field_index = 0;
+			buff = NULL;
+		}
+
+		if(++charIndex >= LINKBUS_MAX_MSG_LENGTH)
+		{
+			receiving_msg = FALSE;
+			charIndex = 0;
+		}
+	}
+}
+
+
+/***********************************************************************
+ * USART Tx UDRE ISR
+ *
+ * This ISR is responsible for filling the USART transmit buffer. It
+ * implements the transmit function of the Linkbus.
+ ************************************************************************/
+ISR(USART_UDRE_vect)
+{
+	static LinkbusTxBuffer* buff = 0;
+	static uint8_t charIndex = 0;
+
+	if(!buff)
+	{
+		buff = nextFullTxBuffer();
+	}
+
+	if((*buff)[charIndex])
+	{
+		/* Put data into buffer, sends the data */
+		UDR0 = (*buff)[charIndex++];
+	}
+	else
+	{
+		charIndex = 0;
+		(*buff)[0] = '\0';
+		buff = nextFullTxBuffer();
+		if(!buff)
+		{
+			linkbus_end_tx();
+		}
+	}
+}
+
+
+#ifdef ENABLE_PIN_CHANGE_INTERRUPT_0
+/***********************************************************************
  * Pin Change Interrupt Request 0 ISR
  *
  * The pin change interrupt PCI0 will trigger if any enabled PCINT[7:0]
@@ -668,13 +842,8 @@ ISR( TIMER2_COMPB_vect )
  ************************************************************************/
 ISR( PCINT0_vect )
 {
-#ifdef ENABLE_TERMINAL_COMMS
-	if(g_terminal_mode)
-	{
-		lb_send_string("\nError: PCINT0 occurred!\n");
-	}
-#endif //ENABLE_TERMINAL_COMMS
 }
+#endif // ENABLE_PIN_CHANGE_INTERRUPT_0
 
 #ifdef ENABLE_PIN_CHANGE_INTERRUPT_1
 /***********************************************************************
@@ -719,348 +888,7 @@ ISR( PCINT0_vect )
 	}
 #endif // ENABLE_PIN_CHANGE_INTERRUPT_1
 
-/***********************************************************************
- * Watchdog Timeout ISR
- *
- * The Watchdog timer helps prevent lockups due to hardware problems.
- * It is especially helpful in this application for preventing I2C bus
- * errors from locking up the foreground process.
- ************************************************************************/
-ISR(WDT_vect)
-{
-	static uint8_t limit = 10;
-
-	g_i2c_not_timed_out = FALSE;    /* unstick I2C */
-	saveAllEEPROM();                /* Make sure changed values get saved */
-
-	/* Don't allow an unlimited number of WD interrupts to occur without enabling
-	 * hardware resets. But a limited number might be required during hardware
-	 * initialization. */
-	if(!g_enableHardwareWDResets && limit)
-	{
-		WDTCSR |= (1 << WDIE);  /* this prevents hardware resets from occurring */
-	}
-
-	if(limit)
-	{
-		limit--;
-		g_last_error_code = ERROR_CODE_WD_TIMEOUT;
-
-#ifdef ENABLE_TERMINAL_COMMS
-		if(g_terminal_mode)
-		{
-			lb_send_WDTError();
-		}
-#endif // ENABLE_TERMINAL_COMMS
-	}
-}
-
-
-/***********************************************************************
- * USART Rx Interrupt ISR
- *
- * This ISR is responsible for reading characters from the USART
- * receive buffer to implement the Linkbus.
- *
- *      Message format:
- *              $id,f1,f2... fn;
- *              where
- *                      id = Linkbus MessageID
- *                      fn = variable length fields
- *                      ; = end of message flag
- ************************************************************************/
-ISR(USART_RX_vect)
-{
-#ifdef ENABLE_TERMINAL_COMMS
-	static char textBuff[LINKBUS_MAX_MSG_FIELD_LENGTH];
-#endif // ENABLE_TERMINAL_COMMS
-
-	static LinkbusRxBuffer* buff = NULL;
-	static uint8_t charIndex = 0;
-	static uint8_t field_index = 0;
-	static uint8_t field_len = 0;
-	static uint32_t msg_ID = 0;
-	static BOOL receiving_msg = FALSE;
-	uint8_t rx_char;
-
-	rx_char = UDR0;
-
-	if(!buff)
-	{
-		buff = nextEmptyRxBuffer();
-	}
-
-	if(buff)
-	{
-		rx_char = toupper(rx_char);
-		SMCR = 0x00; // exit power-down mode
-
-#ifdef ENABLE_TERMINAL_COMMS
-		if(g_terminal_mode)
-		{
-			static uint8_t ignoreCount = 0;
-
-			if(ignoreCount)
-			{
-				rx_char = '\0';
-				ignoreCount--;
-			}
-			else if(rx_char == 0x1B)    /* ESC sequence start */
-			{
-				rx_char = '\0';
-
-				if(charIndex < LINKBUS_MAX_MSG_FIELD_LENGTH)
-				{
-					rx_char = textBuff[charIndex];
-				}
-
-				ignoreCount = 2;                            /* throw out the next two characters */
-			}
-
-			if(rx_char == 0x0D)                             /* Handle carriage return */
-			{
-				if(receiving_msg)
-				{
-					if(charIndex > 0)
-					{
-						buff->type = LINKBUS_MSG_QUERY;
-						buff->id = msg_ID;
-
-						if(field_index > 0) /* terminate the last field */
-						{
-							buff->fields[field_index - 1][field_len] = 0;
-						}
-
-						textBuff[charIndex] = '\0'; /* terminate last-message buffer */
-					}
-
-					lb_send_NewLine();
-				}
-				else
-				{
-					buff->id = INVALID_MESSAGE; /* print help message */
-				}
-
-				charIndex = 0;
-				field_len = 0;
-				msg_ID = LINKBUS_MSG_UNKNOWN;
-
-				field_index = 0;
-				buff = NULL;
-
-				receiving_msg = FALSE;
-			}
-			else if(rx_char)
-			{
-				textBuff[charIndex] = rx_char;  /* hold the characters for re-use */
-
-				if(charIndex)
-				{
-					if(rx_char == 0x7F)         /* Handle backspace */
-					{
-						charIndex--;
-						if(field_index == 0)
-						{
-							msg_ID -= textBuff[charIndex];
-							msg_ID /= 10;
-						}
-						else if(field_len)
-						{
-							field_len--;
-						}
-						else
-						{
-							buff->fields[field_index][0] = '\0';
-							field_index--;
-						}
-					}
-					else
-					{
-						if(rx_char == ' ')
-						{
-							if(textBuff[charIndex - 1] == ' ')
-							{
-								rx_char = '\0';
-							}
-							else
-							{
-								/* if(field_index == 0) // message ID received */
-								if(field_index > 0)
-								{
-									buff->fields[field_index - 1][field_len] = 0;
-								}
-
-								field_index++;
-								field_len = 0;
-							}
-						}
-						else
-						{
-							if(field_index == 0)    /* message ID received */
-							{
-								msg_ID = msg_ID * 10 + rx_char;
-							}
-							else
-							{
-								buff->fields[field_index - 1][field_len++] = rx_char;
-							}
-						}
-
-						charIndex = MIN(charIndex+1, LINKBUS_MAX_MSG_FIELD_LENGTH);
-					}
-				}
-				else
-				{
-					if((rx_char == 0x7F) || (rx_char == ' '))   /* Handle backspace and Space */
-					{
-						rx_char = '\0';
-					}
-					else                                        /* start of new message */
-					{
-						uint8_t i;
-						field_index = 0;
-						msg_ID = 0;
-
-						msg_ID = msg_ID * 10 + rx_char;
-
-						/* Empty the field buffers */
-						for(i = 0; i < LINKBUS_MAX_MSG_NUMBER_OF_FIELDS; i++)
-						{
-							buff->fields[i][0] = '\0';
-						}
-
-						receiving_msg = TRUE;
-						charIndex = MIN(charIndex+1, LINKBUS_MAX_MSG_FIELD_LENGTH);
-					}
-				}
-
-				if(rx_char)
-				{
-					lb_echo_char(rx_char);
-				}
-			}
-		}
-		else
-#endif // ENABLE_TERMINAL_COMMS
-
-		{
-			if((rx_char == '$') || (rx_char == '!'))    /* start of new message = $ */
-			{
-				charIndex = 0;
-				buff->type = (rx_char == '!') ? LINKBUS_MSG_REPLY : LINKBUS_MSG_COMMAND;
-				field_len = 0;
-				msg_ID = LINKBUS_MSG_UNKNOWN;
-				receiving_msg = TRUE;
-
-				/* Empty the field buffers */
-				for(field_index = 0; field_index < LINKBUS_MAX_MSG_NUMBER_OF_FIELDS; field_index++)
-				{
-					buff->fields[field_index][0] = '\0';
-				}
-
-				field_index = 0;
-			}
-			else if(receiving_msg)
-			{
-				if((rx_char == ',') || (rx_char == ';') || (rx_char == '?'))    /* new field = ,; end of message = ; */
-				{
-					/* if(field_index == 0) // message ID received */
-					if(field_index > 0)
-					{
-						buff->fields[field_index - 1][field_len] = 0;
-					}
-
-					field_index++;
-					field_len = 0;
-
-					if(rx_char == ';')
-					{
-						if(charIndex > LINKBUS_MIN_MSG_LENGTH)
-						{
-							buff->id = msg_ID;
-						}
-						receiving_msg = FALSE;
-					}
-					else if(rx_char == '?')
-					{
-						buff->type = LINKBUS_MSG_QUERY;
-						if(charIndex > LINKBUS_MIN_MSG_LENGTH)
-						{
-							buff->id = msg_ID;
-						}
-						receiving_msg = FALSE;
-					}
-
-					if(!receiving_msg)
-					{
-						buff = 0;
-					}
-				}
-				else
-				{
-					if(field_index == 0)    /* message ID received */
-					{
-						msg_ID = msg_ID * 10 + rx_char;
-					}
-					else
-					{
-						buff->fields[field_index - 1][field_len++] = rx_char;
-					}
-				}
-			}
-			else if(rx_char == 0x0D)    /* Handle carriage return */
-			{
-				buff->id = LINKBUS_MSG_UNKNOWN;
-				charIndex = LINKBUS_MAX_MSG_LENGTH;
-				field_len = 0;
-				msg_ID = LINKBUS_MSG_UNKNOWN;
-				field_index = 0;
-				buff = NULL;
-			}
-
-			if(++charIndex >= LINKBUS_MAX_MSG_LENGTH)
-			{
-				receiving_msg = FALSE;
-				charIndex = 0;
-			}
-		}
-	}
-}
-
-
-/***********************************************************************
- * USART Tx UDRE ISR
- *
- * This ISR is responsible for filling the USART transmit buffer. It
- * implements the transmit function of the Linkbus.
- ************************************************************************/
-ISR(USART_UDRE_vect)
-{
-	static LinkbusTxBuffer* buff = 0;
-	static uint8_t charIndex = 0;
-
-	if(!buff)
-	{
-		buff = nextFullTxBuffer();
-	}
-
-	if((*buff)[charIndex])
-	{
-		/* Put data into buffer, sends the data */
-		UDR0 = (*buff)[charIndex++];
-	}
-	else
-	{
-		charIndex = 0;
-		(*buff)[0] = '\0';
-		buff = nextFullTxBuffer();
-		if(!buff)
-		{
-			linkbus_end_tx();
-		}
-	}
-}
-
+#ifdef ENABLE_PIN_CHANGE_INTERRUPT_2
 /***********************************************************************
  * Pin Change Interrupt 2 ISR
  *
@@ -1073,13 +901,27 @@ ISR(USART_UDRE_vect)
  ************************************************************************/
 ISR( PCINT2_vect )
 {
-#ifdef ENABLE_TERMINAL_COMMS
-	if(g_terminal_mode)
+	static uint8_t portHistory = 0xFF; /* default is high because the pull-up */
+	uint8_t changedbits;
+
+	if(!g_sufficient_power_detected)
 	{
-		lb_send_string("\nError: PCINT2 occurred!\n");
+		return; /* ignore changes before power stabilizes */
+
 	}
-#endif //ENABLE_TERMINAL_COMMS
+
+	changedbits = PIND ^ portHistory;
+	portHistory = PIND;
+
+	if(!(changedbits & ((1 << PORTD4) || (1 << PORTD5))))    /* noise? */
+	{
+		return;
+	}
+
+	g_antenna_connect_state = ANT_CONNECTION_UNDETERMINED;
+	g_antenna_connection_changed = TRUE;
 }
+#endif // ENABLE_PIN_CHANGE_INTERRUPT_2
 
 
 EC rtc_init(void)
@@ -1343,32 +1185,6 @@ int main( void )
 
 	wdt_reset();                                    /* HW watchdog */
 
-#ifdef ENABLE_TERMINAL_COMMS
-	if(g_terminal_mode)
-	{
-		if(code)
-		{
-			lb_send_NewLine();
-			lb_send_string("Init error!");
-			lb_send_NewPrompt();
-
-		}
-		else
-		{
-			lb_send_NewLine();
-			lb_send_Help();
-			lb_send_NewPrompt();
-		}
-	}
-	else
-#endif //ENABLE_TERMINAL_COMMS
-
-	{
-		lb_send_sync();  /* send test pattern to help synchronize baud rate with any attached device */
-	}
-
-	wdt_reset();
-
 	g_util_tick_countdown = 20;
 	while(linkbusTxInProgress() && g_util_tick_countdown)
 	{
@@ -1378,8 +1194,6 @@ int main( void )
 #ifndef TRANQUILIZE_WATCHDOG
 	wdt_init(WD_HW_RESETS); /* enable hardware interrupts */
 #endif // TRANQUILIZE_WATCHDOG
-
-	g_am_modulation_enabled = txAMModulationEnabled();
 
 	while(1)
 	{
@@ -1452,21 +1266,25 @@ int main( void )
 		******************************/
 		if(g_go_to_sleep)
 		{
-			init_hardware = FALSE; // ensure failing attempts are canceled
-			g_sufficient_power_detected = FALSE; // init hardware on return from sleep
-			g_seconds_left_to_sleep = g_seconds_to_sleep;
-			linkbus_disable();
-			while(g_go_to_sleep) set_ports(POWER_SLEEP); // Sleep occurs here
-			set_ports(POWER_UP);
-			linkbus_enable();
-			wdt_init(WD_HW_RESETS); /* enable hardware interrupts */
-			wdt_reset();                    /* HW watchdog */
-			g_i2c_not_timed_out = FALSE;    /* unstick I2C */
-			if(!g_event_enabled)
+			if(txSleeping(TRUE))
 			{
-				g_wifi_enable_delay = 2;
-				g_WiFi_shutdown_seconds = 120;
-				g_last_status_code = STATUS_CODE_RETURNED_FROM_SLEEP;
+				init_hardware = FALSE; // ensure failing attempts are canceled
+				g_sufficient_power_detected = FALSE; // init hardware on return from sleep
+				g_seconds_left_to_sleep = g_seconds_to_sleep;
+				linkbus_disable();
+				while(g_go_to_sleep) set_ports(POWER_SLEEP); // Sleep occurs here
+				set_ports(POWER_UP);
+				linkbus_enable();
+				wdt_init(WD_HW_RESETS); /* enable hardware interrupts */
+				wdt_reset();                    /* HW watchdog */
+				g_i2c_not_timed_out = FALSE;    /* unstick I2C */
+				if(!g_event_enabled)
+				{
+					g_wifi_enable_delay = 2;
+					g_WiFi_shutdown_seconds = 120;
+					g_last_status_code = STATUS_CODE_RETURNED_FROM_SLEEP;
+					g_check_for_next_event = TRUE;
+				}
 			}
 		}
 
@@ -1533,13 +1351,15 @@ int main( void )
 
 							if(connection == ANT_80M_CONNECTED)
 							{
-								txSetBand(BAND_80M, OFF);
+								//txSetBand(BAND_80M, OFF);
+								g_last_status_code = STATUS_CODE_80M_ANT_ATTACHED;
 
 								/* TODO: re-enable transmitter power and state if it is currently operating */
 							}
 							else if(connection == ANT_2M_CONNECTED)
 							{
-								txSetBand(BAND_2M, OFF);
+								//txSetBand(BAND_2M, OFF);
+								g_last_status_code = STATUS_CODE_2M_ANT_ATTACHED;
 
 								/* TODO: re-enable transmitter power and state if it is currently operating */
 							}
@@ -1555,14 +1375,27 @@ int main( void )
 			}
 			else if(g_antenna_connect_state == ANT_ALL_DISCONNECTED)
 			{
-				powerToTransmitter(OFF);
+				powerToTransmitterDriver(OFF);
 				g_antenna_connection_changed = FALSE;
 				lastAntennaConnectState = ANT_ALL_DISCONNECTED;
+				g_last_status_code = STATUS_CODE_NO_ANT_ATTACHED;
 			}
 			else /* logic error - this should not occur */
 			{
-				powerToTransmitter(OFF);
+				powerToTransmitterDriver(OFF);
 				g_antenna_connection_changed = FALSE;
+			}
+		}
+
+		/* Perform tasks specified by the transmitter */
+		if(g_txTask)
+		{
+			if(!g_2m_bias_delay)
+			{
+				EC ec;
+				g_2m_bias_delay = 16; /* Adjust so that the state machine takes about 100 ms to step through all states */
+				ec = (*g_txTask)();
+				if(ec) g_last_error_code = ec;
 			}
 		}
 
@@ -1590,59 +1423,6 @@ int main( void )
 
 			switch(msg_id)
 			{
-				case MESSAGE_DRIVE_LEVEL: // used for debug only
-				{
-					uint8_t setting = 0;
-
-					if(lb_buff->fields[FIELD1][0] && lb_buff->fields[FIELD2][0])
-					{
-						char ud = lb_buff->fields[FIELD1][0];
-						setting = atoi(lb_buff->fields[FIELD2]);
-
-						if(ud == 'U')
-						{
-							g_mod_up = setting;
-#ifdef ENABLE_TERMINAL_COMMS
-							lb_broadcast_num(setting, "DRI U");
-#endif // ENABLE_TERMINAL_COMMS
-
-							txSetModulationLevels((uint8_t*)&g_mod_up, NULL);
-
-							if(txGetBand() == BAND_2M)
-							{
-								if(txGetModulation() == MODE_CW)
-								{
-									dac081c_set_dac(g_mod_up, AM_DAC);
-								}
-							}
-						}
-						else if(ud == 'D')
-						{
-							g_mod_down = setting;
-
-#ifdef ENABLE_TERMINAL_COMMS
-							lb_broadcast_num(setting, "DRI D");
-#endif // ENABLE_TERMINAL_COMMS
-							txSetModulationLevels(NULL, (uint8_t*)&g_mod_down);
-						}
-#ifdef ENABLE_TERMINAL_COMMS
-						else
-						{
-							lb_send_string("DRI U|D 0-255\n");
-						}
-#endif // ENABLE_TERMINAL_COMMS
-					}
-
-#ifdef ENABLE_TERMINAL_COMMS
-					else
-					{
-						sprintf(g_tempStr, "U/D = %d/%d\n", g_mod_up, g_mod_down);
-						lb_send_string(g_tempStr);
-					}
-#endif // ENABLE_TERMINAL_COMMS
-				}
-				break;
-
 				case MESSAGE_WIFI:
 				{
 					BOOL result = wifi_enabled();
@@ -1651,24 +1431,16 @@ int main( void )
 					{
 						result = atoi(lb_buff->fields[FIELD1]);
 
-						if(result == 2)
-						{
-							g_WiFi_shutdown_seconds = 0; // disable shutdown
-							cli();
-							linkbus_disable();
-							sei();
+						cli();
+						linkbus_disable();
+						g_WiFi_shutdown_seconds = 0; // disable shutdown
+						sei();
 
-#ifdef ENABLE_TERMINAL_COMMS
-							g_terminal_mode = !result;
-							wifi_reset(g_terminal_mode);
-							linkbus_setTerminalMode(g_terminal_mode);
-#endif // ENABLE_TERMINAL_COMMS
+						if(result == 0) // shut off power to WiFi
+						{
+							PORTD &= ~((1 << PORTD6) | (1 << PORTD7));
 						}
 					}
-
-#ifdef ENABLE_TERMINAL_COMMS
-					if(g_terminal_mode) lb_broadcast_num((uint16_t)result, NULL);
-#endif // ENABLE_TERMINAL_COMMS
 				}
 				break;
 
@@ -1737,68 +1509,44 @@ int main( void )
 				{
 					if(lb_buff->fields[FIELD1][0] == 'A') // AM
 					{
-						txSetModulation(MODE_AM);
+						BOOL setAMmodulation = TRUE;
+						txSetParameters(NULL, NULL, &setAMmodulation, NULL);
 						saveAllEEPROM();
 						event_parameter_count++;
 					}
 					else if(lb_buff->fields[FIELD1][0] == 'C') // CW
 					{
-						txSetModulation(MODE_CW);
+						BOOL setAMmodulation = FALSE;
+						txSetParameters(NULL, NULL, &setAMmodulation, NULL);
 						saveAllEEPROM();
 						event_parameter_count++;
 					}
-
-					g_am_modulation_enabled = txAMModulationEnabled();
-
-#ifdef ENABLE_TERMINAL_COMMS
-					Modulation m = txGetModulation();
-					sprintf(g_tempStr, "MOD=%s\n", m == MODE_AM ? "AM": m == MODE_CW ? "CW":"N/A");
-					lb_send_string(g_tempStr);
-#endif // ENABLE_TERMINAL_COMMS
 				}
 				break;
 
 				case MESSAGE_TX_POWER:
 				{
-					static uint8_t pwr;
+					static uint16_t pwr_mW;
 
 					if(lb_buff->fields[FIELD1][0])
 					{
+						EC ec;
+
 						if((lb_buff->fields[FIELD1][0] == 'M') && (lb_buff->fields[FIELD2][0]))
 						{
-							int16_t mW;
-							uint8_t powerLevel, modLevelHigh, modLevelLow;
-
-							mW = atoi(lb_buff->fields[FIELD2]);
-
-							txMilliwattsToSettings(mW, &powerLevel, &modLevelHigh, &modLevelLow);
+							pwr_mW = (uint16_t)atoi(lb_buff->fields[FIELD2]);
 							event_parameter_count++;
-							pwr = powerLevel;
 						}
 						else
 						{
-							pwr = atoi(lb_buff->fields[FIELD1]);
+							pwr_mW = (uint16_t)atoi(lb_buff->fields[FIELD1]);
 						}
 
-						txSetPowerLevel(pwr);
-
-						if(txGetBand() == BAND_2M)
-						{
-							txGetModulationLevels((uint8_t *)&g_mod_up, (uint8_t *)&g_mod_down);
-
-							if(txGetModulation() == MODE_CW)
-							{
-								dac081c_set_dac(g_mod_up, AM_DAC);
-							}
-						}
+						ec = txSetParameters(&pwr_mW, NULL, NULL, NULL);
+						if(ec) g_last_error_code = ec;
 
 						saveAllEEPROM();
 					}
-
-#ifdef ENABLE_TERMINAL_COMMS
-					pwr = txGetPowerLevel();
-					lb_send_value(pwr, "POW");
-#endif // ENABLE_TERMINAL_COMMS
 				}
 				break;
 
@@ -1889,7 +1637,7 @@ int main( void )
 						g_event_enabled = FALSE; // get things stopped immediately
 						sei();
 						keyTransmitter(OFF);
-						powerToTransmitter(OFF);
+						powerToTransmitterDriver(OFF);
 
 						// Restore saved event settings
 						event_parameter_count = 0;
@@ -1936,35 +1684,11 @@ int main( void )
 					{
 						saveAllEEPROM();
 					}
-#ifdef ENABLE_TERMINAL_COMMS
-					else if(g_terminal_mode)
-					{
-						lb_send_string("Usage: SF F|S epoch\n");
-					}
-#endif // ENABLE_TERMINAL_COMMS
 				}
 				break;
 
 				case MESSAGE_CLOCK:
 				{
-#ifdef ENABLE_TERMINAL_COMMS
-					if(g_terminal_mode)
-					{
-						if(lb_buff->fields[FIELD1][0])
-						{ /* Expected format:  2018-03-23T18:00:00 */
-							if((lb_buff->fields[FIELD1][10] == 'T') && (lb_buff->fields[FIELD1][13] == ':') && (lb_buff->fields[FIELD1][16] == ':'))
-							{
-								strncpy(g_tempStr, lb_buff->fields[FIELD1], 20);
-								ds3231_set_date_time(g_tempStr, RTC_CLOCK);
-							}
-						}
-
-						sprintf(g_tempStr, "%lu", time(NULL));
-						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
-					}
-					else
-#endif // ENABLE_TERMINAL_COMMS
-
 					if(lb_buff->type == LINKBUS_MSG_COMMAND) // ignore replies since, as the time source, we should never be sending queries anyway
 					{
 						if(lb_buff->fields[FIELD1][0])
@@ -2009,13 +1733,6 @@ int main( void )
 							g_time_needed_for_ID = (500 + timeRequiredToSendStrAtWPM(g_messages_text[STATION_ID], g_id_codespeed)) / 1000;
 						}
 					}
-
-#ifdef ENABLE_TERMINAL_COMMS
-					if(g_terminal_mode)  {
-						lb_send_string(g_messages_text[STATION_ID]);
-						lb_send_string("\n");
-                    }
-#endif // ENABLE_TERMINAL_COMMS
 				}
 				break;
 
@@ -2037,12 +1754,6 @@ int main( void )
 								g_time_needed_for_ID = (500 + timeRequiredToSendStrAtWPM(g_messages_text[STATION_ID], g_id_codespeed)) / 1000;
 							}
 						}
-#ifdef ENABLE_TERMINAL_COMMS
-						else
-						{
-							speed = g_id_codespeed;
-						}
-#endif // ENABLE_TERMINAL_COMMS
 					}
 					else if(lb_buff->fields[FIELD1][0] == 'P')
 					{
@@ -2054,19 +1765,7 @@ int main( void )
 							event_parameter_count++;
 							g_code_throttle = (7042 / g_pattern_codespeed) / 10;
 						}
-#ifdef ENABLE_TERMINAL_COMMS
-						else
-						{
-							speed = g_pattern_codespeed;
-						}
-#endif // ENABLE_TERMINAL_COMMS
 					}
-
-#ifdef ENABLE_TERMINAL_COMMS
-					if(g_terminal_mode)  {
-						lb_send_value(speed, "spd");
-                    }
-#endif // ENABLE_TERMINAL_COMMS
 				}
 				break;
 
@@ -2076,10 +1775,6 @@ int main( void )
 
 					if(lb_buff->fields[FIELD1][0] == '0')
 					{
-#ifdef ENABLE_TERMINAL_COMMS
-						time = g_off_air_seconds;
-#endif // ENABLE_TERMINAL_COMMS
-
 						if(lb_buff->fields[FIELD2][0])
 						{
 							time = atol(lb_buff->fields[FIELD2]);
@@ -2090,10 +1785,6 @@ int main( void )
 					}
 					else if(lb_buff->fields[FIELD1][0] == '1')
 					{
-#ifdef ENABLE_TERMINAL_COMMS
-						time = g_on_air_seconds;
-#endif // ENABLE_TERMINAL_COMMS
-
 						if(lb_buff->fields[FIELD2][0])
 						{
 							time = atol(lb_buff->fields[FIELD2]);
@@ -2104,10 +1795,6 @@ int main( void )
 					}
 					else if(lb_buff->fields[FIELD1][0] == 'I')
 					{
-#ifdef ENABLE_TERMINAL_COMMS
-						time = g_ID_time;
-#endif // ENABLE_TERMINAL_COMMS
-
 						if(lb_buff->fields[FIELD2][0])
 						{
 							time = atol(lb_buff->fields[FIELD2]);
@@ -2118,10 +1805,6 @@ int main( void )
 					}
 					else if(lb_buff->fields[FIELD1][0] == 'D')
 					{
-#ifdef ENABLE_TERMINAL_COMMS
-						time = g_intra_cycle_delay_time;
-#endif // ENABLE_TERMINAL_COMMS
-
 						if(lb_buff->fields[FIELD2][0])
 						{
 							time = atol(lb_buff->fields[FIELD2]);
@@ -2130,12 +1813,6 @@ int main( void )
 							event_parameter_count++;
 						}
 					}
-
-#ifdef ENABLE_TERMINAL_COMMS
-					if(g_terminal_mode) {
-						lb_send_value(time, "t");
-					}
-#endif //  ENABLE_TERMINAL_COMMS
 				}
 				break;
 
@@ -2147,13 +1824,6 @@ int main( void )
 						saveAllEEPROM();
 						event_parameter_count++;
 					}
-
-#ifdef ENABLE_TERMINAL_COMMS
-					if(g_terminal_mode) {
-						lb_send_string(g_messages_text[PATTERN_TEXT]);
-						lb_send_string("\n");
-					}
-#endif // ENABLE_TERMINAL_COMMS
 				}
 				break;
 
@@ -2190,25 +1860,26 @@ int main( void )
 
 					if(lb_buff->fields[FIELD1][0])  /* band field */
 					{
+						EC ec = ERROR_CODE_ILLEGAL_COMMAND_RCVD;
+
 						int b = atoi(lb_buff->fields[FIELD1]);
 
 						if(b == 80)
 						{
-							txSetBand(BAND_80M, ON);
+							RadioBand b = BAND_80M;
+							BOOL en = TRUE;
+							ec = txSetParameters(NULL, &b, NULL, &en);
 							event_parameter_count++;
 						}
 						else if(b == 2)
 						{
-							txSetBand(BAND_2M, ON);
-							txGetModulationLevels((uint8_t *)&g_mod_up, (uint8_t *)&g_mod_down);
-							g_am_modulation_enabled = txAMModulationEnabled();
+							RadioBand b = BAND_2M;
+							BOOL en = TRUE;
+							ec = txSetParameters(NULL, &b, NULL, &en);
 							event_parameter_count++;
-
-							if(txGetModulation() == MODE_CW)
-							{
-								dac081c_set_dac(g_mod_up, AM_DAC);
-							}
 						}
+
+						if(ec) g_last_error_code = ec;
 					}
 
 					band = txGetBand();
@@ -2220,25 +1891,6 @@ int main( void )
 					}
 				}
 				break;
-
-#ifdef ENABLE_TERMINAL_COMMS
-				case MESSAGE_TTY:
-				{
-					g_terminal_mode = TRUE;
-					linkbus_setTerminalMode(g_terminal_mode);
-
-					cli();
-					linkbus_disable();
-					sei();
-					wifi_reset(ON);
-					wifi_power(OFF);
-
-					linkbus_setLineTerm("\n\n");
-
-					linkbus_init(BAUD);
-				}
-				break;
-#endif // ENABLE_TERMINAL_COMMS
 
 				case MESSAGE_BAT:
 				{
@@ -2259,52 +1911,13 @@ int main( void )
 				}
 				break;
 
-#ifdef ENABLE_TERMINAL_COMMS
-				case MESSAGE_ALL_INFO:
-				{
-					uint32_t temp;
-					cli(); wdt_reset(); /* HW watchdog */ sei();
-					linkbus_setLineTerm("\n");
-					lb_send_BND(LINKBUS_MSG_REPLY, txGetBand());
-					lb_send_FRE(LINKBUS_MSG_REPLY, txGetFrequency(), FALSE);
-					cli(); wdt_reset(); /* HW watchdog */ sei();
-					temp = VBAT(g_lastConversionResult[BATTERY_READING]);
-					lb_broadcast_num(temp, "BAT");
-					temp = VPA(g_PA_voltage);
-					lb_broadcast_num(temp, "Vpa");
-					linkbus_setLineTerm("\n\n");
-					cli(); wdt_reset(); /* HW watchdog */ sei();
-					sprintf(g_tempStr, "%lu", time(NULL));
-					lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
-					cli(); wdt_reset(); /* HW watchdog */ sei();
-				}
-				break;
-#endif // ENABLE_TERMINAL_COMMS
-
 				default:
 				{
-#ifdef ENABLE_TERMINAL_COMMS
-					if(g_terminal_mode)
-					{
-						lb_send_Help();
-					}
-					else
-#endif // ENABLE_TERMINAL_COMMS
-
-					{
-						linkbus_reset_rx(); /* flush buffer */
-						g_last_error_code = ERROR_CODE_ILLEGAL_COMMAND_RCVD;
-					}
+					linkbus_reset_rx(); /* flush buffer */
+					g_last_error_code = ERROR_CODE_ILLEGAL_COMMAND_RCVD;
 				}
 				break;
 			}
-
-#ifdef ENABLE_TERMINAL_COMMS
-			if(g_terminal_mode)
-			{
-				lb_send_NewPrompt();
-			}
-#endif // ENABLE_TERMINAL_COMMS
 
 			lb_buff->id = MESSAGE_EMPTY;
 		}
@@ -2486,6 +2099,7 @@ uint16_t throttleValue(uint8_t speed)
 BOOL antennaIsConnected(void)
 {
 	return !(PIND & (1 << PORTD3));
+//	return !(PIND & (1 << PORTD4) || (1 << PORTD5));
 }
 
 void initializeAllEventSettings(BOOL disableEvent)

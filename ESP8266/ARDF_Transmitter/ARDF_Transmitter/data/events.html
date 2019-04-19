@@ -317,7 +317,7 @@
                 g_selectedEvent = selection;
             }
 
-            sendTest();
+            executeEvent();
         }
 
         function eventStopSelect(selection) {
@@ -328,7 +328,7 @@
                 g_selectedEvent = selection;
             }
 
-            sendTest();
+            executeEvent();
         }
 
 
@@ -1262,9 +1262,9 @@
             }, 100);
         }
 
-        function sendTest() {
-            sendToSocket("TEST");
-            console.log("Test message sent to socket.");
+        function executeEvent() {
+            sendToSocket("EXECUTE");
+            console.log("Execute message sent to socket.");
 
         }
 
@@ -1554,8 +1554,7 @@
                     del = (del % 3600) / 60;
                     h = h.toFixed();
                     del = del.toFixed();
-                    statusMsg += " in "
-                    h + "h" + del + "m";
+                    statusMsg += " in " + h + "h" + del + "m";
                 } else if (del > 60) {
                     del /= 60;
                     del = del.toFixed();

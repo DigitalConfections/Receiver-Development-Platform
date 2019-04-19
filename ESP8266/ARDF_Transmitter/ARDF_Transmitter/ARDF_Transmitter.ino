@@ -168,6 +168,7 @@ void saveDefaultsFile(void);
 void showSettings();
 void handleFileUpload();
 void handleLBMessage(String message);
+void handleFS();
 
 void setup()
 {
@@ -290,7 +291,23 @@ String connectionStatus ( int which )
 //===============================================================
 void handleRoot()
 { 
-  g_http_server.send(200, "text/html", "<p>Available pages:</p> <p>   73.73.73.73/test.html<p> <p>   73.73.73.73/events.html<p> <p>   73.73.73.73/upload.html<p>");
+  g_http_server.send(200, "text/html", "<p>Available pages:</p> <p>   <a href=\"/test.html\">73.73.73.73/test.html</a>   Testing support</p> <p>   <a href=\"/events.html\">73.73.73.73/events.html</a>   Configure events</p> <p>   <a href=\"/upload.html\">73.73.73.73/upload.html</a> Upload a file</p> <p>   <a href=\"/fs.html\">73.73.73.73/fs.html</a>   Manage filesystem</p>");
+}
+
+void handleFS()
+{
+    String message = "File System Contents\r\n";
+    String line;
+    Dir dir = SPIFFS.openDir("/");
+    while (dir.next())
+    { // List the file system contents
+        String fileName = dir.fileName();
+        size_t fileSize = dir.fileSize();
+        line = String("\t" + fileName + ", size: " + formatBytes(fileSize) + "\r\n");
+        message += line;
+    }
+
+    g_http_server.send(404, "text/plain", message);
 }
 
 
@@ -390,6 +407,9 @@ bool setupHTTP_AP()
 
     /* Start TCP listener on port TCP_PORT */
     g_http_server.on("/", HTTP_GET, handleRoot);     // Call the 'handleRoot' function when a client requests URI "/"
+      
+    g_http_server.on("/fs", HTTP_GET, handleFS); // Provide utility to help manage the file system
+    g_http_server.on("/fs.html", HTTP_GET, handleFS); // Provide utility to help manage the file system
 
     g_http_server.on("/upload", HTTP_GET, []() {                 // if the client requests the upload page
       if (!handleFileRead("/upload.html"))                // send it if it exists
@@ -2145,6 +2165,11 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           g_numberOfScheduledEvents = numberOfEventsScheduled(g_timeOfDayFromTx);
           g_ESP_ATMEGA_Comm_State = TX_HTML_SAVE_CHANGES;
         }
+        else if (msgHeader == SOCK_COMMAND_CLEAR_ACTIVE_EVENT)
+        {
+            if(g_activeEvent) delete(g_activeEvent);
+            g_activeEvent = NULL;
+        }
         else if (msgHeader == SOCK_COMMAND_TYPE_FREQ)
         {
           int typeIndex;
@@ -2244,7 +2269,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         {
           g_ESP_ATMEGA_Comm_State = TX_HTML_REFRESH_EVENTS;
         }
-        else if (msgHeader == SOCK_COMMAND_TEST)
+        else if (msgHeader == SOCK_COMMAND_EXECUTE_EVENT)
         {
           if (g_activeEvent)
           {
@@ -2270,17 +2295,17 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         else if (msgHeader == SOCK_COMMAND_KEY_DOWN)
         {
           String lbMsg = String(LB_MESSAGE_KEY_DOWN);
-          Serial.printf(stringObjToConstCharString(&lbMsg)); // Send ESP message to ATMEGA
+          Serial.printf(stringObjToConstCharString(&lbMsg)); // Send message to ATMEGA
         }
         else if (msgHeader == SOCK_COMMAND_KEY_UP)
         {
           String lbMsg = String(LB_MESSAGE_KEY_UP);
-          Serial.printf(stringObjToConstCharString(&lbMsg)); // Send ESP message to ATMEGA
+          Serial.printf(stringObjToConstCharString(&lbMsg)); // Send message to ATMEGA
         }
-        else if (msgHeader == SOCK_COMMAND_SLEEP)
+        else if (msgHeader == SOCK_COMMAND_WIFI_OFF)
         {
-          String lbMsg = String(LB_MESSAGE_SLEEP);
-          Serial.printf(stringObjToConstCharString(&lbMsg)); // Send ESP message to ATMEGA
+          String lbMsg = String(LB_MESSAGE_WIFI_OFF);
+          Serial.printf(stringObjToConstCharString(&lbMsg)); // Send message to ATMEGA
         }
         else if (msgHeader == SOCK_COMMAND_PASSTHRU)
         {

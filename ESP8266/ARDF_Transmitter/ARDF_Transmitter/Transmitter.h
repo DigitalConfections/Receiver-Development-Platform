@@ -120,6 +120,10 @@ typedef enum {
 typedef enum {
 	STATUS_CODE_IDLE = 0x00,
 	STATUS_CODE_REPORT_IDLE = 0x01,
+	STATUS_CODE_NO_ANT_ATTACHED = 0xE9,
+	STATUS_CODE_2M_ANT_ATTACHED = 0xEA,
+	STATUS_CODE_80M_ANT_ATTACHED = 0xEB,
+	STATUS_CODE_RECEIVING_EVENT_DATA = 0xEC,
 	STATUS_CODE_RETURNED_FROM_SLEEP = 0xED,
 	STATUS_CODE_BEGINNING_XMSN_THIS_CYCLE = 0xEE,
 	STATUS_CODE_SENDING_ID = 0xEF,
@@ -133,6 +137,7 @@ typedef enum {
 // Websocket Command Messages
 #define SOCK_COMMAND_ERROR "ERR_CODE" 
 #define SOCK_COMMAND_STATUS "STATUS"
+#define SOCK_COMMAND_CLEAR_ACTIVE_EVENT "CLEAR"
 #define SOCK_COMMAND_EVENT_NAME "EVENT_NAME" /* read only */
 #define SOCK_COMMAND_EVENT_FILE_VERSION "FILE_VERSION" /* read only */
 #define SOCK_COMMAND_EVENT_DATA "EVENT_DATA" /* read only */
@@ -156,11 +161,11 @@ typedef enum {
 //#define SOCK_COMMAND_TYPE_WPM "CODE_SPEED" /* read only */
 //#define SOCK_COMMAND_TYPE_ID_INTERVAL "ID_INT" /* read only */
 #define SOCK_COMMAND_TX_ROLE "TX_ROLE"
-#define SOCK_COMMAND_TEST "TEST"
+#define SOCK_COMMAND_EXECUTE_EVENT "EXECUTE"
 #define SOCK_COMMAND_REFRESH "REFRESH"
 #define SOCK_COMMAND_KEY_DOWN "KEY_DOWN"
 #define SOCK_COMMAND_KEY_UP "KEY_UP"
-#define SOCK_COMMAND_SLEEP "SLEEP"
+#define SOCK_COMMAND_WIFI_OFF "WIFI_OFF"
 #define SOCK_COMMAND_PASSTHRU "PASS"
 
 // LinkBus Messages
@@ -208,7 +213,7 @@ typedef enum {
 #define LB_MESSAGE_ACTIVATE_EVENT "$GO,2;" /* Tell ATMEGA to execute the event as it has been configured */
 #define LB_MESSAGE_PREP_FOR_NEW_EVENT "$GO,0;" /* Tell ATMEGA to prepare to receive event data */
 #define LB_MESSAGE_KEY_UP "$GO,0;" /* Tell ATMEGA to stop continuous transmit */
-#define LB_MESSAGE_SLEEP "$GO,S;" /* Tell ATMEGA to put all circuits to sleep (no exit without power cycle) */
+#define LB_MESSAGE_WIFI_OFF "$WI,0;" /* Tell ATMEGA to power off WiFi */
 
 typedef enum {
   TX_WAKE_UP,

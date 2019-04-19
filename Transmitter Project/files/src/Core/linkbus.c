@@ -32,7 +32,6 @@
 
 /* Global Variables */
 static volatile BOOL g_bus_disabled = TRUE;
-static volatile BOOL g_lb_terminal_mode = LINKBUS_TERMINAL_MODE_DEFAULT;
 static const char crlf[] = "\n";
 static char lineTerm[8] = "\n";
 static const char textPrompt[] = "TX> ";
@@ -278,20 +277,6 @@ void linkbus_enable(void)
 	}
 }
 
-void linkbus_setTerminalMode(BOOL on)
-{
-	g_lb_terminal_mode = on;
-
-	if(g_lb_terminal_mode)
-	{
-		linkbus_setLineTerm("\n");
-		linkbus_send_text(lineTerm);
-	}
-	else
-	{
-		linkbus_send_text((char*)crlf);
-	}
-}
 
 BOOL linkbus_send_text(char* text)
 {
@@ -330,51 +315,13 @@ void lb_send_WDTError(void)
 	linkbus_send_text((char*)textWDT);
 }
 
-#ifdef ENABLE_TERMINAL_COMMS
-/***********************************************************************
- * lb_send_Help(void)
- ************************************************************************/
-void lb_send_Help(void)
-{
-	if(g_bus_disabled) return;
-	if(!g_lb_terminal_mode) return;
-
-	sprintf(g_tempMsgBuff, "\n*** %s Ver. %s ***", PRODUCT_NAME_LONG, SW_REVISION);
-
-	while(linkbus_send_text(g_tempMsgBuff));
-	while(linkbusTxInProgress());
-
-#ifdef TRANQUILIZE_WATCHDOG
-	sprintf(g_tempMsgBuff, "\nNote: Watchdog disabled in this build!");
-	while(linkbus_send_text(g_tempMsgBuff));
-	while(linkbusTxInProgress());
-#endif // TRANQUILIZE_WATCHDOG
-
-	int rows = sizeof(textHelp)/sizeof(textHelp[0]);
-	for(int i=0; i<rows; i++)
-	{
-		while(linkbus_send_text((char*)textHelp[i]));
-		while(linkbusTxInProgress());
-	}
-
-	lb_send_NewLine();
-}
-#endif // ENABLE_TERMINAL_COMMS
-
 /***********************************************************************************
  *  Support for creating and sending various Terminal Mode Linkbus messages is provided below.
  ************************************************************************************/
 
 void lb_send_NewPrompt(void)
 {
-	if(g_lb_terminal_mode)
-	{
-		linkbus_send_text((char*)textPrompt);
-	}
-	else
-	{
-		linkbus_send_text((char*)crlf);
-	}
+	linkbus_send_text((char*)crlf);
 }
 
 void lb_send_NewLine(void)
@@ -447,22 +394,7 @@ void lb_send_FRE(LBMessageType msgType, Frequency_Hz freq, BOOL isMemoryValue)
 
 	if(valid)
 	{
-		if(g_lb_terminal_mode)
-		{
-			if(isMemoryValue)
-			{
-				sprintf(g_tempMsgBuff, "> %s (MEM)%s", f, lineTerm);
-			}
-			else
-			{
-				sprintf(g_tempMsgBuff, "> %s%s", f, lineTerm);
-			}
-		}
-		else
-		{
-			sprintf(g_tempMsgBuff, "%cFRE,%s,%s%c", prefix, f, isMemoryValue ? "M" : NULL, terminus);
-		}
-
+		sprintf(g_tempMsgBuff, "%cFRE,%s,%s%c", prefix, f, isMemoryValue ? "M" : NULL, terminus);
 		linkbus_send_text(g_tempMsgBuff);
 	}
 }
@@ -482,14 +414,7 @@ void lb_send_msg(LBMessageType msgType, char* msgLabel, char* msgStr)
 		terminus = '?';
 	}
 
-	if(g_lb_terminal_mode)
-	{
-		sprintf(g_tempMsgBuff, "> %s=%s%s", msgLabel, msgStr, lineTerm);
-	}
-	else
-	{
-		sprintf(g_tempMsgBuff, "%c%s,%s%c", prefix, msgLabel, msgStr, terminus);
-	}
+	sprintf(g_tempMsgBuff, "%c%s,%s%c", prefix, msgLabel, msgStr, terminus);
 
 	linkbus_send_text(g_tempMsgBuff);
 }
@@ -515,26 +440,11 @@ void lb_send_BND(LBMessageType msgType, RadioBand band)
 		valid = FALSE;
 	}
 
-	if(g_lb_terminal_mode)
-	{
-		sprintf(b, "%s", band == BAND_2M ? "2m" : "80m");
-	}
-	else
-	{
-		sprintf(b, "%d", band);
-	}
+	sprintf(b, "%d", band);
 
 	if(valid)
 	{
-		if(g_lb_terminal_mode)
-		{
-			sprintf(g_tempMsgBuff, "> BND=%s%s", b, lineTerm);
-		}
-		else
-		{
-			sprintf(g_tempMsgBuff, "%cBND,%s%c", prefix, b, terminus);
-		}
-
+		sprintf(g_tempMsgBuff, "%cBND,%s%c", prefix, b, terminus);
 		linkbus_send_text(g_tempMsgBuff);
 	}
 }
@@ -553,23 +463,9 @@ void lb_broadcast_num(uint16_t data, char* str)
 	sprintf(t, "%u", data);
 	g_tempMsgBuff[0] = '\0';
 
-	if(g_lb_terminal_mode)
+	if(str)
 	{
-		if(str)
-		{
-			sprintf(g_tempMsgBuff, "> %s=%s%s", str, t, lineTerm);
-		}
-		else
-		{
-			sprintf(g_tempMsgBuff, "> %s%s", t, lineTerm);
-		}
-	}
-	else
-	{
-		if(str)
-		{
-			sprintf(g_tempMsgBuff, "%s,%s;", str, t);
-		}
+		sprintf(g_tempMsgBuff, "%s,%s;", str, t);
 	}
 
 	if(g_tempMsgBuff[0]) linkbus_send_text(g_tempMsgBuff);
