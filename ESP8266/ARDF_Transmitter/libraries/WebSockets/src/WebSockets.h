@@ -30,9 +30,16 @@
 #define bit(b) (1UL << (b)) // Taken directly from Arduino.h
 #else
 #include <Arduino.h>
+#include <IPAddress.h>
 #endif
 
+#ifdef ARDUINO_ARCH_AVR
+#error Version 2.x.x currently does not support Arduino with AVR since there is no support for std namespace of c++.
+#error Use Version 1.x.x. (ATmega branch)
+#else
 #include <functional>
+#endif
+
 
 #ifndef NODEBUG_WEBSOCKETS
 #ifdef DEBUG_ESP_PORT
@@ -234,6 +241,7 @@ typedef struct {
         String cUrl;        ///< http url
         uint16_t cCode;     ///< http code
 
+        bool cIsClient = false;     ///< will be used for masking
         bool cIsUpgrade;    ///< Connection == Upgrade
         bool cIsWebsocket;  ///< Upgrade == websocket
 
@@ -256,6 +264,13 @@ typedef struct {
         bool cHttpHeadersValid; ///< non-websocket http header validity indicator
         size_t cMandatoryHeadersCount; ///< non-websocket mandatory http headers present count
 
+        bool pongReceived;
+        uint32_t pingInterval;  // how often ping will be sent, 0 means "heartbeat is not active"
+        uint32_t lastPing;      // millis when last pong has been received
+        uint32_t pongTimeout;   // interval in millis after which pong is considered to timeout
+        uint8_t disconnectTimeoutCount;  // after how many subsequent pong timeouts discconnect will happen, 0 means "do not disconnect"
+        uint8_t pongTimeoutCount;   // current pong timeout count     
+
 #if (WEBSOCKETS_NETWORK_TYPE == NETWORK_ESP8266_ASYNC)
         String cHttpLine;   ///< HTTP header lines
 #endif
@@ -272,13 +287,13 @@ class WebSockets {
         typedef std::function<void(WSclient_t * client, bool ok)> WSreadWaitCb;
 #endif
 
-        virtual void clientDisconnect(WSclient_t * client);
-        virtual bool clientIsConnected(WSclient_t * client);
+        virtual void clientDisconnect(WSclient_t * client) = 0;
+        virtual bool clientIsConnected(WSclient_t * client) = 0;
 
-        virtual void messageReceived(WSclient_t * client, WSopcode_t opcode, uint8_t * payload, size_t length, bool fin);
+        virtual void messageReceived(WSclient_t * client, WSopcode_t opcode, uint8_t * payload, size_t length, bool fin) = 0;
 
         void clientDisconnect(WSclient_t * client, uint16_t code, char * reason = NULL, size_t reasonLen = 0);
-        bool sendFrame(WSclient_t * client, WSopcode_t opcode, uint8_t * payload = NULL, size_t length = 0, bool mask = false, bool fin = true, bool headerToPayload = false);
+        bool sendFrame(WSclient_t * client, WSopcode_t opcode, uint8_t * payload = NULL, size_t length = 0, bool fin = true, bool headerToPayload = false);
 
         void headerDone(WSclient_t * client);
 
@@ -295,7 +310,13 @@ class WebSockets {
         virtual size_t write(WSclient_t * client, uint8_t *out, size_t n);
         size_t write(WSclient_t * client, const char *out);
 
+        void enableHeartbeat(WSclient_t * client, uint32_t pingInterval, uint32_t pongTimeout, uint8_t disconnectTimeoutCount);
+        void handleHBTimeout(WSclient_t * client);
+
 
 };
 
+#ifndef UNUSED
+#define UNUSED(var) (void)(var)
+#endif
 #endif /* WEBSOCKETS_H_ */

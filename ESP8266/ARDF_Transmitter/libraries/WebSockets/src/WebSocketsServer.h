@@ -27,7 +27,9 @@
 
 #include "WebSockets.h"
 
+#ifndef WEBSOCKETS_SERVER_CLIENT_MAX
 #define WEBSOCKETS_SERVER_CLIENT_MAX  (5)
+#endif
 
 
 
@@ -47,7 +49,7 @@ public:
         virtual ~WebSocketsServer(void);
 
         void begin(void);
-		bool isReady(void);
+        void close(void);
 
 #if (WEBSOCKETS_NETWORK_TYPE != NETWORK_ESP8266_ASYNC)
         void loop(void);
@@ -62,7 +64,7 @@ public:
 			const char* mandatoryHttpHeaders[],
 			size_t mandatoryHttpHeaderCount);
 
-		int  clientConnections(void);
+
         bool sendTXT(uint8_t num, uint8_t * payload, size_t length = 0, bool headerToPayload = false);
         bool sendTXT(uint8_t num, const uint8_t * payload, size_t length = 0);
         bool sendTXT(uint8_t num, char * payload, size_t length = 0, bool headerToPayload = false);
@@ -89,9 +91,13 @@ public:
 
         void disconnect(void);
         void disconnect(uint8_t num);
+    
+        bool isRunning(void);
 
         void setAuthorization(const char * user, const char * password);
         void setAuthorization(const char * auth);
+
+        int connectedClients(bool ping = false);
 
 #if (WEBSOCKETS_NETWORK_TYPE == NETWORK_ESP8266) || (WEBSOCKETS_NETWORK_TYPE == NETWORK_ESP8266_ASYNC) || (WEBSOCKETS_NETWORK_TYPE == NETWORK_ESP32)
         IPAddress remoteIP(uint8_t num);
@@ -104,7 +110,6 @@ protected:
         String _base64Authorization; ///< Base64 encoded Auth request
         String * _mandatoryHttpHeaders;
         size_t _mandatoryHttpHeaderCount;
-		bool _began;
 
         WEBSOCKETS_NETWORK_SERVER_CLASS * _server;
 
@@ -112,6 +117,8 @@ protected:
 
         WebSocketServerEvent _cbEvent;
         WebSocketServerHttpHeaderValFunc _httpHeaderValidationFunc;
+
+        bool _runnning;
 
         bool newClient(WEBSOCKETS_NETWORK_CLASS * TCPclient);
 
