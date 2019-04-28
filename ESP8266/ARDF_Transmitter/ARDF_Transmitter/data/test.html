@@ -230,7 +230,8 @@
         }]; /* Event data to display in a table header */
 
         var g_modulationType = ["CW", "AM"];
-        var g_powerLevelType = ["0", "100", "200", "300", "400", "500", "600", "700", "800", "900", "1000", "1100", "1200", "1300", "1400", "1500", "1600", "1700", "1800", "1900", "2000", "2100", "2200"];
+        var g_powerLevels_80m = ["0", "100", "200", "300", "400", "500", "600", "700", "800", "900", "1000", "1100", "1200", "1300", "1400", "1500", "1600", "1700", "1800", "1900", "2000"];
+        var g_powerLevels_2m = ["0", "100", "200", "300", "400", "500", "600", "700", "800", "900", "1000"];
         var g_radioBandType = ["80", "2"];
 
         var g_typeFrequency = [{
@@ -242,7 +243,7 @@
         }]; /* Frequency used by transmitters in that "role" */
 
         var g_selectedEvent = "";
-        var g_powerLevel = g_powerLevelType[5];
+        var g_powerLevel = g_powerLevels_80m[0];
         var g_modulation = g_modulationType[0];
         var g_eventRadioBand = g_radioBandType[0];
 
@@ -402,10 +403,18 @@
                 cell0 = document.createElement("td");
                 cell0.setAttribute("border", "1px solid black");
 
-                var sel = document.createElement('select'),
-                    option,
-                    i = 0,
-                    il = g_powerLevelType.length;
+                var sel, option, i, il;
+                if (g_eventRadioBand == "80m") {
+                    sel = document.createElement('select'),
+                        option,
+                        i = 0,
+                        il = g_powerLevels_80m.length;
+                } else {
+                    sel = document.createElement('select'),
+                        option,
+                        i = 0,
+                        il = g_powerLevels_2m.length;
+                }
 
                 sel.setAttribute("onchange", "pwrClick()");
                 sel.setAttribute("id", "pwrSelect");
@@ -413,14 +422,23 @@
 
                 for (; i < il; i += 1) {
                     option = document.createElement('option');
-                    option.setAttribute('value', g_powerLevelType[i]);
-                    option.appendChild(document.createTextNode(g_powerLevelType[i]));
-                    if (g_powerLevelType[i] == g_powerLevel) {
-                        option.setAttribute("selected", "true");
+                    if (g_eventRadioBand == "80m") {
+                        option.setAttribute('value', g_powerLevels_80m[i]);
+                        option.appendChild(document.createTextNode(g_powerLevels_80m[i]));
+                        if (g_powerLevels_80m[i] == g_powerLevel) {
+                            option.setAttribute("selected", "true");
+                        }
+                        console.log("Power option:", g_powerLevels_80m[i]);
+                    } else {
+                        option.setAttribute('value', g_powerLevels_2m[i]);
+                        option.appendChild(document.createTextNode(g_powerLevels_2m[i]));
+                        if (g_powerLevels_2m[i] == g_powerLevel) {
+                            option.setAttribute("selected", "true");
+                        }
+                        console.log("Power option:", g_powerLevels_2m[i]);
                     }
 
                     sel.appendChild(option);
-                    console.log("Power option:", g_powerLevelType[i]);
                 }
 
 
@@ -442,15 +460,17 @@
                 sel.setAttribute("style", "font-family:verdana; font-size:15px; color:blue; font-weight:bold;");
 
                 for (; i < il; i += 1) {
-                    option = document.createElement('option');
-                    option.setAttribute('value', g_modulationType[i]);
-                    option.appendChild(document.createTextNode(g_modulationType[i]));
-                    if (g_modulationType[i] == g_modulation) {
-                        option.setAttribute("selected", "true");
-                    }
+                    if (g_eventRadioBand == "2m" || ((g_eventRadioBand == "80m") && (g_modulationType[i] == "CW"))) {
+                        option = document.createElement('option');
+                        option.setAttribute('value', g_modulationType[i]);
+                        option.appendChild(document.createTextNode(g_modulationType[i]));
+                        if (g_modulationType[i] == g_modulation) {
+                            option.setAttribute("selected", "true");
+                        }
 
-                    sel.appendChild(option);
-                    console.log("Modulation Type:", g_modulationType[i]);
+                        sel.appendChild(option);
+                        console.log("Modulation Type:", g_modulationType[i]);
+                    }
                 }
 
                 cell0.appendChild(sel);
@@ -1366,6 +1386,7 @@
             var msgText = "POWER,0," + power;
             sendToSocket(msgText);
             console.log(msgText);
+            g_powerLevel = power;
         }
 
 
@@ -1509,15 +1530,19 @@
 
                 if (band == "80") {
                     g_eventRadioBand = "80m"
-                    updateFreqButtonText();
                     freqButton.value = freqDotFormat(g_typeFrequency[0].frequency);
                     modulationSet.value = "CW";
+                    g_powerLevel = g_powerLevels_80m[0];
                 } else {
                     g_eventRadioBand = "2m";
-                    updateFreqButtonText()
                     freqButton.value = freqDotFormat(g_typeFrequency[1].frequency);
                     modulationSet.value = "AM";
+                    g_powerLevel = g_powerLevels_2m[0];
                 }
+
+                updateFreqButtonText();
+                updatePowerLevels();
+                updateModulationSelection();
             }
         }
 
@@ -1799,6 +1824,69 @@
                 freqButton.value = freqDotFormat(g_typeFrequency[0].frequency);
             } else {
                 freqButton.value = freqDotFormat(g_typeFrequency[1].frequency);
+            }
+        }
+
+        function updatePowerLevels() {
+            var powerSelect = document.getElementById("pwrSelect");
+
+            if (powerSelect != null) {
+                powerSelect.options.length = 0;
+                var option, i, il;
+                if (g_eventRadioBand == "80m") {
+                    i = 0;
+                    il = g_powerLevels_80m.length;
+
+                    for (i = 0; i < il; i += 1) {
+                        option = document.createElement('option');
+                        option.setAttribute('value', g_powerLevels_80m[i]);
+                        option.appendChild(document.createTextNode(g_powerLevels_80m[i]));
+                        if (g_powerLevels_80m[i] == g_powerLevel) {
+                            option.setAttribute("selected", "true");
+                        }
+
+                        powerSelect.appendChild(option);
+                    }
+                } else {
+                    i = 0;
+                    il = g_powerLevels_2m.length;
+
+                    for (i = 0; i < il; i += 1) {
+                        option = document.createElement('option');
+                        option.setAttribute('value', g_powerLevels_2m[i]);
+                        option.appendChild(document.createTextNode(g_powerLevels_2m[i]));
+                        if (g_powerLevels_2m[i] == g_powerLevel) {
+                            option.setAttribute("selected", "true");
+                        }
+
+                        powerSelect.appendChild(option);
+                    }
+                }
+            }
+        }
+
+        function updateModulationSelection() {
+            var modSelect = document.getElementById("modSelect");
+
+            if (modSelect != null) {
+                modSelect.options.length = 0;
+                if (g_eventRadioBand == "80m") {
+                    option = document.createElement('option');
+                    option.setAttribute('value', "CW");
+                    option.appendChild(document.createTextNode("CW"));
+                    modSelect.appendChild(option);
+                } else {
+                    option = document.createElement('option');
+                    option.setAttribute('value', "CW");
+                    option.appendChild(document.createTextNode("CW"));
+                    modSelect.appendChild(option);
+                    option = document.createElement('option');
+                    option.setAttribute('value', "AM");
+                    option.appendChild(document.createTextNode("AM"));
+                    modSelect.appendChild(option);
+                    option.setAttribute("selected", "true");
+                    modSelect.appendChild(option);
+                }
             }
         }
 

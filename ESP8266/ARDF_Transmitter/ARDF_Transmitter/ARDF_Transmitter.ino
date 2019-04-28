@@ -167,6 +167,7 @@ bool readDefaultsFile(void);
 void saveDefaultsFile(void);
 void showSettings();
 void handleFileUpload();
+void handleFileDownload();
 void handleLBMessage(String message);
 void handleFS();
 
@@ -303,11 +304,16 @@ void handleFS()
     { // List the file system contents
         String fileName = dir.fileName();
         size_t fileSize = dir.fileSize();
-        line = String("\t" + fileName + ", size: " + formatBytes(fileSize) + "\r\n");
+        line = String("<p>" + fileName + ", size: " + formatBytes(fileSize) + "</p>");
         message += line;
     }
+    
+    message += "<form method=\"post\" enctype=\"multipart/form-data\">\r\n";
+    message += "File name:<input type=\"text\" name=\"name\">\r\n";
+    message += "<input class=\"button\" type=\"submit\" value=\"Download\">\r\n";
+    message += "</form>";
 
-    g_http_server.send(404, "text/plain", message);
+    g_http_server.send(200, "text/html", message);
 }
 
 
@@ -410,6 +416,10 @@ bool setupHTTP_AP()
       
     g_http_server.on("/fs", HTTP_GET, handleFS); // Provide utility to help manage the file system
     g_http_server.on("/fs.html", HTTP_GET, handleFS); // Provide utility to help manage the file system
+
+    g_http_server.on("/fs", HTTP_POST, handleFileDownload);                       // go to 'handleFileDownload'
+
+    g_http_server.on("/fs.html", HTTP_POST, handleFileDownload);                       // go to 'handleFileDownload'
 
     g_http_server.on("/upload", HTTP_GET, []() {                 // if the client requests the upload page
       if (!handleFileRead("/upload.html"))                // send it if it exists
@@ -2926,6 +2936,39 @@ void saveDefaultsFile()
   }
 
   Serial.println(String("\tFile Not Found: ") + path);  // If the file doesn't exist, return false
+}
+
+void handleFileDownload()
+{
+  String path = g_http_server.arg(0);
+    
+//  if (g_debug_prints_enabled)
+  {
+    Serial.println("\nhandleFileDownload: " + path);
+  }
+
+  if (path.endsWith("/")) path += "index.html";   // If a folder is requested, send the index file
+  String contentType = "text/plain";      // Always use text MIME type
+  if (SPIFFS.exists(stringObjToConstCharString(&path)))
+  { // If the file exists, either as a compressed archive, or normal
+      File file = SPIFFS.open(path, "r"); // Open the file
+    size_t sent = g_http_server.streamFile(file, contentType);  // Send it to the client
+    file.close();                       // Close the file again
+    if (g_debug_prints_enabled)
+    {
+      Serial.println(String("\tSent " + String(sent) + "bytes to file: ") + path);
+    }
+    return;
+  }
+  else
+  {
+    if (g_debug_prints_enabled)
+    {
+      Serial.println(String("File not found in SPIFFS: ") + path);
+    }
+  }
+
+  return;
 }
 
 void handleFileUpload()
