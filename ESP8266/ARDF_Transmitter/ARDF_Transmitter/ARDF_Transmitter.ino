@@ -2942,7 +2942,7 @@ void handleFileDownload()
 {
   String path = g_http_server.arg(0);
     
-//  if (g_debug_prints_enabled)
+  if (g_debug_prints_enabled)
   {
     Serial.println("\nhandleFileDownload: " + path);
   }
