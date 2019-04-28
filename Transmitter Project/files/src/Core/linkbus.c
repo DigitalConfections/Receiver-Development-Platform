@@ -32,7 +32,6 @@
 
 /* Global Variables */
 static volatile BOOL g_bus_disabled = TRUE;
-static volatile BOOL g_lb_terminal_mode = LINKBUS_TERMINAL_MODE_DEFAULT;
 static const char crlf[] = "\n";
 static char lineTerm[8] = "\n";
 static const char textPrompt[] = "TX> ";
@@ -230,6 +229,12 @@ void linkbus_reset_rx(void)
 void linkbus_init(uint32_t baud)
 {
 	memset(rx_buffer, 0, sizeof(rx_buffer));
+
+	for(int bufferIndex=0; bufferIndex<LINKBUS_NUMBER_OF_TX_MSG_BUFFERS; bufferIndex++)
+	{
+		tx_buffer[bufferIndex][0] = '\0';
+	}
+
 	/*Set baud rate */
 	uint16_t myubrr = MYUBRR(baud);
 	UBRR0H = (uint8_t)(myubrr >> 8);
@@ -245,48 +250,50 @@ void linkbus_init(uint32_t baud)
 void linkbus_disable(void)
 {
 	uint8_t bufferIndex;
-	
+
 	g_bus_disabled = TRUE;
 	UCSR0B = 0;
 	linkbus_end_tx();
 	memset(rx_buffer, 0, sizeof(rx_buffer));
-	
+
 	for(bufferIndex=0; bufferIndex<LINKBUS_NUMBER_OF_TX_MSG_BUFFERS; bufferIndex++)
 	{
 		tx_buffer[bufferIndex][0] = '\0';
 	}
 }
 
-void linkbus_setTerminalMode(BOOL on)
+void linkbus_enable(void)
 {
-	g_lb_terminal_mode = on;
+	uint8_t bufferIndex;
 
-	if(g_lb_terminal_mode)
+	g_bus_disabled = FALSE;
+	UCSR0B = (1 << RXEN0) | (1 << TXEN0) | (1 << RXCIE0);
+
+	memset(rx_buffer, 0, sizeof(rx_buffer));
+
+	for(bufferIndex=0; bufferIndex<LINKBUS_NUMBER_OF_TX_MSG_BUFFERS; bufferIndex++)
 	{
-		linkbus_setLineTerm("\n");
-		linkbus_send_text(lineTerm);
-	}
-	else
-	{
-		linkbus_send_text((char*)crlf);
+		tx_buffer[bufferIndex][0] = '\0';
 	}
 }
+
 
 BOOL linkbus_send_text(char* text)
 {
 	BOOL err = TRUE;
-	
+	uint16_t tries = 200;
+
 	if(g_bus_disabled) return err;
 
 	if(text)
 	{
 		LinkbusTxBuffer* buff = nextEmptyTxBuffer();
 
-		while(!buff)
+		while(!buff && tries)
 		{
-			while(linkbusTxInProgress())
+			while(linkbusTxInProgress() && tries)
 			{
-				;   /* wait until transmit finishes */
+				if(tries) tries--;   /* wait until transmit finishes */
 			}
 			buff = nextEmptyTxBuffer();
 		}
@@ -308,54 +315,13 @@ void lb_send_WDTError(void)
 	linkbus_send_text((char*)textWDT);
 }
 
-/***********************************************************************
- * lb_send_Help(void)
- ************************************************************************/
-void lb_send_Help(void)
-{
-	if(g_bus_disabled) return;
-	if(!g_lb_terminal_mode) return;
-
-#ifdef DEBUG_FUNCTIONS_ENABLE
-	sprintf(g_tempMsgBuff, "\n*** %s Debug Ver. %s ***", PRODUCT_NAME_LONG, SW_REVISION);
-#else
-	sprintf(g_tempMsgBuff, "\n*** %s Ver. %s ***", PRODUCT_NAME_LONG, SW_REVISION);
-#endif
-	
-	while(linkbus_send_text(g_tempMsgBuff));
-	while(linkbusTxInProgress());
-
-#ifdef TRANQUILIZE_WATCHDOG
-	sprintf(g_tempMsgBuff, "\nNote: Watchdog disabled in this build!");
-	while(linkbus_send_text(g_tempMsgBuff)); 
-	while(linkbusTxInProgress());
-#endif // TRANQUILIZE_WATCHDOG
-	
-	int rows = sizeof(textHelp)/sizeof(textHelp[0]);
-	for(int i=0; i<rows; i++)
-	{
-		while(linkbus_send_text((char*)textHelp[i])); 
-		while(linkbusTxInProgress());
-	}
-	
-	lb_send_NewLine();
-}
-
-
 /***********************************************************************************
  *  Support for creating and sending various Terminal Mode Linkbus messages is provided below.
  ************************************************************************************/
 
 void lb_send_NewPrompt(void)
 {
-	if(g_lb_terminal_mode)
-	{
-		linkbus_send_text((char*)textPrompt);
-	}
-	else
-	{
-		linkbus_send_text((char*)crlf);
-	}
+	linkbus_send_text((char*)crlf);
 }
 
 void lb_send_NewLine(void)
@@ -428,22 +394,7 @@ void lb_send_FRE(LBMessageType msgType, Frequency_Hz freq, BOOL isMemoryValue)
 
 	if(valid)
 	{
-		if(g_lb_terminal_mode)
-		{
-			if(isMemoryValue)
-			{
-				sprintf(g_tempMsgBuff, "> %s (MEM)%s", f, lineTerm);
-			}
-			else
-			{
-				sprintf(g_tempMsgBuff, "> %s%s", f, lineTerm);
-			}
-		}
-		else
-		{
-			sprintf(g_tempMsgBuff, "%cFRE,%s,%s%c", prefix, f, isMemoryValue ? "M" : NULL, terminus);
-		}
-
+		sprintf(g_tempMsgBuff, "%cFRE,%s,%s%c", prefix, f, isMemoryValue ? "M" : NULL, terminus);
 		linkbus_send_text(g_tempMsgBuff);
 	}
 }
@@ -463,14 +414,7 @@ void lb_send_msg(LBMessageType msgType, char* msgLabel, char* msgStr)
 		terminus = '?';
 	}
 
-	if(g_lb_terminal_mode)
-	{
-		sprintf(g_tempMsgBuff, "> %s=%s%s", msgLabel, msgStr, lineTerm);
-	}
-	else
-	{
-		sprintf(g_tempMsgBuff, "%c%s,%s%c", prefix, msgLabel, msgStr, terminus);
-	}
+	sprintf(g_tempMsgBuff, "%c%s,%s%c", prefix, msgLabel, msgStr, terminus);
 
 	linkbus_send_text(g_tempMsgBuff);
 }
@@ -496,26 +440,11 @@ void lb_send_BND(LBMessageType msgType, RadioBand band)
 		valid = FALSE;
 	}
 
-	if(g_lb_terminal_mode)
-	{
-		sprintf(b, "%s", band == BAND_2M ? "2m" : "80m");
-	}
-	else
-	{
-		sprintf(b, "%d", band);
-	}
+	sprintf(b, "%d", band);
 
 	if(valid)
 	{
-		if(g_lb_terminal_mode)
-		{
-			sprintf(g_tempMsgBuff, "> BND=%s%s", b, lineTerm);
-		}
-		else
-		{
-			sprintf(g_tempMsgBuff, "%cBND,%s%c", prefix, b, terminus);
-		}
-
+		sprintf(g_tempMsgBuff, "%cBND,%s%c", prefix, b, terminus);
 		linkbus_send_text(g_tempMsgBuff);
 	}
 }
@@ -534,23 +463,9 @@ void lb_broadcast_num(uint16_t data, char* str)
 	sprintf(t, "%u", data);
 	g_tempMsgBuff[0] = '\0';
 
-	if(g_lb_terminal_mode)
+	if(str)
 	{
-		if(str)
-		{
-			sprintf(g_tempMsgBuff, "> %s=%s%s", str, t, lineTerm);
-		}
-		else
-		{
-			sprintf(g_tempMsgBuff, "> %s%s", t, lineTerm);
-		}
-	}
-	else
-	{
-		if(str)
-		{
-			sprintf(g_tempMsgBuff, "%s,%s;", str, t);
-		}
+		sprintf(g_tempMsgBuff, "%s,%s;", str, t);
 	}
 
 	if(g_tempMsgBuff[0]) linkbus_send_text(g_tempMsgBuff);

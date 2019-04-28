@@ -38,11 +38,13 @@ typedef int16_t Attenuation;
 #define RADIO_NUMBER_OF_BANDS 2
 #define RADIO_IF_FREQUENCY ((Frequency_Hz)10700000)
 #define RADIO_MINIMUM_RECEIVE_FREQ ((Frequency_Hz)3500000)
+#define MAX_TX_POWER_80M_MW 2000
+#define MAX_TX_POWER_2M_MW 1000
 
 /*
  * Define clock pins
  */
-#define TX_CLOCK_HF_1 SI5351_CLK2
+#define TX_CLOCK_VHF_FM SI5351_CLK2
 #define TX_CLOCK_HF_0 SI5351_CLK1
 #define TX_CLOCK_VHF SI5351_CLK0
 
@@ -83,28 +85,52 @@ typedef enum
 	ILLEGAL_MEMORY
 } MemoryStore;
 
+typedef enum
+{
+	BIAS_POWERED_OFF,
+	BIAS_POWER_UP_STEP1,
+	BIAS_POWER_UP_STEP2,
+	BIAS_POWERED_UP,
+	BIAS_POWER_OFF_STEP1,
+	BIAS_POWER_OFF_STEP2
+	} BiasState;
+
+#define BIAS_DELAY_PERIOD_TICKS 100
+
 #define DEFAULT_TX_2M_FREQUENCY 145566000
 #define DEFAULT_TX_80M_FREQUENCY 3550000
 #define DEFAULT_RTTY_OFFSET_FREQUENCY 170
 #define DEFAULT_TX_ACTIVE_BAND BAND_80M
 #define DEFAULT_TX_2M_MODULATION MODE_AM
 
+#define DEFAULT_80M_POWER_TABLE ((const uint8_t[]){0, 1, 5, 20, 35, 50, 65, 80, 95, 110, 125, 140, 155, 170, 185, 200, 215, 230, 245, 250, 250, 250})
+
+#define DEFAULT_2M_AM_POWER_TABLE ((const uint8_t[]){250, 240, 228, 216, 204, 192, 180, 168, 156, 144, 132, 120, 108, 96, 84, 72, 60, 48, 36, 24, 12, 1})
+#define DEFAULT_2M_AM_DRIVE_HIGH_TABLE ((const uint8_t[]){150, 160, 170, 180, 190, 200, 210, 220, 230, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240})
+#define DEFAULT_2M_AM_DRIVE_LOW_TABLE ((const uint8_t[]){150, 150, 150, 150, 150, 150, 150, 150, 150, 150, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240})
+
+#define DEFAULT_2M_CW_POWER_TABLE ((const uint8_t[]){250, 240, 228, 216, 204, 192, 180, 168, 156, 144, 132, 120, 108, 96, 84, 72, 60, 48, 36, 24, 12, 1})
+#define DEFAULT_2M_CW_DRIVE_TABLE ((const uint8_t[]){150, 160, 170, 180, 190, 200, 210, 220, 230, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240})
+
 #define TX_MINIMUM_2M_FREQUENCY 144000000
 #define TX_MAXIMUM_2M_FREQUENCY 148000000
 #define TX_MINIMUM_80M_FREQUENCY 3500000
 #define TX_MAXIMUM_80M_FREQUENCY 8000000
 
-#define DEFAULT_TX_2M_POWER 72 // 5V to all components
-#define DEFAULT_TX_80M_POWER 50
+#define DEFAULT_TX_2M_POWER_MW 100
+#define DEFAULT_TX_80M_POWER_MW 500
 
-#define MAX_2M_PWR_SETTING 120 /* maximum safe DAC setting = 5V*/
+#define MIN_2M_BIAS_SETTING 80 /* minimum safe BIAS DAC setting = -0.8V*/
 #define MAX_80M_PWR_SETTING 255 /* maximum safe DAC setting */
 
-#define DEFAULT_AM_DRIVE_LEVEL 195
+#define DEFAULT_AM_DRIVE_LEVEL_HIGH 195
+#define DEFAULT_AM_DRIVE_LEVEL_LOW 0
 #define DEFAULT_CW_DRIVE_LEVEL 195
 
 #define MAX_2M_AM_DRIVE_LEVEL 195
 #define MAX_2M_CW_DRIVE_LEVEL 195
+
+#define MINUS2V_BIAS 250
 
 typedef struct
 {
@@ -145,17 +171,21 @@ typedef enum {
 	NOT_USED_TXBIT,
 	T_ENABLE,
 	R_ENABLE
-} TxBit;	
+} TxBit;
 
 #ifdef INCLUDE_TRANSMITTER_SUPPORT
 /**
  */
-	BOOL init_transmitter(void);
+	EC init_transmitter(void);
+
+/**
+*/
+	BOOL txSleeping(BOOL enableSleep);
 
 /**
  */
-	void storeTtransmitterValues(void);
-	
+	void storeTransmitterValues(void);
+
 /**
  */
 	void txSetBand(RadioBand band, BOOL enable);
@@ -163,35 +193,26 @@ typedef enum {
 /**
  */
 	RadioBand txGetBand(void);
-	
-/** 
+
+/**
  */
 	void txSetModulation(Modulation mode);
 
-/** 
+/**
  */
 	Modulation txGetModulation(void);
 
-/** 
+/**
  */
 	BOOL txAMModulationEnabled(void);
-	
-/** 
- */
-	void txSetPowerLevel(uint8_t power);
-	
-/** 
- */
-	uint8_t txGetPowerLevel(void);
 
+/**
+ */
+	EC txSetParameters(uint16_t* power_mW, RadioBand* band, BOOL* enableAM, BOOL* enableDriverPwr);
 
 /**
  */
 	BOOL txSetFrequency(Frequency_Hz *freq);
-	
-/**
- */
-	void txSetDrive(uint8_t drive);
 
 /**
  */
@@ -209,10 +230,19 @@ void keyTransmitter(BOOL on);
 
 /**
  */
-void powerToTransmitter(BOOL on);
+BOOL powerToTransmitterDriver(BOOL on);
 
 /**
  */
-void txGetModulationLevels(uint8_t *high, uint8_t *low);
+BOOL txMilliwattsToSettings(uint16_t powerMW, uint8_t* powerLevel, uint8_t* modLevelHigh, uint8_t* modLevelLow);
+
+/**
+Returns TRUE if an antenna for the active band is connected to the transmitter
+ */
+BOOL txIsAntennaForBand(void);
+
+/**
+ */
+void initializeTransmitterEEPROMVars(void);
 
 #endif  /* TRANSMITTER_H_ */

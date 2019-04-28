@@ -25,8 +25,6 @@
 
 #include "defs.h"
 
-#ifdef INCLUDE_DS3231_SUPPORT
-
    #include "ds3231.h"
    #include <util/twi.h>
    #include <stdio.h>
@@ -56,7 +54,7 @@
    #define RTC_TEMP_LSB                    0x12
 
 #ifdef FOOBAR
-const uint8_t wd(int year, int month, int day) 
+const uint8_t wd(int year, int month, int day)
 {
 	static const uint8_t weekdayname[] = {2 /*Mon*/, 3 /*Tue*/, 4 /*Wed*/, 5 /*Thu*/, 6 /*Fri*/, 7 /*Sat*/, 1 /*Sun*/};
 	size_t JND =
@@ -71,14 +69,14 @@ const uint8_t wd(int year, int month, int day)
 }
 #endif
 
-time_t ds3231_get_epoch(BOOL *result)
+time_t ds3231_get_epoch(EC *result)
 {
 	time_t epoch = 0;
 	uint8_t data[7] = { 0, 0, 0, 0, 0, 0, 0 };
 	BOOL res;
-	
+
 	res = i2c_device_read(DS3231_I2C_SLAVE_ADDR, RTC_SECONDS, data, 7);
-	
+
 	if(!res)
 	{
 		struct tm ltm = {0};
@@ -90,13 +88,13 @@ time_t ds3231_get_epoch(BOOL *result)
 		uint8_t seconds;
 		BOOL am_pm;
 		BOOL twelvehour;
-		
+
 		year += data[6] & 0x0f;
 		year += 10*((data[6] & 0xf0) >> 4);
 		ltm.tm_year = year; // year since 1900
-		
+
 		year += 1900; // adjust year to calendar year
-						
+
 		month = data[5] & 0x0f;
 		month += 10*((data[5] & 0xf0) >> 4);
 		ltm.tm_mon = month - 1; // mon 0 to 11
@@ -121,42 +119,46 @@ time_t ds3231_get_epoch(BOOL *result)
 		minutes += (data[1] & 0x0f);
 
 		am_pm = ((data[2] >> 5) & 0x01);
-		
+
 		hours = 10 * ((data[2] >> 4) & 0x01);
 		hours += (data[2] & 0x0f);
 
 		twelvehour = ((data[2] >> 6) & 0x01);
 
-		if(!twelvehour && am_pm)
+		if(twelvehour)
 		{
-			hours += 10;
+			if(am_pm) hours += 12;
+		}
+		else // am_pm holds 20 hours flag
+		{
+			if(am_pm) hours += 20;
 		}
 
 		ltm.tm_hour = hours;
 		ltm.tm_min = minutes;
 		ltm.tm_sec = seconds;
-	  
+
 		epoch = ltm.tm_sec + ltm.tm_min*60 + ltm.tm_hour*3600L + ltm.tm_yday*86400L +
 		(ltm.tm_year-70)*31536000L + ((ltm.tm_year-69)/4)*86400L -
 		((ltm.tm_year-1)/100)*86400L + ((ltm.tm_year+299)/400)*86400L;
 	}
-	 
-	if(result) *result = res; 
+
+	if(result) *result = res ? ERROR_CODE_RTC_NONRESPONSIVE : ERROR_CODE_NO_ERROR;
 	return epoch;
 }
-	
+
 	BOOL ds3231_get_temp(int16_t * val)
 	{
 		uint8_t data[2] = { 0, 0 };
 		BOOL result = i2c_device_read(DS3231_I2C_SLAVE_ADDR, RTC_TEMP_MSB, data, 2);
-		
+
 		if(!result)
 		{
 			*val = data[0];
 			*val = *val << 8;
 			*val |= data[1];
 		}
-		
+
 		return result;
 	}
 
@@ -226,9 +228,9 @@ time_t ds3231_get_epoch(BOOL *result)
 						month += 10*((data[5] & 0xf0) >> 4);
 						year += data[6] & 0x0f;
 						year += 10*((data[6] & 0xf0) >> 4);
-				
+
 						sprintf(buffer, "%4d-%02d-%02dT%1d%1d:%1d%1d:%1d%1d", year, month, date, hour10, hour, minute10, minute, second10, second);
-						
+
 						if(val)
 						{
 							*val = convertTimeStringToEpoch(buffer);
@@ -250,7 +252,7 @@ void ds3231_set_date_time(char * dateString, ClockSetting setting) /* "2018-03-2
 {
 	uint8_t data[7] = { 0, 0, 0, 1, 0, 0, 0 };
 	int temp, year=2000, month, date;
-	
+
 	data[0] = dateString[18] - '0'; /* seconds */
 	data[0] |= ((dateString[17] - '0') << 4); /*10s of seconds */
 	data[1] = dateString[15] - '0'; /* minutes */
@@ -273,7 +275,7 @@ void ds3231_set_date_time(char * dateString, ClockSetting setting) /* "2018-03-2
 	temp = dateString[2] - '0';
 	year += 10*temp;
 	data[6] |= (temp << 4); /* year digit 10 */
-	
+
 	i2c_device_write(DS3231_I2C_SLAVE_ADDR, RTC_SECONDS+(setting*7), data, 7);
 }
 
@@ -290,7 +292,3 @@ void ds3231_set_date_time(char * dateString, ClockSetting setting) /* "2018-03-2
 			i2c_device_write(DS3231_I2C_SLAVE_ADDR, RTC_CONTROL, &byte, 1);
 		}
 	}
-
-
-#endif  /* #ifdef INCLUDE_DS3231_SUPPORT */
-

@@ -32,9 +32,8 @@
 
 /******************************************************
  * Set the text that gets displayed to the user */
-#define SW_REVISION "P1.0.0"
+#define SW_REVISION "P1.0.1"
 
-//#define DEBUG_FUNCTIONS_ENABLE
 //#define TRANQUILIZE_WATCHDOG
 
 #define PRODUCT_NAME_SHORT "ARDF Tx"
@@ -48,26 +47,78 @@
    #define INCLUDE_DS3231_SUPPORT // Maxim RTC
    #define INCLUDE_TRANSMITTER_SUPPORT
    #define INCLUDE_DAC081C085_SUPPORT
+//   #define ENABLE_PIN_CHANGE_INTERRUPT_0
+//   #define ENABLE_PIN_CHANGE_INTERRUPT_1
+//   #define ENABLE_PIN_CHANGE_INTERRUPT_2
 
 #ifdef INCLUDE_DAC081C085_SUPPORT
    #define PA_DAC DAC081C_I2C_SLAVE_ADDR_A0
    #define AM_DAC DAC081C_I2C_SLAVE_ADDR_A1
+   #define BIAS_DAC DAC081C_I2C_SLAVE_ADDR_A2
 #endif
 
 /*******************************************************/
+/* Error Codes                                                                   */
+/*******************************************************/
+typedef enum {
+	ERROR_CODE_NO_ERROR = 0x00,
+	ERROR_CODE_REPORT_NO_ERROR = 0x01,
+	ERROR_CODE_2M_BIAS_SET_TOO_RAPIDLY = 0xC6,
+	ERROR_CODE_EVENT_STATION_ID_ERROR = 0xC7,
+	ERROR_CODE_EVENT_PATTERN_CODE_SPEED_NOT_SPECIFIED = 0xC8,
+	ERROR_CODE_EVENT_PATTERN_NOT_SPECIFIED = 0xC9,
+	ERROR_CODE_EVENT_TIMING_ERROR = 0xCA,
+	ERROR_CODE_EVENT_MISSING_TRANSMIT_DURATION = 0xCB,
+	ERROR_CODE_EVENT_MISSING_START_TIME = 0xCC,
+	ERROR_CODE_EVENT_NOT_CONFIGURED = 0xCD,
+    ERROR_CODE_ILLEGAL_COMMAND_RCVD = 0xCE,
+    ERROR_CODE_SW_LOGIC_ERROR = 0xCF,
+	ERROR_CODE_NO_ANTENNA_PREVENTS_POWER_SETTING = 0xF6,
+	ERROR_CODE_NO_ANTENNA_FOR_BAND = 0xF7,
+	ERROR_CODE_WD_TIMEOUT = 0xF8,
+	ERROR_CODE_SUPPLY_VOLTAGE_ERROR = 0xF9,
+	ERROR_CODE_BUCK_REG_OUTOFSPEC = 0xFA,
+	ERROR_CODE_CLKGEN_NONRESPONSIVE = 0xFB,
+	ERROR_CODE_RTC_NONRESPONSIVE = 0xFC,
+	ERROR_CODE_DAC3_NONRESPONSIVE = 0xFD,
+	ERROR_CODE_DAC2_NONRESPONSIVE = 0xFE,
+	ERROR_CODE_DAC1_NONRESPONSIVE = 0xFF
+	} EC;
 
-/******************************************************
- * Include only the necessary software support */
-#define ENABLE_1_SEC_INTERRUPTS
+/*******************************************************/
+/* Status Codes                                                                 */
+/*******************************************************/
+typedef enum {
+	STATUS_CODE_IDLE = 0x00,
+	STATUS_CODE_REPORT_IDLE = 0x01,
+	STATUS_CODE_NO_ANT_ATTACHED = 0xE9,
+	STATUS_CODE_2M_ANT_ATTACHED = 0xEA,
+	STATUS_CODE_80M_ANT_ATTACHED = 0xEB,
+	STATUS_CODE_RECEIVING_EVENT_DATA = 0xEC,
+	STATUS_CODE_RETURNED_FROM_SLEEP = 0xED,
+	STATUS_CODE_BEGINNING_XMSN_THIS_CYCLE = 0xEE,
+	STATUS_CODE_SENDING_ID = 0xEF,
+	STATUS_CODE_EVENT_NEVER_ENDS = 0xFB,
+	STATUS_CODE_EVENT_FINISHED = 0xFC,
+	STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING = 0xFD,
+	STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT = 0xFE,
+	STATUS_CODE_WAITING_FOR_EVENT_START = 0xFF
+	} SC;
 
+/*******************************************************/
 /*******************************************************
 * ADC Scale Factors */
 /* Battery voltage should be read when +12V supply is enabled and all transmitters are fully powered off */
 #define ADC_REF_VOLTAGE_mV 1100UL
 
-#define BATTERY_VOLTAGE_MAX_MV 4200UL
-#define BATTERY_DROP 140UL
-#define VBAT(x) (BATTERY_DROP + (x * BATTERY_VOLTAGE_MAX_MV) / 1023)
+#define ADC_MAX_VOLTAGE_MV 4200UL /* maximum voltage the ADC can read */
+#define BATTERY_VOLTAGE_MAX_MV 4200UL /* voltage at which the battery is considered to be fully charged */
+#define BATTERY_VOLTAGE_MIN_MV 3200UL /* voltage at which the battery is considered to be fully depleted */
+#define BATTERY_VOLTAGE_RANGE_MV (BATTERY_VOLTAGE_MAX_MV - BATTERY_VOLTAGE_MIN_MV)
+#define BATTERY_DROP 320UL /* voltage drop between the battery terminals and the ADC input while powering the ESP8266 */
+#define BATTERY_DROP_OFFSET (BATTERY_DROP * 1023UL)
+#define VBAT(x) (BATTERY_DROP + (x * ADC_MAX_VOLTAGE_MV) / 1023)
+#define BATTERY_PERCENTAGE(x) ( ( 100UL * ((x * ADC_MAX_VOLTAGE_MV + BATTERY_DROP_OFFSET) - (1023UL * BATTERY_VOLTAGE_MIN_MV)) )  / (BATTERY_VOLTAGE_RANGE_MV * 1023))
 
 #define SUPPLY_VOLTAGE_MAX_MV 14100UL
 #define VSUPPLY(x)((x * SUPPLY_VOLTAGE_MAX_MV) / 1023)
@@ -85,6 +136,11 @@ typedef uint16_t BatteryLevel;  /* in milliVolts */
 #define POWER_OFF_VOLT_THRESH_MV VOLTS_2_4 /* 2.4 V = 2400 mV */
 #define POWER_ON_VOLT_THRESH_MV VOLTS_3_0  /* 3.0 V = 3000 mV */
 
+#define ANTENNA_DETECT_THRESH 20
+#define ANTENNA_DETECT_DEBOUNCE 50
+
+#define NUMBER_OF_ESSENTIAL_EVENT_PARAMETERS 14
+
 
 /*******************************************************/
 
@@ -94,7 +150,7 @@ typedef uint16_t BatteryLevel;  /* in milliVolts */
 
 /******************************************************
  * EEPROM definitions */
-#define EEPROM_INITIALIZED_FLAG 0xAA
+#define EEPROM_INITIALIZED_FLAG 0xA7
 #define EEPROM_UNINITIALIZED 0x00
 
 #define EEPROM_STATION_ID_DEFAULT "FOXBOX"
@@ -102,6 +158,7 @@ typedef uint16_t BatteryLevel;  /* in milliVolts */
 
 #define EEPROM_START_TIME_DEFAULT 0
 #define EEPROM_FINISH_TIME_DEFAULT 0
+#define EEPROM_EVENT_ENABLED_DEFAULT FALSE
 #define EEPROM_ID_CODE_SPEED_DEFAULT 20
 #define EEPROM_PATTERN_CODE_SPEED_DEFAULT 8
 #define EEPROM_ON_AIR_TIME_DEFAULT 60
@@ -162,6 +219,9 @@ typedef uint16_t BatteryLevel;  /* in milliVolts */
   __x > __high ? __high : (__x < __low ? __low : __x);\
   })
 
+#define MAX_TIME 4294967295L
+#define MAX_UINT16 65535
+
 typedef enum
 {
 	DOWN = -1,
@@ -169,6 +229,15 @@ typedef enum
 	UP = 1,
 	SETTOVALUE
 } IncrType;
+
+typedef enum
+{
+	ANT_CONNECTION_UNDETERMINED,
+	ANT_ALL_DISCONNECTED,
+	ANT_2M_CONNECTED,
+	ANT_80M_CONNECTED,
+	ANT_2M_AND_80M_CONNECTED
+} AntConnType;
 
 typedef enum
 {

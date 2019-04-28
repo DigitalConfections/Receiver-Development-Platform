@@ -41,6 +41,7 @@ class WebSocketsClient: private WebSockets {
 
         void begin(const char *host, uint16_t port, const char * url = "/", const char * protocol = "arduino");
         void begin(String host, uint16_t port, String url = "/", String protocol = "arduino");
+        void begin(IPAddress host, uint16_t port, const char * url = "/", const char * protocol = "arduino");
 
 #if (WEBSOCKETS_NETWORK_TYPE == NETWORK_ESP8266) || (WEBSOCKETS_NETWORK_TYPE == NETWORK_ESP32)
         void beginSSL(const char *host, uint16_t port, const char * url = "/", const char * = "", const char * protocol = "arduino");
@@ -85,6 +86,9 @@ class WebSocketsClient: private WebSockets {
 
         void setReconnectInterval(unsigned long time);
 
+        void enableHeartbeat(uint32_t pingInterval, uint32_t pongTimeout, uint8_t disconnectTimeoutCount);
+        void disableHeartbeat();        
+
     protected:
         String _host;
         uint16_t _port;
@@ -113,6 +117,8 @@ class WebSocketsClient: private WebSockets {
 
         void connectedCb();
         void connectFailedCb();
+
+        void handleHBPing(); // send ping in specified intervals
 
 #if (WEBSOCKETS_NETWORK_TYPE == NETWORK_ESP8266_ASYNC)
         void asyncConnect();

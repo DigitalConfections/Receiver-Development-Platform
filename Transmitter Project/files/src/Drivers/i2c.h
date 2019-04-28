@@ -65,8 +65,9 @@
 
 #ifdef INCLUDE_DAC081C085_SUPPORT
 
-	#define DAC081C_I2C_SLAVE_ADDR_A0 0x18
-	#define DAC081C_I2C_SLAVE_ADDR_A1 0x1A
+	#define DAC081C_I2C_SLAVE_ADDR_A0 0x18 /* 24dec: ADR0 = FLT, ADR1 = FLT */
+	#define DAC081C_I2C_SLAVE_ADDR_A1 0x1A /* 26dec: ADR0 = GND, ADR1 = FLT */
+	#define DAC081C_I2C_SLAVE_ADDR_A2 0x10 /* 16dec: ADR0 = FLT, ADR1 = GND */
 
 	/**
 	   Set the DAC to the value passed in setting.

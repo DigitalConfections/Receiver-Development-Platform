@@ -30,7 +30,6 @@
 #include "transmitter.h"
 #include "si5351.h"
 
-#define LINKBUS_TERMINAL_MODE_DEFAULT FALSE
 #define LINKBUS_MAX_MSG_LENGTH 50
 #define LINKBUS_MIN_MSG_LENGTH 3    /* shortest message: $TTY; */
 #define LINKBUS_MAX_MSG_FIELD_LENGTH 21
@@ -100,7 +99,9 @@ typedef enum
 	MESSAGE_PERM = 'P',								/* Saves most settings to EEPROM "perm" */
 	MESSAGE_TX_POWER = 'P' * 100 + 'O' * 10 + 'W',	/* Sets transmit power level */
 	MESSAGE_TX_MOD = 'M' * 100 + 'O' * 10 + 'D',    /* Sets 2m modulation format to AM or CW */
+#ifdef DONOTUSE
 	MESSAGE_DRIVE_LEVEL = 'D' * 100 + 'R' * 10 + 'I', /*  Adjust 2m drive level */
+#endif // DONOTUSE
 	MESSAGE_SET_STATION_ID = 'I' * 10 + 'D',        /* Sets amateur radio callsign text */
 	MESSAGE_SET_PATTERN = 'P' * 10 + 'A',           /* Sets unique transmit pattern */
 	MESSAGE_CODE_SPEED = 'S' * 100 + 'P' * 10 + 'D', /* Sets id and pattern code speeds */
@@ -108,22 +109,17 @@ typedef enum
 	MESSAGE_ESP_COMM = 'E' * 100 + 'S' * 10 + 'P',  /* Communications with ESP8266 controller */
 	MESSAGE_GO = 'G' * 10 + 'O',					/* Start transmitting now without delay */
 
-	/* TTY USER MESSAGES */
-	MESSAGE_ALL_INFO = '?',                         /* Prints all receiver info */
-	
 	/* UTILITY MESSAGES */
 	MESSAGE_RESET = 'R' * 100 + 'S' * 10 + 'T',		/* Processor reset */
 	MESSAGE_WIFI = 'W' * 10 + 'I',					/* Enable/disable WiFi */
-
-#ifdef DEBUG_FUNCTIONS_ENABLE
-	MESSAGE_DEBUG = 'D' * 100 + 'B' * 10 + 'G',		/* Used for debug only */
-#endif
 
 	INVALID_MESSAGE = UINT16_MAX					/* This value must never overlap a valid message ID */
 } LBMessageID;
 
 #define MESSAGE_TIME_LABEL "TIM"
 #define MESSAGE_ESP_LABEL "ESP"
+#define MESSAGE_ERRORCODE_LABEL "EC"
+#define MESSAGE_STATUSCODE_LABEL "SC"
 
 typedef enum
 {
@@ -174,17 +170,23 @@ typedef struct
 void linkbus_init(uint32_t baud);
 
 /**
+ * Immediately turns off receiver and flushes receive buffer
+ */
+void linkbus_disable(void);
+
+/**
+ * Undoes linkbus_disable()
+ */
+void linkbus_enable(void);
+
+
+/**
  */
 void linkbus_end_tx(void);
 
 /**
  */
 void linkbus_reset_rx(void);
-
-/**
- * Immediately turns off receiver and flushes receive buffer
- */
-void linkbus_disable(void);
 
 /**
  */
@@ -212,13 +214,9 @@ void lb_send_sync(void);
 
 /**
  */
-void linkbus_setTerminalMode(BOOL on);
-
-/**
- */
 void lb_send_FRE(LBMessageType msgType, Frequency_Hz freq, BOOL isMemoryValue);
 
-/** 
+/**
 */
 void lb_send_ESP(LBMessageType msgType, char* msg);
 

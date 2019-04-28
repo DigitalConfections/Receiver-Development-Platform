@@ -130,13 +130,13 @@
 #define DO_BOUNDS_CHECKING
 #define DIVIDE_XTAL_FREQ_IF_NEEDED
 #define APPLY_XTAL_CALIBRATION_VALUE
-#define SUPPORT_STATUS_READS 
+#define SUPPORT_STATUS_READS
 */
 #define PREVENT_UNACHIEVABLE_FREQUENCIES
 /*
  * The following flag is used to disable GCC compiler optimizations in code regions where the optimizer has
  * been found to introduce run-time problems. Comment out the following #define if your compiler does not support
- * the syntax used in this library. 
+ * the syntax used in this library.
  */
 #ifndef SELECTIVELY_DISABLE_OPTIMIZATION
 	#define SELECTIVELY_DISABLE_OPTIMIZATION
@@ -449,11 +449,11 @@ Frequency_Hz si5351_get_frequency(Si5351_clock clock);
 
 /**
  */
-void si5351_clock_enable(Si5351_clock, BOOL);
+EC si5351_clock_enable(Si5351_clock, BOOL);
 
 /**
  */
-void si5351_drive_strength(Si5351_clock, Si5351_drive);
+EC si5351_drive_strength(Si5351_clock, Si5351_drive);
 
 /**
  */

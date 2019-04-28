@@ -1,3 +1,25 @@
+/**********************************************************************************************
+   Copyright © 2019 Digital Confections LLC
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy of
+   this software and associated documentation files (the "Software"), to deal in the
+   Software without restriction, including without limitation the rights to use, copy,
+   modify, merge, publish, distribute, sublicense, and/or sell copies of the Software,
+   and to permit persons to whom the Software is furnished to do so, subject to the
+   following conditions:
+
+   The above copyright notice and this permission notice shall be included in all
+   copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+   INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+   PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+   FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+   OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
+
+ **********************************************************************************************/
+
 #include "Helpers.h"
 #include <Arduino.h>
 //#include <GDBStub.h>
@@ -43,14 +65,14 @@ const char * stringObjToConstCharString(String *val)
   return ((const char*)(*val).c_str());
 }
 
-String checksum(String str) 
+String checksum(String str)
 {
   char hex[4];
   int star = str.lastIndexOf("*");
-  if(star > 0) str = str.substring(0, star);
-  int checksum = 0; 
-  
-  for (uint16_t i = 0; i < str.length(); i++){ 
+  if (star > 0) str = str.substring(0, star);
+  int checksum = 0;
+
+  for (uint16_t i = 0; i < str.length(); i++) {
     checksum ^= str.charAt(i);
   }
 
@@ -59,14 +81,14 @@ String checksum(String str)
 }
 
 /**
- * Returns true if checksum calculation does not match the string's checksum, 
- * or if the string passed in the argument doesn't include a checksum
- */
+   Returns true if checksum calculation does not match the string's checksum,
+   or if the string passed in the argument doesn't include a checksum
+*/
 bool validateMessage(String str)
 {
   str.trim();
   int star = str.lastIndexOf("*");
-  if(star < ((int)str.length() - 3)) return true;
+  if (star < ((int)str.length() - 3)) return true;
   String cs = str.substring(star);
   String check = checksum(str);
   return (!cs.equals(check));
@@ -237,7 +259,7 @@ bool mystrptime(String s, Tyme* tm) {
     if (hold > 59) return true;
     tm->tm_sec = hold;
   }
-  
+
   return false;
 }
 
@@ -254,7 +276,6 @@ unsigned long convertTimeStringToEpoch(String s)
              (tm.tm_year - 70) * 31536000L + ((tm.tm_year - 69) / 4) * 86400L -
              ((tm.tm_year - 1) / 100) * 86400L + ((tm.tm_year + 299) / 400) * 86400L;
   }
-  
+
   return result;
 }
-
