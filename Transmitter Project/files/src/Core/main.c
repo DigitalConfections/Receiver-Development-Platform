@@ -83,7 +83,8 @@ static volatile BOOL g_antenna_connection_changed = TRUE;
 volatile AntConnType g_antenna_connect_state = ANT_CONNECTION_UNDETERMINED;
 static volatile uint16_t g_2m_bias_delay = 0;
 
-EC (*g_txTask)(void) = NULL; /* allows the transmitter to specify functions to run in the foreground */
+//EC (*g_txTask)(BiasStateMachineCommand* smCommand) = NULL; /* allows the transmitter to specify functions to run in the foreground */
+extern EC (*g_txTask)(BiasStateMachineCommand* smCommand);  /* allow the transmitter to specify functions to run in the foreground */
 volatile uint8_t g_mod_up = MAX_2M_CW_DRIVE_LEVEL;
 volatile uint8_t g_mod_down = MAX_2M_CW_DRIVE_LEVEL;
 
@@ -1394,7 +1395,7 @@ int main( void )
 			{
 				EC ec;
 				g_2m_bias_delay = 16; /* Adjust so that the state machine takes about 100 ms to step through all states */
-				ec = (*g_txTask)();
+				ec = (*g_txTask)(NULL);
 				if(ec) g_last_error_code = ec;
 			}
 		}
