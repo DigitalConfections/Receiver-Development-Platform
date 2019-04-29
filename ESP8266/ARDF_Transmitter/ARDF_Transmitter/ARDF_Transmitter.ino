@@ -2953,10 +2953,10 @@ void handleFileDownload()
   { // If the file exists, either as a compressed archive, or normal
       File file = SPIFFS.open(path, "r"); // Open the file
     size_t sent = g_http_server.streamFile(file, contentType);  // Send it to the client
-    file.close();                       // Close the file again
+    file.close();                       // Close the file 
     if (g_debug_prints_enabled)
     {
-      Serial.println(String("\tSent " + String(sent) + "bytes to file: ") + path);
+      Serial.println(String("\tSent " + String(sent) + "bytes from file: ") + path);
     }
     return;
   }
