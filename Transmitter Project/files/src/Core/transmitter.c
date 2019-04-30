@@ -29,15 +29,13 @@
 #include "transmitter.h"
 #include "i2c.h"    /* DAC on 80m VGA of Rev X1 Receiver board */
 
-#define BUCK_9V 85
-
 #ifdef INCLUDE_TRANSMITTER_SUPPORT
 
 	extern AntConnType g_antenna_connect_state;
 	extern uint8_t g_mod_up;
 	extern uint8_t g_mod_down;
-	extern EC (*g_txTask)(void);  /* allow the transmitter to specify functions to run in the foreground */
-	static volatile BiasState g_bias_state = BIAS_POWERED_OFF;
+	EC (*g_txTask)(BiasStateMachineCommand* smCommand) = NULL; /* allows the transmitter to specify functions to run in the foreground */
+//	extern EC (*g_txTask)(BiasStateMachineCommand* smCommand);  /* allow the transmitter to specify functions to run in the foreground */
 	static volatile uint8_t g_new_2m_power_DAC_setting = 0;
 	static volatile uint16_t g_new_power_level_mW = 0;
 	static volatile RadioBand g_new_band_setting = BAND_INVALID;
@@ -57,7 +55,7 @@
 	volatile BOOL g_am_modulation_enabled = FALSE;
 	static volatile uint8_t g_am_drive_level_high = DEFAULT_AM_DRIVE_LEVEL_HIGH;
 	static volatile uint8_t g_am_drive_level_low = DEFAULT_AM_DRIVE_LEVEL_LOW;
-	static volatile uint8_t g_cw_drive_level = DEFAULT_CW_DRIVE_LEVEL;
+//	static volatile uint8_t g_cw_drive_level = DEFAULT_CW_DRIVE_LEVEL;
 
 	static volatile BOOL g_transmitter_keyed = FALSE;
 
@@ -75,7 +73,7 @@
 	static uint32_t EEMEM ee_cw_offset_frequency = DEFAULT_RTTY_OFFSET_FREQUENCY;
 	static uint8_t EEMEM ee_am_drive_level_high = DEFAULT_AM_DRIVE_LEVEL_HIGH;
 	static uint8_t EEMEM ee_am_drive_level_low = DEFAULT_AM_DRIVE_LEVEL_LOW;
-	static uint8_t EEMEM ee_cw_drive_level = DEFAULT_CW_DRIVE_LEVEL;
+//	static uint8_t EEMEM ee_cw_drive_level = DEFAULT_CW_DRIVE_LEVEL;
 	static uint8_t EEMEM ee_active_2m_modulation = DEFAULT_TX_2M_MODULATION;
 	static uint8_t EEMEM ee_80m_power_table[22] = DEFAULT_80M_POWER_TABLE;
 	static uint8_t EEMEM ee_2m_am_power_table[22] = DEFAULT_2M_AM_POWER_TABLE;
@@ -94,11 +92,11 @@
 
 	/**
 	 */
-	void txSet2mModulationLevels(uint8_t *high, uint8_t *low);
+	void txGet2mModulationLevels(uint8_t *high, uint8_t *low);
 
 	/**
 	 */
-	EC tx2mBiasStateMachine(void);
+	EC tx2mBiasStateMachine(BiasStateMachineCommand* smCommand);
 
 /*
  *       This function sets the VFO frequency (CLK0 of the Si5351) based on the intended receive frequency passed in by the parameter (freq),
@@ -159,7 +157,7 @@
 		return( FREQUENCY_NOT_SPECIFIED);
 	}
 
-	void txSet2mModulationLevels(uint8_t *high, uint8_t *low)
+	void txGet2mModulationLevels(uint8_t *high, uint8_t *low)
 	{
 		if(g_activeBand != BAND_2M)
 		{
@@ -169,7 +167,7 @@
 		if(high)
 		{
 			g_am_drive_level_high = MIN(*high, MAX_2M_AM_DRIVE_LEVEL);
-			g_cw_drive_level = MIN(*high, MAX_2M_AM_DRIVE_LEVEL);
+//			g_cw_drive_level = MIN(*high, MAX_2M_AM_DRIVE_LEVEL);
 			g_mod_up = g_am_drive_level_high;
 		}
 
@@ -284,23 +282,27 @@
 						g_new_2m_power_DAC_setting = 0;
 						g_new_power_level_mW = *power_mW;
 						g_new_band_setting = BAND_80M;
+
 						if(enableAM != NULL)
 						{
 							g_new_AM_mod_setting = *enableAM;
 						}
+
 						if(enableDriverPwr)
 						{
 							g_new_power_enable_setting = *enableDriverPwr;
 						}
 
-						if((g_bias_state == BIAS_POWERED_OFF) || (g_bias_state == BIAS_POWERED_UP))
+						BiasStateMachineCommand bsmc = BIAS_SM_STABILITY_CHECK;
+						code = tx2mBiasStateMachine(&bsmc);
+
+						if(code == ERROR_CODE_NO_ERROR)
 						{
 							g_activeBand = BAND_INVALID;    /* prevent this branch from executing next time */
 							g_txTask = tx2mBiasStateMachine;
-							return( ERROR_CODE_NO_ERROR);
 						}
 
-						return( ERROR_CODE_SW_LOGIC_ERROR);
+						return( code);
 					}
 				}
 				else if(*band == BAND_2M)
@@ -374,20 +376,32 @@
 					{
 						if(g_new_2m_power_level_received)  /* check to see if last power level change completed */
 						{
-							code = ERROR_CODE_2M_BIAS_SET_TOO_RAPIDLY;
+							code = ERROR_CODE_2M_BIAS_SM_NOT_READY;
 							err = TRUE;
 						}
 						else
 						{
-							g_2m_power_level_mW = *power_mW;
-							txSet2mModulationLevels(&modLevelHigh, &modLevelLow);
+							txGet2mModulationLevels(&modLevelHigh, &modLevelLow);
 
+							g_new_power_level_mW = *power_mW;
 							g_new_2m_power_DAC_setting = biasDAC;
 
-							if((g_bias_state == BIAS_POWERED_OFF) || (g_bias_state == BIAS_POWERED_UP))
+							BiasStateMachineCommand smc = BIAS_SM_STABILITY_CHECK;
+							code = tx2mBiasStateMachine(&smc);
+
+							if(code == ERROR_CODE_NO_ERROR)
 							{
 								g_new_2m_power_level_received = TRUE;
 								g_txTask = tx2mBiasStateMachine;
+							}
+
+							if(g_2m_modulationFormat == MODE_CW)
+							{
+								err = dac081c_set_dac(modLevelHigh, AM_DAC);
+								if(err)
+								{
+									code = ERROR_CODE_DAC2_NONRESPONSIVE;
+								}
 							}
 						}
 					}
@@ -481,6 +495,9 @@
 			return( code);
 		}
 
+		BiasStateMachineCommand bsmc = BIAS_SM_COMMAND_INIT;
+		code = tx2mBiasStateMachine(&bsmc);
+
 		g_tx_initialized = TRUE;
 
 		return( code);
@@ -504,7 +521,7 @@
 			g_rtty_offset = eeprom_read_dword(&ee_cw_offset_frequency);
 			g_am_drive_level_high = eeprom_read_byte(&ee_am_drive_level_high);
 			g_am_drive_level_low = eeprom_read_byte(&ee_am_drive_level_low);
-			g_cw_drive_level = eeprom_read_byte(&ee_cw_drive_level);
+//			g_cw_drive_level = eeprom_read_byte(&ee_cw_drive_level);
 			g_2m_modulationFormat = eeprom_read_byte(&ee_active_2m_modulation);
 		}
 		else
@@ -519,7 +536,7 @@
 			g_rtty_offset = DEFAULT_RTTY_OFFSET_FREQUENCY;
 			g_am_drive_level_high = DEFAULT_AM_DRIVE_LEVEL_HIGH;
 			g_am_drive_level_low = DEFAULT_AM_DRIVE_LEVEL_LOW;
-			g_cw_drive_level = DEFAULT_CW_DRIVE_LEVEL;
+//			g_cw_drive_level = DEFAULT_CW_DRIVE_LEVEL;
 			g_2m_modulationFormat = DEFAULT_TX_2M_MODULATION;
 
 			saveAllTransmitterEEPROM();
@@ -539,7 +556,7 @@
 		eeprom_update_dword((uint32_t*)&ee_si5351_ref_correction, si5351_get_correction());
 		eeprom_update_byte(&ee_am_drive_level_high, g_am_drive_level_high);
 		eeprom_update_byte(&ee_am_drive_level_high, g_am_drive_level_low);
-		eeprom_update_byte(&ee_cw_drive_level, g_cw_drive_level);
+//		eeprom_update_byte(&ee_cw_drive_level, g_cw_drive_level);
 		eeprom_update_byte(&ee_active_2m_modulation, g_2m_modulationFormat);
 		memcpy(table, DEFAULT_80M_POWER_TABLE, sizeof(table));
 		eeprom_write_block(table, ee_80m_power_table, sizeof(table));
@@ -669,104 +686,12 @@ BOOL txIsAntennaForBand(void)
 }
 
 
-/**
- *  State machine for setting 2m Power Amplifier bias.
- *  Note: This function is executed by the TIMER2_COMPB interrupt service routine.
- */
-EC __attribute__((optimize("O0"))) tx2mBiasStateMachine(void)
-{
-	static uint8_t holdNewPowerLevel = 0;
-	EC ec = ERROR_CODE_NO_ERROR;
-
-	switch(g_bias_state)
-	{
-		case BIAS_POWERED_OFF:
-		{
-			if(g_new_parameters_received)
-			{
-				g_new_parameters_received = FALSE;
-				txSetParameters((uint16_t*)&g_new_power_level_mW, (uint8_t*)&g_new_band_setting, (BOOL*)&g_new_AM_mod_setting, (BOOL*)&g_new_power_enable_setting);
-				return ec;
-			}
-			else if(g_new_2m_power_level_received)
-			{
-				g_new_2m_power_level_received = FALSE;
-				if(g_new_2m_power_DAC_setting > 0)
-				{
-					dac081c_set_dac(MINUS2V_BIAS, BIAS_DAC);    /* set negative bias for safety */
-					holdNewPowerLevel = g_new_2m_power_DAC_setting;
-					g_bias_state = BIAS_POWER_UP_STEP1;
-				}
-				return ec;
-			}
-
-			dac081c_set_dac(0, BIAS_DAC);   /* set negative bias to zero */
-			g_txTask = NULL;
-		}
-		break;
-
-		case BIAS_POWER_UP_STEP1:
-		{
-			BOOL err = dac081c_set_dac(BUCK_9V, PA_DAC);    /* set to 9V for the MAAP-011232 */
-
-			if(err)
-			{
-				PORTB &= ~(1 << PORTB6);                    /* Turn off Tx power */
-				g_bias_state = BIAS_POWERED_OFF;
-				ec = ERROR_CODE_DAC1_NONRESPONSIVE;
-			}
-			else
-			{
-				PORTB |= (1 << PORTB6); /* Turn on Tx power */
-				g_bias_state = BIAS_POWER_UP_STEP2;
-			}
-		}
-		break;
-
-		case BIAS_POWER_UP_STEP2:
-		{
-			dac081c_set_dac(holdNewPowerLevel, BIAS_DAC);   /* set negative bias for correct power output */
-			g_2m_power_level_mW = holdNewPowerLevel;
-			g_bias_state = BIAS_POWERED_UP;
-		}
-		break;
-
-		case BIAS_POWERED_UP:
-		{
-			if((g_new_parameters_received) || (g_new_2m_power_level_received))
-			{
-				g_bias_state = BIAS_POWER_OFF_STEP1;
-			}
-			else
-			{
-				g_txTask = NULL;
-			}
-		}
-		break;
-
-		case BIAS_POWER_OFF_STEP1:
-		{
-			dac081c_set_dac(MINUS2V_BIAS, BIAS_DAC);    /* set negative bias for safety */
-			g_bias_state = BIAS_POWER_OFF_STEP2;
-		}
-		break;
-
-		case BIAS_POWER_OFF_STEP2:
-		{
-			dac081c_set_dac(0, PA_DAC); /* set to 0V for the MAAP-011232 */
-
-			PORTB &= ~(1 << PORTB6);    /* Turn off Tx power */
-			g_bias_state = BIAS_POWERED_OFF;
-		}
-		break;
-	}
-
-	return ec;
-}
-
 BOOL txSleeping(BOOL enableSleep)
 {
-	if(g_bias_state == BIAS_POWERED_OFF)
+	BiasStateMachineCommand bsmc = BIAS_SM_IS_POWER_OFF;
+	EC ec = tx2mBiasStateMachine(&bsmc);
+
+	if(ec == ERROR_CODE_NO_ERROR)
 	{
 		uint8_t val;
 
@@ -784,3 +709,131 @@ BOOL txSleeping(BOOL enableSleep)
 
 	return FALSE;
 }
+
+
+/**
+ *  State machine for setting 2m Power Amplifier bias.
+ *  Note: This function is executed by the TIMER2_COMPB interrupt service routine.
+ */
+//EC __attribute__((optimize("O0"))) tx2mBiasStateMachine(BiasStateMachineCommand* smCommand)
+EC tx2mBiasStateMachine(BiasStateMachineCommand* smCommand)
+{
+	static volatile BiasState bias_state = BIAS_POWERED_OFF;
+	static volatile BOOL smFailed = FALSE;
+	static volatile uint8_t hold_new_bias_DAC_setting = 0;
+	static volatile uint16_t hold_new_power_setting_MW = 0;
+	EC ec = ERROR_CODE_NO_ERROR;
+
+	if(smCommand || smFailed)
+	{
+		if(smFailed)
+		{
+			dac081c_set_dac(BIAS_MINUS_2V, BIAS_DAC);   /* set negative bias for safety */
+			PORTB &= ~(1 << PORTB6);                    /* Turn off Tx power */
+			dac081c_set_dac(BUCK_0V, PA_DAC);
+			bias_state = BIAS_POWERED_OFF;
+		}
+
+		if(*smCommand == BIAS_SM_COMMAND_INIT)
+		{
+			smFailed = FALSE;
+			bias_state = BIAS_POWERED_OFF;
+		}
+		else if(*smCommand == BIAS_SM_STABILITY_CHECK)
+		{
+			if(!((bias_state == BIAS_POWERED_OFF) || (bias_state == BIAS_POWERED_UP)))
+			{
+				ec = ERROR_CODE_2M_BIAS_SM_NOT_READY;
+			}
+		}
+		else if(*smCommand == BIAS_SM_IS_POWER_OFF)
+		{
+			if(bias_state != BIAS_POWERED_OFF)
+			{
+				ec = ERROR_CODE_2M_BIAS_SM_NOT_READY;
+			}
+		}
+	}
+	else
+	{
+		if(bias_state == BIAS_POWERED_OFF)
+		{
+			if(g_new_parameters_received)
+			{
+				g_new_parameters_received = FALSE;
+				txSetParameters((uint16_t*)&g_new_power_level_mW, (uint8_t*)&g_new_band_setting, (BOOL*)&g_new_AM_mod_setting, (BOOL*)&g_new_power_enable_setting);
+				return ec;
+			}
+			else if(g_new_2m_power_level_received)
+			{
+				g_new_2m_power_level_received = FALSE;
+				if(g_new_2m_power_DAC_setting > 0)
+				{
+					dac081c_set_dac(BIAS_MINUS_2V, BIAS_DAC);    /* set negative bias for safety */
+					hold_new_bias_DAC_setting = g_new_2m_power_DAC_setting;
+					hold_new_power_setting_MW = g_new_power_level_mW;
+					bias_state = BIAS_POWER_UP_STEP1;
+				}
+				return ec;
+			}
+
+			dac081c_set_dac(0, BIAS_DAC);   /* set negative bias to zero */
+			g_txTask = NULL;
+		}
+		else if(bias_state == BIAS_POWER_UP_STEP1)
+		{
+			if(hold_new_power_setting_MW == 0) /* Leave power to PA turned off if power setting is zero */
+			{
+				bias_state = BIAS_POWER_UP_STEP2;
+			}
+			else
+			{
+				BOOL err = dac081c_set_dac(BUCK_5V, PA_DAC);    /* set to 9V max for the MAAP-011232 */
+
+				if(err)
+				{
+					PORTB &= ~(1 << PORTB6);                    /* Turn off Tx power */
+					bias_state = BIAS_POWERED_OFF;
+					ec = ERROR_CODE_DAC1_NONRESPONSIVE;
+				}
+				else
+				{
+					PORTB |= (1 << PORTB6); /* Turn on Tx power */
+					bias_state = BIAS_POWER_UP_STEP2;
+				}
+			}
+		}
+		else if (bias_state == BIAS_POWER_UP_STEP2)
+		{
+			dac081c_set_dac(hold_new_bias_DAC_setting, BIAS_DAC);   /* set negative bias for correct power output */
+			g_2m_power_level_mW = hold_new_power_setting_MW;
+			bias_state = BIAS_POWERED_UP;
+		}
+		else if(bias_state == BIAS_POWERED_UP)
+		{
+			if((g_new_parameters_received) || (g_new_2m_power_level_received))
+			{
+				bias_state = BIAS_POWER_OFF_STEP1;
+			}
+			else
+			{
+				g_txTask = NULL;
+			}
+		}
+		else if(bias_state == BIAS_POWER_OFF_STEP1)
+		{
+			dac081c_set_dac(BIAS_MINUS_2V, BIAS_DAC);    /* set negative bias for safety */
+			bias_state = BIAS_POWER_OFF_STEP2;
+		}
+		else if(bias_state == BIAS_POWER_OFF_STEP2)
+		{
+			dac081c_set_dac(BUCK_0V, PA_DAC); /* set to 0V for the MAAP-011232 */
+
+			PORTB &= ~(1 << PORTB6);    /* Turn off Tx power */
+			bias_state = BIAS_POWERED_OFF;
+		}
+	}
+
+	return ec;
+}
+
