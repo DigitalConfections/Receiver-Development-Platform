@@ -1570,38 +1570,9 @@ void httpWebServerLoop()
 
             if (g_numberOfSocketClients) {
               String msg;
-              if (g_debug_prints_enabled)
-              {
-                Serial.println("Sending MAC addresses:");
-              }
-
-              for (int i = 0; i < MAX_NUMBER_OF_WEB_CLIENTS; i++)
-              {
-                if ((g_webSocketClient[i].macAddr).length() && (g_webSocketClient[i].socketID < WEBSOCKETS_SERVER_CLIENT_MAX))
-                {
-                  msg = String( String(SOCK_COMMAND_MAC) + "," + g_webSocketClient[i].macAddr );
-                  g_webSocketServer.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
-                  if (g_debug_prints_enabled)
-                  {
-                    Serial.println(msg);
-                  }
-                }
-              }
 
               g_http_server.handleClient();
               g_webSocketServer.loop();
-
-              if (g_debug_prints_enabled)
-              {
-                Serial.println("Sending SSID:");
-              }
-
-              msg = String( String(SOCK_COMMAND_SSID) + "," + g_AP_NameString );
-              g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-              if (g_debug_prints_enabled)
-              {
-                Serial.println(msg);
-              }
 
               if (g_eventsRead)
               {
@@ -2300,6 +2271,15 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
                         Serial.println(msg);
                     }
                 }
+            }
+        }
+        else if (msgHeader == SOCK_COMMAND_SSID)
+        {
+            String msg = String( String(SOCK_COMMAND_SSID) + "," + g_AP_NameString );
+            g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+            if (g_debug_prints_enabled)
+            {
+              Serial.println(msg);
             }
         }
         else if (msgHeader == SOCK_COMMAND_KEY_DOWN)
