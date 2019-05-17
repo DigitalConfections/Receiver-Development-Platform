@@ -38,7 +38,7 @@ typedef int16_t Attenuation;
 #define RADIO_NUMBER_OF_BANDS 2
 #define RADIO_IF_FREQUENCY ((Frequency_Hz)10700000)
 #define RADIO_MINIMUM_RECEIVE_FREQ ((Frequency_Hz)3500000)
-#define MAX_TX_POWER_80M_MW 2000
+#define MAX_TX_POWER_80M_MW 5000
 #define MAX_TX_POWER_2M_MW 1000
 
 /*
@@ -135,14 +135,14 @@ typedef enum
 #define BIAS_MINUS_2V 255
 #define BIAS_MINUS_MAX 255
 
-#define DEFAULT_80M_POWER_TABLE ((const uint8_t[]){0, 1, 5, 20, 35, 50, 65, 80, 95, 110, 125, 140, 155, 170, 185, 200, 215, 230, 245, 250, 250, 250})
+#define DEFAULT_80M_POWER_TABLE ((const uint8_t[]){0, 1, 1, 1, 10, 20, 30, 35, 45, 60, 80, 95, 110, 130, 160, 200})
 
-#define DEFAULT_2M_AM_POWER_TABLE ((const uint8_t[]){250, 240, 230, 220, 210, 200, 190, 180, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170})
-#define DEFAULT_2M_AM_DRIVE_HIGH_TABLE ((const uint8_t[]){150, 160, 170, 180, 190, 200, 210, 220, 230, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240})
-#define DEFAULT_2M_AM_DRIVE_LOW_TABLE ((const uint8_t[]){150, 150, 150, 150, 150, 150, 150, 150, 150, 150, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240, 240})
+#define DEFAULT_2M_AM_POWER_TABLE ((const uint8_t[]){250, 240, 230, 220, 210, 200, 190, 180, 170, 170, 170, 170, 170, 170, 170, 170})
+#define DEFAULT_2M_AM_DRIVE_HIGH_TABLE ((const uint8_t[]){150, 160, 170, 180, 190, 200, 210, 220, 230, 240, 240, 240, 240, 240, 240, 240})
+#define DEFAULT_2M_AM_DRIVE_LOW_TABLE ((const uint8_t[]){150, 150, 150, 150, 150, 150, 150, 150, 150, 150, 240, 240, 240, 240, 240, 240})
 
-#define DEFAULT_2M_CW_POWER_TABLE ((const uint8_t[]){250, 240, 230, 220, 210, 200, 190, 180, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170, 170})
-#define DEFAULT_2M_CW_DRIVE_TABLE ((const uint8_t[]){250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250})
+#define DEFAULT_2M_CW_POWER_TABLE ((const uint8_t[]){250, 240, 220, 200, 180, 160, 140, 120, 100, 100, 100, 100, 100, 100, 100, 100})
+#define DEFAULT_2M_CW_DRIVE_TABLE ((const uint8_t[]){250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250})
 
 #define TX_MINIMUM_2M_FREQUENCY 144000000
 #define TX_MAXIMUM_2M_FREQUENCY 148000000
@@ -229,7 +229,7 @@ typedef enum {
 
 /**
  */
-	BOOL txSetFrequency(Frequency_Hz *freq);
+	BOOL txSetFrequency(Frequency_Hz *freq, BOOL leaveClockOff);
 
 /**
  */

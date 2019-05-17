@@ -77,7 +77,7 @@ static volatile uint8_t g_wifi_enable_delay = 0;
 static volatile uint16_t g_util_tick_countdown = 0;
 static volatile BOOL g_battery_measurements_active = FALSE;
 static volatile uint16_t g_maximum_battery = 0;
-static volatile BatteryType g_battery_type = BATTERY_UNKNOWN;
+volatile BatteryType g_battery_type = BATTERY_UNKNOWN;
 
 static volatile BOOL g_antenna_connection_changed = TRUE;
 volatile AntConnType g_antenna_connect_state = ANT_CONNECTION_UNDETERMINED;
@@ -149,7 +149,7 @@ static uint16_t g_filterADCValue[NUMBER_OF_POLLED_ADC_CHANNELS] = { 500, 500, 50
 static volatile BOOL g_adcUpdated[NUMBER_OF_POLLED_ADC_CHANNELS] = { FALSE, FALSE, FALSE, FALSE, FALSE };
 static volatile uint16_t g_lastConversionResult[NUMBER_OF_POLLED_ADC_CHANNELS];
 
-static volatile uint32_t g_PA_voltage = 0;
+//static volatile uint32_t g_PA_voltage = 0;
 
 extern volatile BOOL g_i2c_not_timed_out;
 static volatile BOOL g_sufficient_power_detected = FALSE;
@@ -608,25 +608,14 @@ ISR( TIMER2_COMPB_vect )
 				}
 			}
 		}
-		else if(indexConversionInProcess == PA_VOLTAGE_READING)
+//		else if(indexConversionInProcess == PA_VOLTAGE_READING)
+//		{
+//			lastResult = holdConversionResult;
+//			g_PA_voltage = holdConversionResult;
+//		}
+		else
 		{
 			lastResult = holdConversionResult;
-			g_PA_voltage = holdConversionResult;
-		}
-		else if (indexConversionInProcess == V12V_VOLTAGE_READING)
-		{
-			lastResult = holdConversionResult;
-			g_PA_voltage = holdConversionResult;
-		}
-		else if (indexConversionInProcess == BAND_80M_ANTENNA)
-		{
-			lastResult = holdConversionResult;
-			g_PA_voltage = holdConversionResult;
-		}
-		else if (indexConversionInProcess == BAND_2M_ANTENNA)
-		{
-			lastResult = holdConversionResult;
-			g_PA_voltage = holdConversionResult;
 		}
 
 		g_lastConversionResult[indexConversionInProcess] = lastResult;
@@ -1214,6 +1203,15 @@ int main( void )
 				{
 					g_sufficient_power_detected = TRUE;
 					init_hardware = TRUE;
+				}
+				else if(!g_wifi_enable_delay) // no battery detected by the time WiFi  is turned on, assume an external battery is being used
+				{
+					if(g_battery_type == BATTERY_UNKNOWN)
+					{
+						g_battery_type = BATTERY_EXTERNAL;
+						g_sufficient_power_detected = TRUE;
+						init_hardware = TRUE;
+					}
 				}
 			}
 		}
@@ -1834,10 +1832,10 @@ int main( void )
 
 					if(lb_buff->fields[FIELD1][0])
 					{
-						Frequency_Hz f = atol(lb_buff->fields[FIELD1]); // Prevent optimizer from breaking this
+						Frequency_Hz f = atol(lb_buff->fields[FIELD1]);
 
 						Frequency_Hz ff = f;
-						if(txSetFrequency(&ff))
+						if(txSetFrequency(&ff, FALSE))
 						{
 							g_transmitter_freq = ff;
 							event_parameter_count++;

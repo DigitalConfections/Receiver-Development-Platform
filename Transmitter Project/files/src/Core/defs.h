@@ -150,7 +150,7 @@ typedef uint16_t BatteryLevel;  /* in milliVolts */
 
 /******************************************************
  * EEPROM definitions */
-#define EEPROM_INITIALIZED_FLAG 0xAB
+#define EEPROM_INITIALIZED_FLAG 0xB8
 #define EEPROM_UNINITIALIZED 0x00
 
 #define EEPROM_STATION_ID_DEFAULT "FOXBOX"
@@ -362,6 +362,7 @@ typedef enum batteryType
 {
 	BATTERY_9V,
 	BATTERY_4r2V,
+	BATTERY_EXTERNAL,
 	BATTERY_UNKNOWN
 } BatteryType;
 

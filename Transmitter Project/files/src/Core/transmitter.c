@@ -31,7 +31,7 @@
 
 #ifdef INCLUDE_TRANSMITTER_SUPPORT
 
-	extern AntConnType g_antenna_connect_state;
+	extern volatile AntConnType g_antenna_connect_state;
 	extern uint8_t g_mod_up;
 	extern uint8_t g_mod_down;
 	EC (*g_txTask)(BiasStateMachineCommand* smCommand) = NULL; /* allows the transmitter to specify functions to run in the foreground */
@@ -75,12 +75,12 @@
 	static uint8_t EEMEM ee_am_drive_level_low = DEFAULT_AM_DRIVE_LEVEL_LOW;
 //	static uint8_t EEMEM ee_cw_drive_level = DEFAULT_CW_DRIVE_LEVEL;
 	static uint8_t EEMEM ee_active_2m_modulation = DEFAULT_TX_2M_MODULATION;
-	static uint8_t EEMEM ee_80m_power_table[22] = DEFAULT_80M_POWER_TABLE;
-	static uint8_t EEMEM ee_2m_am_power_table[22] = DEFAULT_2M_AM_POWER_TABLE;
-	static uint8_t EEMEM ee_2m_am_drive_low_table[22] = DEFAULT_2M_AM_DRIVE_LOW_TABLE;
-	static uint8_t EEMEM ee_2m_am_drive_high_table[22] = DEFAULT_2M_AM_DRIVE_HIGH_TABLE;
-	static uint8_t EEMEM ee_2m_cw_power_table[22] = DEFAULT_2M_CW_POWER_TABLE;
-	static uint8_t EEMEM ee_2m_cw_drive_table[22] = DEFAULT_2M_CW_DRIVE_TABLE;
+	static uint8_t EEMEM ee_80m_power_table[16] = DEFAULT_80M_POWER_TABLE;
+	static uint8_t EEMEM ee_2m_am_power_table[16] = DEFAULT_2M_AM_POWER_TABLE;
+	static uint8_t EEMEM ee_2m_am_drive_low_table[16] = DEFAULT_2M_AM_DRIVE_LOW_TABLE;
+	static uint8_t EEMEM ee_2m_am_drive_high_table[16] = DEFAULT_2M_AM_DRIVE_HIGH_TABLE;
+	static uint8_t EEMEM ee_2m_cw_power_table[16] = DEFAULT_2M_CW_POWER_TABLE;
+	static uint8_t EEMEM ee_2m_cw_drive_table[16] = DEFAULT_2M_CW_DRIVE_TABLE;
 
 /*
  *       Local Function Prototypes
@@ -99,11 +99,11 @@
 	EC tx2mBiasStateMachine(BiasStateMachineCommand* smCommand);
 
 /*
- *       This function sets the VFO frequency (CLK0 of the Si5351) based on the intended receive frequency passed in by the parameter (freq),
- *       and the VFO configuration in effect. The VFO  frequency might be above or below the intended receive frequency, depending on the VFO
- *       configuration setting in effect for the radio band of the receive frequency.
+ *       This function sets the VFO frequency (CLK0 of the Si5351) based on the intended frequency passed in by the parameter (freq),
+ *       and the VFO configuration in effect. The VFO  frequency might be above or below the intended  frequency, depending on the VFO
+ *       configuration setting in effect for the radio band of the frequency.
  */
-	BOOL txSetFrequency(Frequency_Hz *freq)
+	BOOL txSetFrequency(Frequency_Hz *freq, BOOL leaveClockOff)
 	{
 		BOOL activeBandSet = FALSE;
 		RadioBand bandSet = BAND_INVALID;
@@ -127,11 +127,11 @@
 		{
 			if(bandSet == BAND_2M)
 			{
-				si5351_set_freq(*freq, TX_CLOCK_VHF, TRUE);
+				si5351_set_freq(*freq, TX_CLOCK_VHF, leaveClockOff);
 			}
 			else
 			{
-				si5351_set_freq(*freq, TX_CLOCK_HF_0, TRUE);
+				si5351_set_freq(*freq, TX_CLOCK_HF_0, leaveClockOff);
 			}
 
 			activeBandSet = TRUE;
@@ -309,7 +309,7 @@
 				{
 					g_activeBand = *band;
 					Frequency_Hz f = g_2m_frequency;
-					txSetFrequency(&f);
+					txSetFrequency(&f, TRUE);
 
 					if(!enableAM)
 					{
@@ -432,7 +432,7 @@
 			powerToTransmitterDriver(*enableDriverPwr);
 		}
 
-		return( code);
+		return(code);
 	}
 
 
@@ -604,21 +604,69 @@ BOOL txMilliwattsToSettings(uint16_t powerMW, uint8_t* driveLevel, uint8_t* modL
 		powerMW = CLAMP(0, powerMW, MAX_TX_POWER_2M_MW);
 	}
 
-	if(powerMW > 99)
+	if(powerMW < 5)
 	{
-		powerMW /= 100;
+		powerMW = 0;
+	}
+	else if(powerMW < 50)
+	{
+		powerMW = 1;
+	}
+	else if(powerMW < 150)
+	{
+		powerMW = 2;
+	}
+	else if(powerMW < 250)
+	{
+		powerMW = 3;
+	}
+	else if(powerMW < 350)
+	{
+		powerMW = 4;
+	}
+	else if(powerMW < 450)
+	{
+		powerMW = 5;
+	}
+	else if(powerMW < 550)
+	{
+		powerMW = 6;
+	}
+	else if(powerMW < 650)
+	{
+		powerMW = 7;
+	}
+	else if(powerMW < 900)
+	{
+		powerMW = 8;
+	}
+	else if(powerMW < 1250)
+	{
+		powerMW = 9;
+	}
+	else if(powerMW < 1750)
+	{
+		powerMW = 10;
+	}
+	else if(powerMW < 2250)
+	{
+		powerMW = 11;
+	}
+	else if(powerMW < 2750)
+	{
+		powerMW = 12;
+	}
+	else if(powerMW < 3500)
+	{
+		powerMW = 13;
+	}
+	else if(powerMW < 4500)
+	{
+		powerMW = 14;
 	}
 	else
 	{
-		powerMW /= 10;
-		if(powerMW)
-		{
-			powerMW = 1;
-		}
-		else
-		{
-			powerMW = 0;
-		}
+		powerMW = 15;
 	}
 
 	if(band == BAND_80M)
