@@ -32,29 +32,6 @@
 
 /* Global Variables */
 static volatile BOOL g_bus_disabled = TRUE;
-static const char crlf[] = "\n";
-static char lineTerm[8] = "\n";
-static const char textPrompt[] = "TX> ";
-static const char textWDT[] = "*** WDT Reset! ***\n";
-
-
-static const char textHelp[][35] = { "\nCommands:\n",
-" BAT   - Battery\n",
-" TIM [hh:mm:ss]- RTC Time\n",
-" BND [2|80] - Band\n",
-" FRE [M<1:5>] [Hz] - Freq\n",
-" DRI U|D 0-255 - 2m Drive\n",
-" POW [0-255] - PA Power\n",
-" ID [text]   - Station ID\n",
-" PA [text]   - Pattern\n",
-" SPD [ID|PA] s - Speed WPM\n",
-" T [0|1|D] s - On/Off/Dly times\n",
-" SF [S|F] [hh:mm:ss] - Start/Fin\n",
-" P             - Perm\n",
-" RST           - Reset\n",
-" WI [1|2]      - WiFi \n",
-" ?             - Info\n"
-};
 
 static char g_tempMsgBuff[LINKBUS_MAX_MSG_LENGTH];
 
@@ -310,95 +287,10 @@ BOOL linkbus_send_text(char* text)
 	return(err);
 }
 
-void lb_send_WDTError(void)
-{
-	linkbus_send_text((char*)textWDT);
-}
-
-/***********************************************************************************
- *  Support for creating and sending various Terminal Mode Linkbus messages is provided below.
- ************************************************************************************/
-
-void lb_send_NewPrompt(void)
-{
-	linkbus_send_text((char*)crlf);
-}
-
-void lb_send_NewLine(void)
-{
-	linkbus_send_text((char*)crlf);
-}
-
-void linkbus_setLineTerm(char* term)
-{
-	sprintf(lineTerm, term);
-}
-
-void lb_echo_char(uint8_t c)
-{
-	g_tempMsgBuff[0] = c;
-	g_tempMsgBuff[1] = '\0';
-	linkbus_send_text(g_tempMsgBuff);
-}
-
-BOOL lb_send_string(char* str)
-{
-	if(str == NULL) return TRUE;
-	if(strlen(str) > LINKBUS_MAX_MSG_LENGTH) return TRUE;
-	strncpy(g_tempMsgBuff, str, LINKBUS_MAX_MSG_LENGTH);
-	linkbus_send_text(g_tempMsgBuff);
-	return FALSE;
-}
-
-void lb_send_value(uint16_t value, char* label)
-{
-	sprintf(g_tempMsgBuff, "> %s=%d%s", label, value, lineTerm);
-	linkbus_send_text(g_tempMsgBuff);
-}
 
 /***********************************************************************************
  *  Support for creating and sending various Linkbus messages is provided below.
  ************************************************************************************/
-
-void lb_send_FRE(LBMessageType msgType, Frequency_Hz freq, BOOL isMemoryValue)
-{
-	BOOL valid = TRUE;
-	char f[10] = "\0";
-	char prefix = '$';
-	char terminus = ';';
-
-	if(freq != FREQUENCY_NOT_SPECIFIED)
-	{
-		if(freq < ILLEGAL_MEMORY)   /* Memory locations are MEM1, MEM2, MEM3, ... ILLEGAL_MEMORY-1 */
-		{
-			sprintf(f, "M%d", (int)freq);
-		}
-		else
-		{
-			sprintf(f, "%ld", freq);
-		}
-	}
-
-	if(msgType == LINKBUS_MSG_REPLY)
-	{
-		prefix = '!';
-	}
-	else if(msgType == LINKBUS_MSG_QUERY)
-	{
-		terminus = '?';
-	}
-	else if(msgType != LINKBUS_MSG_COMMAND)
-	{
-		valid = FALSE;
-	}
-
-	if(valid)
-	{
-		sprintf(g_tempMsgBuff, "%cFRE,%s,%s%c", prefix, f, isMemoryValue ? "M" : NULL, terminus);
-		linkbus_send_text(g_tempMsgBuff);
-	}
-}
-
 
 void lb_send_msg(LBMessageType msgType, char* msgLabel, char* msgStr)
 {
@@ -419,35 +311,6 @@ void lb_send_msg(LBMessageType msgType, char* msgLabel, char* msgStr)
 	linkbus_send_text(g_tempMsgBuff);
 }
 
-
-void lb_send_BND(LBMessageType msgType, RadioBand band)
-{
-	char b[4];
-	BOOL valid = TRUE;
-	char prefix = '$';
-	char terminus = ';';
-
-	if(msgType == LINKBUS_MSG_REPLY)
-	{
-		prefix = '!';
-	}
-	else if(msgType == LINKBUS_MSG_QUERY)
-	{
-		terminus = '?';
-	}
-	else if(msgType != LINKBUS_MSG_COMMAND)
-	{
-		valid = FALSE;
-	}
-
-	sprintf(b, "%d", band);
-
-	if(valid)
-	{
-		sprintf(g_tempMsgBuff, "%cBND,%s%c", prefix, b, terminus);
-		linkbus_send_text(g_tempMsgBuff);
-	}
-}
 
 void lb_send_sync(void)
 {

@@ -39,7 +39,9 @@ typedef int16_t Attenuation;
 #define RADIO_IF_FREQUENCY ((Frequency_Hz)10700000)
 #define RADIO_MINIMUM_RECEIVE_FREQ ((Frequency_Hz)3500000)
 #define MAX_TX_POWER_80M_MW 5000
+#define MAX_TX_POWER_80M_4r2V_MW 2000
 #define MAX_TX_POWER_2M_MW 1000
+#define MAX_TX_POWER_2M_4r2V_MW 100
 
 /*
  * Define clock pins
@@ -251,7 +253,7 @@ BOOL powerToTransmitterDriver(BOOL on);
 
 /**
  */
-BOOL txMilliwattsToSettings(uint16_t powerMW, uint8_t* powerLevel, uint8_t* modLevelHigh, uint8_t* modLevelLow);
+EC txMilliwattsToSettings(uint16_t* powerMW, uint8_t* powerLevel, uint8_t* modLevelHigh, uint8_t* modLevelLow);
 
 /**
 Returns TRUE if an antenna for the active band is connected to the transmitter

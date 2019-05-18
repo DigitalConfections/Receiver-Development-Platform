@@ -34,6 +34,7 @@
 	extern volatile AntConnType g_antenna_connect_state;
 	extern uint8_t g_mod_up;
 	extern uint8_t g_mod_down;
+	extern volatile BatteryType g_battery_type;
 	EC (*g_txTask)(BiasStateMachineCommand* smCommand) = NULL; /* allows the transmitter to specify functions to run in the foreground */
 //	extern EC (*g_txTask)(BiasStateMachineCommand* smCommand);  /* allow the transmitter to specify functions to run in the foreground */
 	static volatile uint8_t g_new_2m_power_DAC_setting = 0;
@@ -369,7 +370,8 @@
 				if(!err)
 				{
 					uint8_t biasDAC, modLevelHigh, modLevelLow;
-					txMilliwattsToSettings(*power_mW, &biasDAC, &modLevelHigh, &modLevelLow);
+					code = txMilliwattsToSettings(power_mW, &biasDAC, &modLevelHigh, &modLevelLow);
+					err = (code == ERROR_CODE_SW_LOGIC_ERROR);
 
 					/* Prevent possible damage to transmitter */
 					if(g_activeBand == BAND_2M)
@@ -591,87 +593,126 @@ RadioBand bandForFrequency(Frequency_Hz freq)
 	return(result);
 }
 
-BOOL txMilliwattsToSettings(uint16_t powerMW, uint8_t* driveLevel, uint8_t* modLevelHigh, uint8_t* modLevelLow)
+EC txMilliwattsToSettings(uint16_t* powerMW, uint8_t* driveLevel, uint8_t* modLevelHigh, uint8_t* modLevelLow)
 {
+	EC ec = ERROR_CODE_NO_ERROR;
 	RadioBand band = txGetBand();
+	uint16_t maxPwr;
+	uint8_t index;
+
+	if(powerMW == NULL) return(ERROR_CODE_SW_LOGIC_ERROR);
 
 	if(band == BAND_80M)
 	{
-		powerMW = CLAMP(0, powerMW, MAX_TX_POWER_80M_MW);
+		if(g_battery_type == BATTERY_4r2V)
+		{
+			maxPwr = MAX_TX_POWER_80M_4r2V_MW;
+		}
+		else
+		{
+			maxPwr = MAX_TX_POWER_80M_MW;
+		}
 	}
 	else
 	{
-		powerMW = CLAMP(0, powerMW, MAX_TX_POWER_2M_MW);
+		if(g_battery_type == BATTERY_4r2V)
+		{
+			maxPwr = MAX_TX_POWER_2M_4r2V_MW;
+		}
+		else
+		{
+			maxPwr = MAX_TX_POWER_2M_MW;
+		}
 	}
 
-	if(powerMW < 5)
+	if(*powerMW > maxPwr) ec = ERROR_CODE_POWER_LEVEL_NOT_SUPPORTED;
+
+	*powerMW = CLAMP(0, *powerMW, maxPwr);
+
+	if(*powerMW < 5)
 	{
-		powerMW = 0;
+		index = 0;
+		*powerMW = 0;
 	}
-	else if(powerMW < 50)
+	else if(*powerMW < 50)
 	{
-		powerMW = 1;
+		index = 1;
+		*powerMW = 10;
 	}
-	else if(powerMW < 150)
+	else if(*powerMW < 150)
 	{
-		powerMW = 2;
+		index = 2;
+		*powerMW = 100;
 	}
-	else if(powerMW < 250)
+	else if(*powerMW < 250)
 	{
-		powerMW = 3;
+		index = 3;
+		*powerMW = 200;
 	}
-	else if(powerMW < 350)
+	else if(*powerMW < 350)
 	{
-		powerMW = 4;
+		index = 4;
+		*powerMW = 300;
 	}
-	else if(powerMW < 450)
+	else if(*powerMW < 450)
 	{
-		powerMW = 5;
+		index = 5;
+		*powerMW = 400;
 	}
-	else if(powerMW < 550)
+	else if(*powerMW < 550)
 	{
-		powerMW = 6;
+		index = 6;
+		*powerMW = 500;
 	}
-	else if(powerMW < 650)
+	else if(*powerMW < 650)
 	{
-		powerMW = 7;
+		index = 7;
+		*powerMW = 600;
 	}
-	else if(powerMW < 900)
+	else if(*powerMW < 900)
 	{
-		powerMW = 8;
+		index = 8;
+		*powerMW = 800;
 	}
-	else if(powerMW < 1250)
+	else if(*powerMW < 1250)
 	{
-		powerMW = 9;
+		index = 9;
+		*powerMW = 1000;
 	}
-	else if(powerMW < 1750)
+	else if(*powerMW < 1750)
 	{
-		powerMW = 10;
+		index = 10;
+		*powerMW = 1500;
 	}
-	else if(powerMW < 2250)
+	else if(*powerMW < 2250)
 	{
-		powerMW = 11;
+		index = 11;
+		*powerMW = 2000;
 	}
-	else if(powerMW < 2750)
+	else if(*powerMW < 2750)
 	{
-		powerMW = 12;
+		index = 12;
+		*powerMW = 2500;
 	}
-	else if(powerMW < 3500)
+	else if(*powerMW < 3500)
 	{
-		powerMW = 13;
+		index = 13;
+		*powerMW = 3000;
 	}
-	else if(powerMW < 4500)
+	else if(*powerMW < 4500)
 	{
-		powerMW = 14;
+		index = 14;
+		*powerMW = 4000;
 	}
 	else
 	{
-		powerMW = 15;
+		index = 15;
+		*powerMW = 5000;
 	}
 
 	if(band == BAND_80M)
 	{
-		*driveLevel = eeprom_read_byte(&ee_80m_power_table[powerMW]);
+		*driveLevel = eeprom_read_byte(&ee_80m_power_table[index]);
 		*modLevelHigh = 0;
 		*modLevelLow = 0;
 		*driveLevel = MIN(*driveLevel, MAX_80M_PWR_SETTING);
@@ -680,21 +721,21 @@ BOOL txMilliwattsToSettings(uint16_t powerMW, uint8_t* driveLevel, uint8_t* modL
 	{
 		if(g_2m_modulationFormat == MODE_AM)
 		{
-			*driveLevel = eeprom_read_byte(&ee_2m_am_power_table[powerMW]);
-			*modLevelHigh = eeprom_read_byte(&ee_2m_am_drive_high_table[powerMW]);
-			*modLevelLow = eeprom_read_byte(&ee_2m_am_drive_low_table[powerMW]);
+			*driveLevel = eeprom_read_byte(&ee_2m_am_power_table[index]);
+			*modLevelHigh = eeprom_read_byte(&ee_2m_am_drive_high_table[index]);
+			*modLevelLow = eeprom_read_byte(&ee_2m_am_drive_low_table[index]);
 		}
 		else
 		{
-			*driveLevel = eeprom_read_byte(&ee_2m_cw_power_table[powerMW]);
-			*modLevelHigh = eeprom_read_byte(&ee_2m_cw_drive_table[powerMW]);
+			*driveLevel = eeprom_read_byte(&ee_2m_cw_power_table[index]);
+			*modLevelHigh = eeprom_read_byte(&ee_2m_cw_drive_table[index]);
 			*modLevelLow = *modLevelHigh;
 		}
 
 		*driveLevel = MAX(*driveLevel, MIN_2M_BIAS_SETTING);
 	}
 
-	return( FALSE);
+	return(ec);
 }
 
 /**

@@ -3198,6 +3198,26 @@ void handleLBMessage(String message)
         g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
     }
   }
+  else if (type == LB_MESSAGE_TX_POWER)
+  {
+      String code = payload;
+      int mLocation = code.indexOf('M');
+      
+      if(mLocation >= 0)
+      {
+          code = code.substring(mLocation+2);
+      }
+      
+      if (g_debug_prints_enabled)
+      {
+          Serial.println("tx power=" + code);
+      }
+
+      if (g_numberOfSocketClients) {
+        String msg = String(String(SOCK_COMMAND_TYPE_PWR) + "," + code);
+        g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+      }
+  }
   else if (type == LB_MESSAGE_TEMP)
   {
     int16_t rawtemp = payload.toInt();

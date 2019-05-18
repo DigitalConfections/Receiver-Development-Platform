@@ -1545,6 +1545,9 @@ int main( void )
 						if(ec) g_last_error_code = ec;
 
 						saveAllEEPROM();
+
+						sprintf(g_tempStr, "M,%u", pwr_mW);
+						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TX_POWER_LABEL, g_tempStr);
 					}
 				}
 				break;
@@ -1828,8 +1831,6 @@ int main( void )
 
 				case MESSAGE_SET_FREQ:
 				{
-					BOOL isMem = FALSE;
-
 					if(lb_buff->fields[FIELD1][0])
 					{
 						Frequency_Hz f = atol(lb_buff->fields[FIELD1]);
@@ -1848,7 +1849,8 @@ int main( void )
 
 					if(g_transmitter_freq)
 					{
-						lb_send_FRE(LINKBUS_MSG_REPLY, g_transmitter_freq, isMem);
+						sprintf(g_tempStr, "%ld,", g_transmitter_freq);
+						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_SET_FREQ_LABEL, g_tempStr);
 					}
 				}
 				break;
@@ -1886,7 +1888,8 @@ int main( void )
 					if(lb_buff->type == LINKBUS_MSG_QUERY)  /* Query */
 					{
 						/* Send a reply */
-						lb_send_BND(LINKBUS_MSG_REPLY, band);
+						sprintf(g_tempStr, "%i", band);
+						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_BAND_LABEL, g_tempStr);
 					}
 				}
 				break;
