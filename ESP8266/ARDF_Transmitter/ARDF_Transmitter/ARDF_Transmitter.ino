@@ -165,11 +165,14 @@ TxCommState g_ESP_ATMEGA_Comm_State = TX_WAKE_UP;
 bool populateEventFileList(void);
 bool readDefaultsFile(void);
 void saveDefaultsFile(void);
-void showSettings();
-void handleFileUpload();
-void handleFileDownload();
+void showSettings(void);
+void handleFileUpload(void);
+void handleFileDownload(void);
+void fileDelete(void);
+void fileDeleteWithMessage(String msg);
+void handleFileDelete(void);
 void handleLBMessage(String message);
-void handleFS();
+void handleFS(void);
 
 void setup()
 {
@@ -292,12 +295,12 @@ String connectionStatus ( int which )
 //===============================================================
 void handleRoot()
 { 
-  g_http_server.send(200, "text/html", "<p>Available pages:</p> <p>   <a href=\"/test.html\">73.73.73.73/test.html</a>   Testing support</p> <p>   <a href=\"/events.html\">73.73.73.73/events.html</a>   Configure events</p> <p>   <a href=\"/upload.html\">73.73.73.73/upload.html</a> Upload a file</p> <p>   <a href=\"/fs.html\">73.73.73.73/fs.html</a>   Manage filesystem</p>");
+  g_http_server.send(200, "text/html", "<h2 style=\"font-family:verdana; font-size:30px; color:Black; text-align:left;\">Options</h2> <p>   <a href=\"/test.html\">73.73.73.73/test.html</a>   Testing support</p> <p>   <a href=\"/events.html\">73.73.73.73/events.html</a>   Configure events</p> <p>   <a href=\"/upload.html\">73.73.73.73/upload.html</a> Upload a file</p> <p>   <a href=\"/fs.html\">73.73.73.73/fs.html</a>   Download a file</p> <p>   <a href=\"/fileDelete.html\">73.73.73.73/fileDelete.html</a>   Delete a file (Use with caution!)</p>");
 }
 
 void handleFS()
 {
-    String message = "File System Contents\r\n";
+    String message = "<p style=\"text-align:left;\"><a href=\\ \"73.73.73.73\">[HOME]</a></p> <h2 style=\"font-family:verdana; font-size:30px; color:Black; text-align:left;\">File System Contents</h2>";
     String line;
     Dir dir = SPIFFS.openDir("/");
     while (dir.next())
@@ -316,12 +319,40 @@ void handleFS()
     g_http_server.send(200, "text/html", message);
 }
 
+void fileDelete()
+{
+    fileDeleteWithMessage("");
+}
+
+void fileDeleteWithMessage(String msg)
+{
+    String message = "<p style=\"text-align:left;\"><a href=\\ \"73.73.73.73\">[HOME]</a></p> <h2 style=\"font-family:verdana; font-size:30px; color:Black; text-align:left;\">File System Contents</h2>";
+    String line;
+    Dir dir = SPIFFS.openDir("/");
+    while (dir.next())
+    { // List the file system contents
+        String fileName = dir.fileName();
+        size_t fileSize = dir.fileSize();
+        line = String("<p>" + fileName + ", size: " + formatBytes(fileSize) + "</p>");
+        message += line;
+    }
+    
+    message += "<form method=\"post\" enctype=\"multipart/form-data\">\r\n";
+    message += "File name:<input type=\"text\" name=\"name\">\r\n";
+    message += "<input class=\"button\" type=\"submit\" value=\"Delete\">\r\n";
+    message += "</form>";
+    
+    if (msg.length() > 0) message += msg;
+
+    g_http_server.send(200, "text/html", message);
+}
+
 
 void handleNotFound()
 { // if the requested file or page doesn't exist, return a 404 not found error
   if (!handleFileRead(g_http_server.uri()))
   { // check if the file exists in the flash memory (SPIFFS), if so, send it
-    String message = "File Not Found\n\n";
+    String message = "<p style=\"text-align:left;\"><a href=\\ \"73.73.73.73\">[HOME]</a></p><p>File Not Found</p>";
     message += "URI: ";
     message += g_http_server.uri();
     message += "\nMethod: ";
@@ -332,7 +363,7 @@ void handleNotFound()
     for (uint8_t i = 0; i < g_http_server.args(); i++) {
       message += " " + g_http_server.argName(i) + ": " + g_http_server.arg(i) + "\n";
     }
-    g_http_server.send(404, "text/plain", message);
+    g_http_server.send(404, "text/html", message);
   }
   else
   {
@@ -418,8 +449,13 @@ bool setupHTTP_AP()
     g_http_server.on("/fs.html", HTTP_GET, handleFS); // Provide utility to help manage the file system
 
     g_http_server.on("/fs", HTTP_POST, handleFileDownload);                       // go to 'handleFileDownload'
-
     g_http_server.on("/fs.html", HTTP_POST, handleFileDownload);                       // go to 'handleFileDownload'
+
+    g_http_server.on("/fileDelete", HTTP_GET, fileDelete); // Provide utility to help manage the file system
+    g_http_server.on("/fileDelete.html", HTTP_GET, fileDelete); // Provide utility to help manage the file system
+
+    g_http_server.on("/fileDelete", HTTP_POST, handleFileDelete);                       // go to 'handleFileDelete'
+    g_http_server.on("/fileDelete.html", HTTP_POST, handleFileDelete);                       // go to 'handleFileDelete'
 
     g_http_server.on("/upload", HTTP_GET, []() {                 // if the client requests the upload page
       if (!handleFileRead("/upload.html"))                // send it if it exists
@@ -2917,6 +2953,44 @@ void saveDefaultsFile()
 
   Serial.println(String("\tFile Not Found: ") + path);  // If the file doesn't exist, return false
 }
+               
+void handleFileDelete()
+{
+  String path = g_http_server.arg(0);
+  bool abort = false;
+    
+  if (g_debug_prints_enabled)
+  {
+    Serial.println("\nhandleFileDelete: " + path);
+  }
+
+  if (path.endsWith("/")) abort = true;   // If a folder is requested consider it an error
+    
+  if (!abort && SPIFFS.exists(stringObjToConstCharString(&path)))
+  { // If the file exists
+    SPIFFS.remove(path);
+
+    if (g_debug_prints_enabled)
+    {
+      Serial.println(String(path + " Deleted."));
+    }
+      
+    fileDeleteWithMessage("<p>File deleted successfully!</p>");
+  }
+  else
+  {
+    if (g_debug_prints_enabled)
+    {
+      Serial.println(String("File not found in SPIFFS: ") + path);
+    }
+      
+    fileDeleteWithMessage("<p>File deletion failed!</p>");
+  }
+    
+
+  return;
+}
+
 
 void handleFileDownload()
 {
@@ -2931,14 +3005,13 @@ void handleFileDownload()
   String contentType = "text/plain";      // Always use text MIME type
   if (SPIFFS.exists(stringObjToConstCharString(&path)))
   { // If the file exists, either as a compressed archive, or normal
-      File file = SPIFFS.open(path, "r"); // Open the file
+    File file = SPIFFS.open(path, "r"); // Open the file
     size_t sent = g_http_server.streamFile(file, contentType);  // Send it to the client
     file.close();                       // Close the file 
     if (g_debug_prints_enabled)
     {
       Serial.println(String("\tSent " + String(sent) + "bytes from file: ") + path);
     }
-    return;
   }
   else
   {
