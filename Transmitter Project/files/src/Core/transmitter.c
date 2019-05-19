@@ -431,7 +431,7 @@
 
 		if(!err)
 		{
-			powerToTransmitterDriver(*enableDriverPwr);
+			if(enableDriverPwr != NULL) powerToTransmitterDriver(*enableDriverPwr);
 		}
 
 		return(code);
