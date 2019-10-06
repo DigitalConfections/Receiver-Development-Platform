@@ -137,7 +137,8 @@ typedef enum
 #define BIAS_MINUS_2V 255
 #define BIAS_MINUS_MAX 255
 
-#define DEFAULT_80M_POWER_TABLE ((const uint8_t[]){0, 1, 1, 1, 10, 20, 30, 35, 45, 60, 80, 95, 110, 130, 160, 200})
+                                                 /*  0,  10,  100,  200,  300,  400,   500,   600,  800,   1000,  1500,  2000,    2500,   3000,  4000,  5000 */
+#define DEFAULT_80M_POWER_TABLE ((const uint8_t[]){0, 2, 20, 40, 54, 62, 70, 78, 91, 100, 130, 155, 180, 200, 245, 254})
 
 #define DEFAULT_2M_AM_POWER_TABLE ((const uint8_t[]){250, 240, 230, 220, 210, 200, 190, 180, 170, 170, 170, 170, 170, 170, 170, 170})
 #define DEFAULT_2M_AM_DRIVE_HIGH_TABLE ((const uint8_t[]){150, 160, 170, 180, 190, 200, 210, 220, 230, 240, 240, 240, 240, 240, 240, 240})
@@ -249,7 +250,7 @@ void keyTransmitter(BOOL on);
 
 /**
  */
-BOOL powerToTransmitterDriver(BOOL on);
+EC powerToTransmitter(BOOL on);
 
 /**
  */

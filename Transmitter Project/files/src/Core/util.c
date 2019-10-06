@@ -30,10 +30,25 @@
 #include <stdlib.h>
 #include <string.h>
 
+/**
+ * Returns a-b
+ * It appears difftime might not be handling subtraction of unsigned arguments correctly with current compiler
+ */
+int32_t timeDif(time_t a, time_t b)
+{
+	int32_t dif; // = difftime(now, g_event_start_time); // returns arg1 - arg2
+	if(a > b)
+		dif = a - b;
+	else
+		dif = -(b - a);
+
+	return dif;
+}
+
+
 /***********************************************************************************************
  *  Print Formatting Utility Functions
  ************************************************************************************************/
-
 
 #ifdef DATE_STRING_SUPPORT_ENABLED
 
@@ -51,12 +66,12 @@ BOOL mystrptime(char* s, struct tm* ltm) {
   BOOL noSeconds = FALSE;
 
   strncpy(str, s, 21);  // "yyyy-mm-ddThh:mm:ssZ\0" <- maximum length null-terminated string
-  
+
   ptr1 = strchr(str, 'Z');
   if(ptr1) *ptr1 = '\0'; // erase the 'Z' character at the end if one exists
-  
+
   noSeconds = (strlen(str) < 17);
-  
+
   ptr1 = strchr(str, '-');
   *ptr1 = '\0';
   strncpy(temp, str, 5);
@@ -66,7 +81,7 @@ BOOL mystrptime(char* s, struct tm* ltm) {
   hold -= 1900;
   if((hold < 0) || (hold > 200)) return TRUE;
   ltm->tm_year = hold;
-  
+
   ptr0 = ptr1;
 
   ptr1 = strchr(ptr0, '-');
@@ -76,7 +91,7 @@ BOOL mystrptime(char* s, struct tm* ltm) {
   hold = atoi(temp) - 1;
   if((hold > 11) || (hold < 0)) return TRUE;
   ltm->tm_mon = hold;
-  
+
   ptr0 = ptr1;
 
   ptr1 = strchr(ptr0, 'T');
@@ -86,7 +101,7 @@ BOOL mystrptime(char* s, struct tm* ltm) {
   hold = atoi(temp);
   if((hold > 31) || (hold < 1)) return TRUE;
   ltm->tm_mday = hold;
-  
+
   ptr0 = ptr1;
 
   ltm->tm_yday = 0;
@@ -105,7 +120,7 @@ BOOL mystrptime(char* s, struct tm* ltm) {
   hold = atoi(temp);
   if((hold > 23) || (hold < 0)) return TRUE;
   ltm->tm_hour = hold;
-  
+
   ptr0 = ptr1;
 
   if(noSeconds)
@@ -147,7 +162,8 @@ uint32_t convertTimeStringToEpoch(char * s)
     (ltm.tm_year-70)*31536000L + ((ltm.tm_year-69)/4)*86400L -
     ((ltm.tm_year-1)/100)*86400L + ((ltm.tm_year+299)/400)*86400L;
   }
-  
+
   return result;
 }
+
 #endif //  DATE_STRING_SUPPORT_ENABLED

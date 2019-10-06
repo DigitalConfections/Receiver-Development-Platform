@@ -151,7 +151,7 @@ typedef uint16_t BatteryLevel;  /* in milliVolts */
 
 /******************************************************
  * EEPROM definitions */
-#define EEPROM_INITIALIZED_FLAG 0xB8
+#define EEPROM_INITIALIZED_FLAG 0xBD
 #define EEPROM_UNINITIALIZED 0x00
 
 #define EEPROM_STATION_ID_DEFAULT "FOXBOX"
@@ -222,6 +222,7 @@ typedef uint16_t BatteryLevel;  /* in milliVolts */
 
 #define MAX_TIME 4294967295L
 #define MAX_UINT16 65535
+#define MAX_INT16 32767
 
 typedef enum
 {

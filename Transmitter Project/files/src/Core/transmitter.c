@@ -185,19 +185,24 @@
 		return(g_activeBand);
 	}
 
-	BOOL powerToTransmitterDriver(BOOL on)
+	EC powerToTransmitter(BOOL on)
 	{
+		EC result = ERROR_CODE_NO_ERROR;
+
 		if(on)
 		{
 			if(!txIsAntennaForBand())
 			{
-				return( TRUE);
+				return(ERROR_CODE_NO_ANTENNA_FOR_BAND);
 			}
 
 			if(g_activeBand == BAND_80M)
 			{
 				PORTB &= ~(1 << PORTB0);    /* Turn VHF off */
 				PORTB |= (1 << PORTB1);     /* Turn HF on */
+
+				uint16_t pwr_mW = g_80m_power_level_mW;
+				result = txSetParameters(&pwr_mW, NULL, NULL, NULL);
 			}
 			else
 			{
@@ -208,9 +213,20 @@
 		else
 		{
 			PORTB &= ~((1 << PORTB0) | (1 << PORTB1));  /* Turn off both bands */
+
+			if(g_activeBand == BAND_80M)
+			{
+				BOOL err = dac081c_set_dac(0, PA_DAC);
+				if(err)
+				{
+					result = ERROR_CODE_DAC1_NONRESPONSIVE;
+				}
+
+				PORTB &= ~(1 << PORTB6);    /* Turn off Tx power */
+			}
 		}
 
-		return( FALSE);
+		return(result);
 	}
 
 	void keyTransmitter(BOOL on)
@@ -261,12 +277,7 @@
 			{
 				isNewBand = TRUE;
 				keyTransmitter(OFF);
-				powerToTransmitterDriver(OFF);
-
-				if(power_mW == NULL)
-				{
-					power_mW = (uint16_t*)g_80m_power_level_mW;
-				}
+				powerToTransmitter(OFF);
 
 				if(*band == BAND_80M)
 				{
@@ -289,7 +300,7 @@
 							g_new_AM_mod_setting = *enableAM;
 						}
 
-						if(enableDriverPwr)
+						if(enableDriverPwr != NULL)
 						{
 							g_new_power_enable_setting = *enableDriverPwr;
 						}
@@ -299,11 +310,15 @@
 
 						if(code == ERROR_CODE_NO_ERROR)
 						{
-							g_activeBand = BAND_INVALID;    /* prevent this branch from executing next time */
+							g_activeBand = BAND_INVALID;    /* prevent this branch from executing next time, when called by the SM */
 							g_txTask = tx2mBiasStateMachine;
 						}
 
 						return( code);
+					}
+					else
+					{
+						g_activeBand = BAND_80M;
 					}
 				}
 				else if(*band == BAND_2M)
@@ -312,7 +327,12 @@
 					Frequency_Hz f = g_2m_frequency;
 					txSetFrequency(&f, TRUE);
 
-					if(!enableAM)
+					if(power_mW == NULL)
+					{
+						power_mW = (uint16_t*)g_2m_power_level_mW;
+					}
+
+					if(enableAM == NULL)
 					{
 						enableAM = (BOOL*)&g_am_modulation_enabled;
 					}
@@ -431,7 +451,7 @@
 
 		if(!err)
 		{
-			if(enableDriverPwr != NULL) powerToTransmitterDriver(*enableDriverPwr);
+			if(enableDriverPwr != NULL) powerToTransmitter(*enableDriverPwr);
 		}
 
 		return(code);
@@ -456,7 +476,11 @@
 	EC init_transmitter(void)
 	{
 		EC code;
-		uint16_t pwr = 0;
+		RadioBand bnd;
+
+		BiasStateMachineCommand bsmc = BIAS_SM_IS_POWER_OFF;
+		code = tx2mBiasStateMachine(&bsmc);
+		if(code != ERROR_CODE_NO_ERROR) return(code); // never initialize if bias to 2m module is not turned off
 
 		if((code = si5351_init(SI5351_CRYSTAL_LOAD_6PF, 0)))
 		{
@@ -465,7 +489,10 @@
 
 		initializeTransmitterEEPROMVars();
 
-		if((code = txSetParameters(&pwr, (RadioBand*)&g_activeBand, NULL, NULL)))
+		bnd = g_activeBand;
+		g_activeBand = BAND_INVALID; // ensure full configuration by txSetParameters()
+
+		if((code = txSetParameters(NULL, (RadioBand*)&bnd, NULL, NULL)))
 		{
 			return( code);
 		}
@@ -497,8 +524,14 @@
 			return( code);
 		}
 
-		BiasStateMachineCommand bsmc = BIAS_SM_COMMAND_INIT;
-		code = tx2mBiasStateMachine(&bsmc);
+		if(bnd == BAND_80M)
+		{
+			txSetFrequency((Frequency_Hz*)&g_80m_frequency, TRUE);
+		}
+		else if(bnd == BAND_2M)
+		{
+			txSetFrequency((Frequency_Hz*)&g_2m_frequency, TRUE);
+		}
 
 		g_tx_initialized = TRUE;
 
@@ -740,7 +773,7 @@ EC txMilliwattsToSettings(uint16_t* powerMW, uint8_t* driveLevel, uint8_t* modLe
 
 /**
  */
-BOOL txIsAntennaForBand(void)
+BOOL __attribute__((optimize("O0"))) txIsAntennaForBand(void)
 {
 	BOOL result = FALSE;
 	RadioBand b = txGetBand();
@@ -768,6 +801,9 @@ BOOL txIsAntennaForBand(void)
 		break;
 
 		default:
+		{
+
+		}
 		break;
 	}
 
