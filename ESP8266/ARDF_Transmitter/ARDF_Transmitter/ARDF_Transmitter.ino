@@ -347,7 +347,6 @@ void fileDeleteWithMessage(String msg)
     g_http_server.send(200, "text/html", message);
 }
 
-
 void handleNotFound()
 { // if the requested file or page doesn't exist, return a 404 not found error
   if (!handleFileRead(g_http_server.uri()))
@@ -444,7 +443,7 @@ bool setupHTTP_AP()
 
     /* Start TCP listener on port TCP_PORT */
     g_http_server.on("/", HTTP_GET, handleRoot);     // Call the 'handleRoot' function when a client requests URI "/"
-      
+
     g_http_server.on("/fs", HTTP_GET, handleFS); // Provide utility to help manage the file system
     g_http_server.on("/fs.html", HTTP_GET, handleFS); // Provide utility to help manage the file system
 
@@ -476,7 +475,7 @@ bool setupHTTP_AP()
     { // If a POST request is sent to the /upload.html address,
       g_http_server.send(200, "text/plain", "");
     }, handleFileUpload);                       // go to 'handleFileUpload'
-
+      
     g_http_server.onNotFound(handleNotFound);        // When a client requests an unknown URI (i.e. something other than "/"), call function "handleNotFound"
     g_http_server.begin();
 
@@ -1368,6 +1367,7 @@ void httpWebServerLoop()
           {
             /* Inform the ATMEGA that WiFi power up is complete */
             Serial.printf(LB_MESSAGE_ESP_WAKEUP); // Send ESP message to ATMEGA
+            g_ESP_ATMEGA_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
           }
           break;
 
@@ -1949,6 +1949,7 @@ void httpWebServerLoop()
           }
           break;
 
+        default:
         case TX_WAITING_FOR_INSTRUCTIONS:
           {
             serialIndex = 0;
@@ -2142,10 +2143,11 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           p = p.substring(p.indexOf(',') + 1);
           p.toUpperCase();
 
-          if (g_debug_prints_enabled)
-          {
-            Serial.printf(String("Pattern: \"" + p + "\"\n").c_str());
-          }
+//          if (g_debug_prints_enabled)
+//          {
+//            Serial.printf(String("Pattern: \"" + p + "\"\n").c_str());
+//          }
+            
           String lbMsg = String(LB_MESSAGE_PATTERN_SET + p + ";");
           Serial.println(stringObjToConstCharString(&lbMsg)); // Send to Transmitter
 
@@ -2184,6 +2186,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         }
         else if (msgHeader == SOCK_COMMAND_CLEAR_ACTIVE_EVENT)
         {
+            String lbMsg = String(LB_MESSAGE_KEY_UP);
+            Serial.printf(stringObjToConstCharString(&lbMsg)); // Send message to ATMEGA
             if(g_activeEvent) delete(g_activeEvent);
             g_activeEvent = NULL;
         }
@@ -3223,10 +3227,10 @@ void handleLBMessage(String message)
     g_timeOfDayFromTx = payload.toInt();
     unsigned long epoch = g_timeOfDayFromTx;
 
-    if (g_debug_prints_enabled)
-    {
-        Serial.println("T=" + String(epoch));
-    }
+//    if (g_debug_prints_enabled)
+//    {
+//        Serial.println("T=" + String(epoch));
+//    }
 
     if (epoch)
     {
@@ -3261,10 +3265,10 @@ void handleLBMessage(String message)
   {
     String code = payload;
 
-    if (g_debug_prints_enabled)
-    {
-        Serial.println("status=" + String(code));
-    }
+//    if (g_debug_prints_enabled)
+//    {
+//        Serial.println("status=" + String(code));
+//    }
 
       if (g_numberOfSocketClients) {
         String msg = String(String(SOCK_COMMAND_STATUS) + "," + code);
@@ -3281,10 +3285,10 @@ void handleLBMessage(String message)
           code = code.substring(mLocation+2);
       }
       
-      if (g_debug_prints_enabled)
-      {
-          Serial.println("tx power=" + code);
-      }
+//      if (g_debug_prints_enabled)
+//      {
+//          Serial.println("tx power=" + code);
+//      }
 
       if (g_numberOfSocketClients) {
         String msg = String(String(SOCK_COMMAND_TYPE_PWR) + "," + code);
@@ -3317,10 +3321,10 @@ void handleLBMessage(String message)
   {
     float temp = payload.toInt();
 
-    if (g_debug_prints_enabled)
-    {
-      Serial.println("B=" + String(temp));
-    }
+//    if (g_debug_prints_enabled)
+//    {
+//      Serial.println("B=" + String(temp));
+//    }
 
     char dataStr[4];
     dtostrf(temp, 3, 0, dataStr);

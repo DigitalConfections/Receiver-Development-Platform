@@ -197,6 +197,8 @@
         var g_timedOut = false;
 
         var g_freq1FrequencyHz = "";
+        var g_lastFreqTime = 0;
+        var g_webSocketTxFreqTimer = 0;
 
         var g_numberOfOpenWebSockets = 0;
         var g_stillConnected = 0;
@@ -293,23 +295,23 @@
                 sendClear();
                 setTimeout(function() {
                     sendBand();
-                }, 100);
+                }, 250);
                 setTimeout(function() {
                     sendPower();
-                }, 200);
+                }, 500);
                 setTimeout(function() {
                     sendModulation();
-                }, 400);
+                }, 750);
                 setTimeout(function() {
-                    sendFrequency();
-                }, 600);
+                    sendFrequencyForBand();
+                }, 1000);
                 setTimeout(function() {
                     sendPattern();
-                }, 800);
+                }, 1250);
                 //sendCall();
                 setTimeout(function() {
                     sendKeyDown();
-                }, 1000);
+                }, 1500);
             } else {
                 btn.value = "Xmit";
                 var btext = "KEY_UP";
@@ -1289,7 +1291,7 @@
                 }, 5000);
 
             } else {
-                if (dif > 100) {
+                if (dif > 200) {
                     g_websock.send(msg);
                     g_lastPacketTime = now;
                     g_lastSocketTxMessage = msg;
@@ -1297,7 +1299,7 @@
                     console.log("Commands too rapid. Delaying send.");
                     g_webSocketTxTimer = setInterval(function() {
                         sendToSocket(msg);
-                    }, 200);
+                    }, 150);
                 }
             }
         }
@@ -1432,7 +1434,7 @@
             console.log(msgText);
         }
 
-        function sendFrequency() {
+        function sendFrequencyForBand() {
             var f;
             var band = document.getElementById("bandSelect").value;
             if (band == "80") {
@@ -1447,9 +1449,32 @@
 
 
         function sendFreq(freq) {
-            var msgText = "FREQ,0," + freq;
-            console.log(msgText);
-            sendToSocket(msgText);
+            var now = Date.now();
+            var dif = now - g_lastFreqTime;
+
+            if (g_webSocketTxFreqTimer != 0) {
+                clearInterval(g_webSocketTxFreqTimer);
+                g_webSocketTxFreqTimer = 0;
+            }
+
+            if (dif > 500) {
+                var msgText = "FREQ,0," + freq;
+                console.log(msgText);
+                sendToSocket(msgText);
+                g_lastFreqTime = now;
+
+                if (document.getElementById("bandSelect").value == "80") {
+                    g_typeFrequency[0].frequency = freq;
+                } else {
+                    g_typeFrequency[1].frequency = freq;
+                }
+            } else {
+                console.log("Freq too fast. Delaying send.");
+                g_webSocketTxFreqTimer = setInterval(function() {
+                    sendFreq(freq);
+                }, 300);
+            }
+
         }
 
         function callSignEntered() {

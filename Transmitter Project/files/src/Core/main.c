@@ -459,7 +459,7 @@ ISR( INT0_vect )
 					{
 						time(&temp_time);
 						uint32_t dif = timeDif(g_event_start_time, temp_time);
-						
+
 						if(dif < 30)
 						{
 							g_go_to_sleep = FALSE;
@@ -668,7 +668,7 @@ ISR(WDT_vect)
 	static uint8_t limit = 10;
 
 	g_i2c_not_timed_out = FALSE;    /* unstick I2C */
-	saveAllEEPROM();                /* Make sure changed values get saved */
+//	saveAllEEPROM();                /* Make sure changed values get saved */
 
 	/* Don't allow an unlimited number of WD interrupts to occur without enabling
 	 * hardware resets. But a limited number might be required during hardware
@@ -1894,7 +1894,7 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					f = atol(lb_buff->fields[FIELD1]);
 
 					Frequency_Hz ff = f;
-					if(txSetFrequency(&ff, FALSE))
+					if(txSetFrequency(&ff, TRUE))
 					{
 						transmitter_freq = ff;
 						event_parameter_count++;
