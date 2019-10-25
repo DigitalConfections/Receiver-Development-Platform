@@ -120,6 +120,9 @@ typedef enum
 #define MESSAGE_ESP_LABEL "ESP"
 #define MESSAGE_ERRORCODE_LABEL "EC"
 #define MESSAGE_STATUSCODE_LABEL "SC"
+#define MESSAGE_BAND_LABEL "BND"
+#define MESSAGE_SET_FREQ_LABEL "FRE"
+#define MESSAGE_TX_POWER_LABEL "POW"
 
 typedef enum
 {
@@ -213,10 +216,6 @@ LinkbusRxBuffer* nextFullRxBuffer(void);
 void lb_send_sync(void);
 
 /**
- */
-void lb_send_FRE(LBMessageType msgType, Frequency_Hz freq, BOOL isMemoryValue);
-
-/**
 */
 void lb_send_ESP(LBMessageType msgType, char* msg);
 
@@ -226,44 +225,10 @@ void lb_send_msg(LBMessageType msgType, char* msgLabel, char* msgStr);
 
 /**
  */
-void lb_send_BND(LBMessageType msgType, RadioBand band);
-
-/**
- */
 void lb_broadcast_num(uint16_t data, char* str);
 
 /**
  */
-void lb_send_NewLine(void);
-
-/**
- *  Sends RDP> to terminal
- */
-void lb_send_NewPrompt(void);
-
-/**
- */
 void lb_send_Help(void);
-
-/**
- */
-void lb_send_WDTError(void);
-
-/**
- */
-void linkbus_setLineTerm(char* term);
-
-/**
- */
-void lb_send_value(uint16_t value, char* label);
-
-/**
- */
-void lb_echo_char(uint8_t c);
-
-/**
- */
-BOOL lb_send_string(char* str);
-
 
 #endif  /* LINKBUS_H_ */

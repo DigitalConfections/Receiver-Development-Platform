@@ -73,6 +73,7 @@ typedef enum {
 	ERROR_CODE_EVENT_NOT_CONFIGURED = 0xCD,
     ERROR_CODE_ILLEGAL_COMMAND_RCVD = 0xCE,
     ERROR_CODE_SW_LOGIC_ERROR = 0xCF,
+	ERROR_CODE_POWER_LEVEL_NOT_SUPPORTED = 0xF5,
 	ERROR_CODE_NO_ANTENNA_PREVENTS_POWER_SETTING = 0xF6,
 	ERROR_CODE_NO_ANTENNA_FOR_BAND = 0xF7,
 	ERROR_CODE_WD_TIMEOUT = 0xF8,
@@ -150,7 +151,7 @@ typedef uint16_t BatteryLevel;  /* in milliVolts */
 
 /******************************************************
  * EEPROM definitions */
-#define EEPROM_INITIALIZED_FLAG 0xAB
+#define EEPROM_INITIALIZED_FLAG 0xBD
 #define EEPROM_UNINITIALIZED 0x00
 
 #define EEPROM_STATION_ID_DEFAULT "FOXBOX"
@@ -221,6 +222,7 @@ typedef uint16_t BatteryLevel;  /* in milliVolts */
 
 #define MAX_TIME 4294967295L
 #define MAX_UINT16 65535
+#define MAX_INT16 32767
 
 typedef enum
 {
@@ -362,6 +364,7 @@ typedef enum batteryType
 {
 	BATTERY_9V,
 	BATTERY_4r2V,
+	BATTERY_EXTERNAL,
 	BATTERY_UNKNOWN
 } BatteryType;
 

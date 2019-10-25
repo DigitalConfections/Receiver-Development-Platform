@@ -33,6 +33,7 @@
 #include "defs.h"
 #include <time.h>
 
+int32_t timeDif(time_t a, time_t b);
 
 /***********************************************************************************************
  *  Print Formatting Utility Functions

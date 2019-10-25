@@ -643,13 +643,21 @@
 
             if (websocketcreated == true) {
                 document.getElementById("xmtrTime").innerHTML = "Connected";
-                sendToSocket("EVENT_NAME,NEW!");
-                g_loading_data = true;
 
                 g_websock.onopen = function(evt) {
                     console.log("websock open");
                     websocketcreated = true;
                     g_stillConnected = Math.max(200, g_stillConnected);
+                    setTimeout(function() {
+                        sendToSocket("MAC");
+                    }, 100);
+                    setTimeout(function() {
+                        sendToSocket("SSID");
+                    }, 250);
+                    setTimeout(function() {
+                        sendToSocket("EVENT_NAME,NEW!");
+                    }, 500);
+                    g_loading_data = true;
                 };
 
                 g_websock.onclose = function(evt) {
@@ -693,9 +701,27 @@
                                 switch (sc) {
 
                                     case 0x00: // STATUS_CODE_IDLE = 0x00
-                                    case 0x01: // STATUS_CODE_REPORT_IDLE = 0x01
+                                    case 0x01: // STATUS_CODE_REPORT_IDLE = 0x01;
                                         {
                                             text = "";
+                                        }
+                                        break;
+
+                                    case 0xE9: // STATUS_CODE_NO_ANT_ATTACHED = 0xE9
+                                        {
+                                            text = "No antennas attached";
+                                        }
+                                        break;
+
+                                    case 0xEA: // STATUS_CODE_2M_ANT_ATTACHED = 0xEA
+                                        {
+                                            text = "2m antenna attached";
+                                        }
+                                        break;
+
+                                    case 0xEB: // STATUS_CODE_80M_ANT_ATTACHED = 0xEB
+                                        {
+                                            text = "80m antenna attached";
                                         }
                                         break;
 
@@ -1160,10 +1186,6 @@
                             }
                             break;
 
-                        case "TEST":
-                            {}
-                            break;
-
                         default:
                             console.log("Unrecognized message: ", str);
                             break;
@@ -1186,12 +1208,12 @@
             var now = Date.now();
             var dif = now - g_lastPacketTime;
 
-            if (msg === g_lastSocketTxMessage) {
-                if (msg != "TEST") {
-                    console.log("Repeated command ignored!");
-                    return;
-                }
-            }
+            //            if (msg === g_lastSocketTxMessage) {
+            //                if (msg != "TEST") {
+            //                    console.log("Repeated command ignored!");
+            //                    return;
+            //                }
+            //            }
 
             if (g_webSocketTxTimer != 0) {
                 clearInterval(g_webSocketTxTimer);
@@ -2407,6 +2429,7 @@
     </div>
 
     <center>
+        <p style="text-align:left;"><a href=\ "73.73.73.73">[HOME]</a></p>
         <h1 id="mainHeading" style="font-family:verdana; font-size:30px; color:Black; text-align:center;">Transmitter Settings</h1>
         <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">HTML Ver 0.1.7 - 6 Mar 2019</p>
 

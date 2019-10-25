@@ -197,6 +197,8 @@
         var g_timedOut = false;
 
         var g_freq1FrequencyHz = "";
+        var g_lastFreqTime = 0;
+        var g_webSocketTxFreqTimer = 0;
 
         var g_numberOfOpenWebSockets = 0;
         var g_stillConnected = 0;
@@ -230,8 +232,8 @@
         }]; /* Event data to display in a table header */
 
         var g_modulationType = ["CW", "AM"];
-        var g_powerLevels_80m = ["0", "100", "200", "300", "400", "500", "600", "700", "800", "900", "1000", "1100", "1200", "1300", "1400", "1500", "1600", "1700", "1800", "1900", "2000"];
-        var g_powerLevels_2m = ["0", "100", "200", "300", "400", "500", "600", "700", "800", "900", "1000"];
+        var g_powerLevels_80m = ["0", "10", "100", "200", "300", "400", "500", "600", "800", "1000", "1500", "2000", "2500", "3000", "4000", "5000"];
+        var g_powerLevels_2m = ["0", "10", "100", "200", "300", "400", "500", "600", "800", "1000"];
         var g_radioBandType = ["80", "2"];
 
         var g_typeFrequency = [{
@@ -293,23 +295,23 @@
                 sendClear();
                 setTimeout(function() {
                     sendBand();
-                }, 100);
+                }, 250);
                 setTimeout(function() {
                     sendPower();
-                }, 200);
+                }, 500);
                 setTimeout(function() {
                     sendModulation();
-                }, 400);
+                }, 750);
                 setTimeout(function() {
-                    sendFrequency();
-                }, 600);
+                    sendFrequencyForBand();
+                }, 1000);
                 setTimeout(function() {
                     sendPattern();
-                }, 800);
+                }, 1250);
                 //sendCall();
                 setTimeout(function() {
                     sendKeyDown();
-                }, 1000);
+                }, 1500);
             } else {
                 btn.value = "Xmit";
                 var btext = "KEY_UP";
@@ -648,11 +650,15 @@
                     console.log("websock open");
                     websocketcreated = true;
                     g_stillConnected = Math.max(200, g_stillConnected);
-                    sendToSocket("MAC");
+                    setTimeout(function() {
+                        sendToSocket("MAC");
+                    }, 100);
                     setTimeout(function() {
                         sendBand();
-                    }, 100);
-
+                    }, 300);
+                    setTimeout(function() {
+                        sendToSocket("SSID");
+                    }, 500);
                 };
 
                 g_websock.onclose = function(evt) {
@@ -861,6 +867,12 @@
                                     case 0xCF: // ERROR_CODE_SW_LOGIC_ERROR = 0xCF
                                         {
                                             text = "Software logic error";
+                                        }
+                                        break;
+
+                                    case 0xF5: // ERROR_CODE_POWER_LEVEL_NOT_SUPPORTED = 0xF5
+                                        {
+                                            text = "Transmit power level not supported";
                                         }
                                         break;
 
@@ -1176,6 +1188,18 @@
                             }
                             break;
 
+                        case "POWER":
+                            {
+                                var mw = arr[1];
+
+                                console.log("tx power: ", arr[1]);
+                                var pe = document.getElementById("pwrSelect");
+
+                                if (pe != null) {
+                                    pe.value = arr[1];
+                                }
+                            }
+
                         case "TEST":
                             {}
                             break;
@@ -1267,7 +1291,7 @@
                 }, 5000);
 
             } else {
-                if (dif > 100) {
+                if (dif > 200) {
                     g_websock.send(msg);
                     g_lastPacketTime = now;
                     g_lastSocketTxMessage = msg;
@@ -1275,7 +1299,7 @@
                     console.log("Commands too rapid. Delaying send.");
                     g_webSocketTxTimer = setInterval(function() {
                         sendToSocket(msg);
-                    }, 200);
+                    }, 150);
                 }
             }
         }
@@ -1410,7 +1434,7 @@
             console.log(msgText);
         }
 
-        function sendFrequency() {
+        function sendFrequencyForBand() {
             var f;
             var band = document.getElementById("bandSelect").value;
             if (band == "80") {
@@ -1425,9 +1449,32 @@
 
 
         function sendFreq(freq) {
-            var msgText = "FREQ,0," + freq;
-            console.log(msgText);
-            sendToSocket(msgText);
+            var now = Date.now();
+            var dif = now - g_lastFreqTime;
+
+            if (g_webSocketTxFreqTimer != 0) {
+                clearInterval(g_webSocketTxFreqTimer);
+                g_webSocketTxFreqTimer = 0;
+            }
+
+            if (dif > 500) {
+                var msgText = "FREQ,0," + freq;
+                console.log(msgText);
+                sendToSocket(msgText);
+                g_lastFreqTime = now;
+
+                if (document.getElementById("bandSelect").value == "80") {
+                    g_typeFrequency[0].frequency = freq;
+                } else {
+                    g_typeFrequency[1].frequency = freq;
+                }
+            } else {
+                console.log("Freq too fast. Delaying send.");
+                g_webSocketTxFreqTimer = setInterval(function() {
+                    sendFreq(freq);
+                }, 300);
+            }
+
         }
 
         function callSignEntered() {
@@ -2098,8 +2145,9 @@
     </div>
 
     <center>
+        <p style="text-align:left;"><a href=\ "73.73.73.73">[HOME]</a></p>
         <h1 id="mainHeading" style="font-family:verdana; font-size:30px; color:Black; text-align:center;">Transmitter Test</h1>
-        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">HTML Ver 0.2 - 18 Mar 2019</p>
+        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">HTML Ver 0.3 - 30 Apr 2019</p>
 
         <div>
             <table>

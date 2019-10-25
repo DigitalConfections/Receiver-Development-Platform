@@ -31,9 +31,10 @@
 
 #ifdef INCLUDE_TRANSMITTER_SUPPORT
 
-	extern AntConnType g_antenna_connect_state;
+	extern volatile AntConnType g_antenna_connect_state;
 	extern uint8_t g_mod_up;
 	extern uint8_t g_mod_down;
+	extern volatile BatteryType g_battery_type;
 	EC (*g_txTask)(BiasStateMachineCommand* smCommand) = NULL; /* allows the transmitter to specify functions to run in the foreground */
 //	extern EC (*g_txTask)(BiasStateMachineCommand* smCommand);  /* allow the transmitter to specify functions to run in the foreground */
 	static volatile uint8_t g_new_2m_power_DAC_setting = 0;
@@ -75,12 +76,12 @@
 	static uint8_t EEMEM ee_am_drive_level_low = DEFAULT_AM_DRIVE_LEVEL_LOW;
 //	static uint8_t EEMEM ee_cw_drive_level = DEFAULT_CW_DRIVE_LEVEL;
 	static uint8_t EEMEM ee_active_2m_modulation = DEFAULT_TX_2M_MODULATION;
-	static uint8_t EEMEM ee_80m_power_table[22] = DEFAULT_80M_POWER_TABLE;
-	static uint8_t EEMEM ee_2m_am_power_table[22] = DEFAULT_2M_AM_POWER_TABLE;
-	static uint8_t EEMEM ee_2m_am_drive_low_table[22] = DEFAULT_2M_AM_DRIVE_LOW_TABLE;
-	static uint8_t EEMEM ee_2m_am_drive_high_table[22] = DEFAULT_2M_AM_DRIVE_HIGH_TABLE;
-	static uint8_t EEMEM ee_2m_cw_power_table[22] = DEFAULT_2M_CW_POWER_TABLE;
-	static uint8_t EEMEM ee_2m_cw_drive_table[22] = DEFAULT_2M_CW_DRIVE_TABLE;
+	static uint8_t EEMEM ee_80m_power_table[16] = DEFAULT_80M_POWER_TABLE;
+	static uint8_t EEMEM ee_2m_am_power_table[16] = DEFAULT_2M_AM_POWER_TABLE;
+	static uint8_t EEMEM ee_2m_am_drive_low_table[16] = DEFAULT_2M_AM_DRIVE_LOW_TABLE;
+	static uint8_t EEMEM ee_2m_am_drive_high_table[16] = DEFAULT_2M_AM_DRIVE_HIGH_TABLE;
+	static uint8_t EEMEM ee_2m_cw_power_table[16] = DEFAULT_2M_CW_POWER_TABLE;
+	static uint8_t EEMEM ee_2m_cw_drive_table[16] = DEFAULT_2M_CW_DRIVE_TABLE;
 
 /*
  *       Local Function Prototypes
@@ -99,11 +100,11 @@
 	EC tx2mBiasStateMachine(BiasStateMachineCommand* smCommand);
 
 /*
- *       This function sets the VFO frequency (CLK0 of the Si5351) based on the intended receive frequency passed in by the parameter (freq),
- *       and the VFO configuration in effect. The VFO  frequency might be above or below the intended receive frequency, depending on the VFO
- *       configuration setting in effect for the radio band of the receive frequency.
+ *       This function sets the VFO frequency (CLK0 of the Si5351) based on the intended frequency passed in by the parameter (freq),
+ *       and the VFO configuration in effect. The VFO  frequency might be above or below the intended  frequency, depending on the VFO
+ *       configuration setting in effect for the radio band of the frequency.
  */
-	BOOL txSetFrequency(Frequency_Hz *freq)
+	BOOL txSetFrequency(Frequency_Hz *freq, BOOL leaveClockOff)
 	{
 		BOOL activeBandSet = FALSE;
 		RadioBand bandSet = BAND_INVALID;
@@ -127,11 +128,11 @@
 		{
 			if(bandSet == BAND_2M)
 			{
-				si5351_set_freq(*freq, TX_CLOCK_VHF, TRUE);
+				si5351_set_freq(*freq, TX_CLOCK_VHF, leaveClockOff);
 			}
 			else
 			{
-				si5351_set_freq(*freq, TX_CLOCK_HF_0, TRUE);
+				si5351_set_freq(*freq, TX_CLOCK_HF_0, leaveClockOff);
 			}
 
 			activeBandSet = TRUE;
@@ -184,19 +185,24 @@
 		return(g_activeBand);
 	}
 
-	BOOL powerToTransmitterDriver(BOOL on)
+	EC powerToTransmitter(BOOL on)
 	{
+		EC result = ERROR_CODE_NO_ERROR;
+
 		if(on)
 		{
 			if(!txIsAntennaForBand())
 			{
-				return( TRUE);
+				return(ERROR_CODE_NO_ANTENNA_FOR_BAND);
 			}
 
 			if(g_activeBand == BAND_80M)
 			{
 				PORTB &= ~(1 << PORTB0);    /* Turn VHF off */
 				PORTB |= (1 << PORTB1);     /* Turn HF on */
+
+				uint16_t pwr_mW = g_80m_power_level_mW;
+				result = txSetParameters(&pwr_mW, NULL, NULL, NULL);
 			}
 			else
 			{
@@ -207,9 +213,20 @@
 		else
 		{
 			PORTB &= ~((1 << PORTB0) | (1 << PORTB1));  /* Turn off both bands */
+
+			if(g_activeBand == BAND_80M)
+			{
+				BOOL err = dac081c_set_dac(0, PA_DAC);
+				if(err)
+				{
+					result = ERROR_CODE_DAC1_NONRESPONSIVE;
+				}
+
+				PORTB &= ~(1 << PORTB6);    /* Turn off Tx power */
+			}
 		}
 
-		return( FALSE);
+		return(result);
 	}
 
 	void keyTransmitter(BOOL on)
@@ -260,12 +277,7 @@
 			{
 				isNewBand = TRUE;
 				keyTransmitter(OFF);
-				powerToTransmitterDriver(OFF);
-
-				if(power_mW == NULL)
-				{
-					power_mW = (uint16_t*)g_80m_power_level_mW;
-				}
+				powerToTransmitter(OFF);
 
 				if(*band == BAND_80M)
 				{
@@ -288,7 +300,7 @@
 							g_new_AM_mod_setting = *enableAM;
 						}
 
-						if(enableDriverPwr)
+						if(enableDriverPwr != NULL)
 						{
 							g_new_power_enable_setting = *enableDriverPwr;
 						}
@@ -298,20 +310,29 @@
 
 						if(code == ERROR_CODE_NO_ERROR)
 						{
-							g_activeBand = BAND_INVALID;    /* prevent this branch from executing next time */
+							g_activeBand = BAND_INVALID;    /* prevent this branch from executing next time, when called by the SM */
 							g_txTask = tx2mBiasStateMachine;
 						}
 
 						return( code);
+					}
+					else
+					{
+						g_activeBand = BAND_80M;
 					}
 				}
 				else if(*band == BAND_2M)
 				{
 					g_activeBand = *band;
 					Frequency_Hz f = g_2m_frequency;
-					txSetFrequency(&f);
+					txSetFrequency(&f, TRUE);
 
-					if(!enableAM)
+					if(power_mW == NULL)
+					{
+						power_mW = (uint16_t*)g_2m_power_level_mW;
+					}
+
+					if(enableAM == NULL)
 					{
 						enableAM = (BOOL*)&g_am_modulation_enabled;
 					}
@@ -369,7 +390,8 @@
 				if(!err)
 				{
 					uint8_t biasDAC, modLevelHigh, modLevelLow;
-					txMilliwattsToSettings(*power_mW, &biasDAC, &modLevelHigh, &modLevelLow);
+					code = txMilliwattsToSettings(power_mW, &biasDAC, &modLevelHigh, &modLevelLow);
+					err = (code == ERROR_CODE_SW_LOGIC_ERROR);
 
 					/* Prevent possible damage to transmitter */
 					if(g_activeBand == BAND_2M)
@@ -429,10 +451,10 @@
 
 		if(!err)
 		{
-			powerToTransmitterDriver(*enableDriverPwr);
+			if(enableDriverPwr != NULL) powerToTransmitter(*enableDriverPwr);
 		}
 
-		return( code);
+		return(code);
 	}
 
 
@@ -454,7 +476,11 @@
 	EC init_transmitter(void)
 	{
 		EC code;
-		uint16_t pwr = 0;
+		RadioBand bnd;
+
+		BiasStateMachineCommand bsmc = BIAS_SM_IS_POWER_OFF;
+		code = tx2mBiasStateMachine(&bsmc);
+		if(code != ERROR_CODE_NO_ERROR) return(code); // never initialize if bias to 2m module is not turned off
 
 		if((code = si5351_init(SI5351_CRYSTAL_LOAD_6PF, 0)))
 		{
@@ -463,7 +489,10 @@
 
 		initializeTransmitterEEPROMVars();
 
-		if((code = txSetParameters(&pwr, (RadioBand*)&g_activeBand, NULL, NULL)))
+		bnd = g_activeBand;
+		g_activeBand = BAND_INVALID; // ensure full configuration by txSetParameters()
+
+		if((code = txSetParameters(NULL, (RadioBand*)&bnd, NULL, NULL)))
 		{
 			return( code);
 		}
@@ -495,8 +524,14 @@
 			return( code);
 		}
 
-		BiasStateMachineCommand bsmc = BIAS_SM_COMMAND_INIT;
-		code = tx2mBiasStateMachine(&bsmc);
+		if(bnd == BAND_80M)
+		{
+			txSetFrequency((Frequency_Hz*)&g_80m_frequency, TRUE);
+		}
+		else if(bnd == BAND_2M)
+		{
+			txSetFrequency((Frequency_Hz*)&g_2m_frequency, TRUE);
+		}
 
 		g_tx_initialized = TRUE;
 
@@ -591,39 +626,126 @@ RadioBand bandForFrequency(Frequency_Hz freq)
 	return(result);
 }
 
-BOOL txMilliwattsToSettings(uint16_t powerMW, uint8_t* driveLevel, uint8_t* modLevelHigh, uint8_t* modLevelLow)
+EC txMilliwattsToSettings(uint16_t* powerMW, uint8_t* driveLevel, uint8_t* modLevelHigh, uint8_t* modLevelLow)
 {
+	EC ec = ERROR_CODE_NO_ERROR;
 	RadioBand band = txGetBand();
+	uint16_t maxPwr;
+	uint8_t index;
+
+	if(powerMW == NULL) return(ERROR_CODE_SW_LOGIC_ERROR);
 
 	if(band == BAND_80M)
 	{
-		powerMW = CLAMP(0, powerMW, MAX_TX_POWER_80M_MW);
-	}
-	else
-	{
-		powerMW = CLAMP(0, powerMW, MAX_TX_POWER_2M_MW);
-	}
-
-	if(powerMW > 99)
-	{
-		powerMW /= 100;
-	}
-	else
-	{
-		powerMW /= 10;
-		if(powerMW)
+		if(g_battery_type == BATTERY_4r2V)
 		{
-			powerMW = 1;
+			maxPwr = MAX_TX_POWER_80M_4r2V_MW;
 		}
 		else
 		{
-			powerMW = 0;
+			maxPwr = MAX_TX_POWER_80M_MW;
 		}
+	}
+	else
+	{
+		if(g_battery_type == BATTERY_4r2V)
+		{
+			maxPwr = MAX_TX_POWER_2M_4r2V_MW;
+		}
+		else
+		{
+			maxPwr = MAX_TX_POWER_2M_MW;
+		}
+	}
+
+	if(*powerMW > maxPwr) ec = ERROR_CODE_POWER_LEVEL_NOT_SUPPORTED;
+
+	*powerMW = CLAMP(0, *powerMW, maxPwr);
+
+	if(*powerMW < 5)
+	{
+		index = 0;
+		*powerMW = 0;
+	}
+	else if(*powerMW < 50)
+	{
+		index = 1;
+		*powerMW = 10;
+	}
+	else if(*powerMW < 150)
+	{
+		index = 2;
+		*powerMW = 100;
+	}
+	else if(*powerMW < 250)
+	{
+		index = 3;
+		*powerMW = 200;
+	}
+	else if(*powerMW < 350)
+	{
+		index = 4;
+		*powerMW = 300;
+	}
+	else if(*powerMW < 450)
+	{
+		index = 5;
+		*powerMW = 400;
+	}
+	else if(*powerMW < 550)
+	{
+		index = 6;
+		*powerMW = 500;
+	}
+	else if(*powerMW < 650)
+	{
+		index = 7;
+		*powerMW = 600;
+	}
+	else if(*powerMW < 900)
+	{
+		index = 8;
+		*powerMW = 800;
+	}
+	else if(*powerMW < 1250)
+	{
+		index = 9;
+		*powerMW = 1000;
+	}
+	else if(*powerMW < 1750)
+	{
+		index = 10;
+		*powerMW = 1500;
+	}
+	else if(*powerMW < 2250)
+	{
+		index = 11;
+		*powerMW = 2000;
+	}
+	else if(*powerMW < 2750)
+	{
+		index = 12;
+		*powerMW = 2500;
+	}
+	else if(*powerMW < 3500)
+	{
+		index = 13;
+		*powerMW = 3000;
+	}
+	else if(*powerMW < 4500)
+	{
+		index = 14;
+		*powerMW = 4000;
+	}
+	else
+	{
+		index = 15;
+		*powerMW = 5000;
 	}
 
 	if(band == BAND_80M)
 	{
-		*driveLevel = eeprom_read_byte(&ee_80m_power_table[powerMW]);
+		*driveLevel = eeprom_read_byte(&ee_80m_power_table[index]);
 		*modLevelHigh = 0;
 		*modLevelLow = 0;
 		*driveLevel = MIN(*driveLevel, MAX_80M_PWR_SETTING);
@@ -632,26 +754,26 @@ BOOL txMilliwattsToSettings(uint16_t powerMW, uint8_t* driveLevel, uint8_t* modL
 	{
 		if(g_2m_modulationFormat == MODE_AM)
 		{
-			*driveLevel = eeprom_read_byte(&ee_2m_am_power_table[powerMW]);
-			*modLevelHigh = eeprom_read_byte(&ee_2m_am_drive_high_table[powerMW]);
-			*modLevelLow = eeprom_read_byte(&ee_2m_am_drive_low_table[powerMW]);
+			*driveLevel = eeprom_read_byte(&ee_2m_am_power_table[index]);
+			*modLevelHigh = eeprom_read_byte(&ee_2m_am_drive_high_table[index]);
+			*modLevelLow = eeprom_read_byte(&ee_2m_am_drive_low_table[index]);
 		}
 		else
 		{
-			*driveLevel = eeprom_read_byte(&ee_2m_cw_power_table[powerMW]);
-			*modLevelHigh = eeprom_read_byte(&ee_2m_cw_drive_table[powerMW]);
+			*driveLevel = eeprom_read_byte(&ee_2m_cw_power_table[index]);
+			*modLevelHigh = eeprom_read_byte(&ee_2m_cw_drive_table[index]);
 			*modLevelLow = *modLevelHigh;
 		}
 
 		*driveLevel = MAX(*driveLevel, MIN_2M_BIAS_SETTING);
 	}
 
-	return( FALSE);
+	return(ec);
 }
 
 /**
  */
-BOOL txIsAntennaForBand(void)
+BOOL __attribute__((optimize("O0"))) txIsAntennaForBand(void)
 {
 	BOOL result = FALSE;
 	RadioBand b = txGetBand();
@@ -679,6 +801,9 @@ BOOL txIsAntennaForBand(void)
 		break;
 
 		default:
+		{
+
+		}
 		break;
 	}
 

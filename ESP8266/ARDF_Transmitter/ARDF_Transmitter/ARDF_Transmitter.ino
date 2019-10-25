@@ -165,11 +165,14 @@ TxCommState g_ESP_ATMEGA_Comm_State = TX_WAKE_UP;
 bool populateEventFileList(void);
 bool readDefaultsFile(void);
 void saveDefaultsFile(void);
-void showSettings();
-void handleFileUpload();
-void handleFileDownload();
+void showSettings(void);
+void handleFileUpload(void);
+void handleFileDownload(void);
+void fileDelete(void);
+void fileDeleteWithMessage(String msg);
+void handleFileDelete(void);
 void handleLBMessage(String message);
-void handleFS();
+void handleFS(void);
 
 void setup()
 {
@@ -292,12 +295,12 @@ String connectionStatus ( int which )
 //===============================================================
 void handleRoot()
 { 
-  g_http_server.send(200, "text/html", "<p>Available pages:</p> <p>   <a href=\"/test.html\">73.73.73.73/test.html</a>   Testing support</p> <p>   <a href=\"/events.html\">73.73.73.73/events.html</a>   Configure events</p> <p>   <a href=\"/upload.html\">73.73.73.73/upload.html</a> Upload a file</p> <p>   <a href=\"/fs.html\">73.73.73.73/fs.html</a>   Manage filesystem</p>");
+  g_http_server.send(200, "text/html", "<h2 style=\"font-family:verdana; font-size:30px; color:Black; text-align:left;\">Options</h2> <p>   <a href=\"/test.html\">73.73.73.73/test.html</a>   Testing support</p> <p>   <a href=\"/events.html\">73.73.73.73/events.html</a>   Configure events</p> <p>   <a href=\"/upload.html\">73.73.73.73/upload.html</a> Upload a file</p> <p>   <a href=\"/fs.html\">73.73.73.73/fs.html</a>   Download a file</p> <p>   <a href=\"/fileDelete.html\">73.73.73.73/fileDelete.html</a>   Delete a file (Use with caution!)</p>");
 }
 
 void handleFS()
 {
-    String message = "File System Contents\r\n";
+    String message = "<p style=\"text-align:left;\"><a href=\\ \"73.73.73.73\">[HOME]</a></p> <h2 style=\"font-family:verdana; font-size:30px; color:Black; text-align:left;\">File System Contents</h2>";
     String line;
     Dir dir = SPIFFS.openDir("/");
     while (dir.next())
@@ -316,12 +319,39 @@ void handleFS()
     g_http_server.send(200, "text/html", message);
 }
 
+void fileDelete()
+{
+    fileDeleteWithMessage("");
+}
+
+void fileDeleteWithMessage(String msg)
+{
+    String message = "<p style=\"text-align:left;\"><a href=\\ \"73.73.73.73\">[HOME]</a></p> <h2 style=\"font-family:verdana; font-size:30px; color:Black; text-align:left;\">File System Contents</h2>";
+    String line;
+    Dir dir = SPIFFS.openDir("/");
+    while (dir.next())
+    { // List the file system contents
+        String fileName = dir.fileName();
+        size_t fileSize = dir.fileSize();
+        line = String("<p>" + fileName + ", size: " + formatBytes(fileSize) + "</p>");
+        message += line;
+    }
+    
+    message += "<form method=\"post\" enctype=\"multipart/form-data\">\r\n";
+    message += "File name:<input type=\"text\" name=\"name\">\r\n";
+    message += "<input class=\"button\" type=\"submit\" value=\"Delete\">\r\n";
+    message += "</form>";
+    
+    if (msg.length() > 0) message += msg;
+
+    g_http_server.send(200, "text/html", message);
+}
 
 void handleNotFound()
 { // if the requested file or page doesn't exist, return a 404 not found error
   if (!handleFileRead(g_http_server.uri()))
   { // check if the file exists in the flash memory (SPIFFS), if so, send it
-    String message = "File Not Found\n\n";
+    String message = "<p style=\"text-align:left;\"><a href=\\ \"73.73.73.73\">[HOME]</a></p><p>File Not Found</p>";
     message += "URI: ";
     message += g_http_server.uri();
     message += "\nMethod: ";
@@ -332,7 +362,7 @@ void handleNotFound()
     for (uint8_t i = 0; i < g_http_server.args(); i++) {
       message += " " + g_http_server.argName(i) + ": " + g_http_server.arg(i) + "\n";
     }
-    g_http_server.send(404, "text/plain", message);
+    g_http_server.send(404, "text/html", message);
   }
   else
   {
@@ -413,13 +443,18 @@ bool setupHTTP_AP()
 
     /* Start TCP listener on port TCP_PORT */
     g_http_server.on("/", HTTP_GET, handleRoot);     // Call the 'handleRoot' function when a client requests URI "/"
-      
+
     g_http_server.on("/fs", HTTP_GET, handleFS); // Provide utility to help manage the file system
     g_http_server.on("/fs.html", HTTP_GET, handleFS); // Provide utility to help manage the file system
 
     g_http_server.on("/fs", HTTP_POST, handleFileDownload);                       // go to 'handleFileDownload'
-
     g_http_server.on("/fs.html", HTTP_POST, handleFileDownload);                       // go to 'handleFileDownload'
+
+    g_http_server.on("/fileDelete", HTTP_GET, fileDelete); // Provide utility to help manage the file system
+    g_http_server.on("/fileDelete.html", HTTP_GET, fileDelete); // Provide utility to help manage the file system
+
+    g_http_server.on("/fileDelete", HTTP_POST, handleFileDelete);                       // go to 'handleFileDelete'
+    g_http_server.on("/fileDelete.html", HTTP_POST, handleFileDelete);                       // go to 'handleFileDelete'
 
     g_http_server.on("/upload", HTTP_GET, []() {                 // if the client requests the upload page
       if (!handleFileRead("/upload.html"))                // send it if it exists
@@ -440,7 +475,7 @@ bool setupHTTP_AP()
     { // If a POST request is sent to the /upload.html address,
       g_http_server.send(200, "text/plain", "");
     }, handleFileUpload);                       // go to 'handleFileUpload'
-
+      
     g_http_server.onNotFound(handleNotFound);        // When a client requests an unknown URI (i.e. something other than "/"), call function "handleNotFound"
     g_http_server.begin();
 
@@ -1332,6 +1367,7 @@ void httpWebServerLoop()
           {
             /* Inform the ATMEGA that WiFi power up is complete */
             Serial.printf(LB_MESSAGE_ESP_WAKEUP); // Send ESP message to ATMEGA
+            g_ESP_ATMEGA_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
           }
           break;
 
@@ -1570,38 +1606,9 @@ void httpWebServerLoop()
 
             if (g_numberOfSocketClients) {
               String msg;
-              if (g_debug_prints_enabled)
-              {
-                Serial.println("Sending MAC addresses:");
-              }
-
-              for (int i = 0; i < MAX_NUMBER_OF_WEB_CLIENTS; i++)
-              {
-                if ((g_webSocketClient[i].macAddr).length() && (g_webSocketClient[i].socketID < WEBSOCKETS_SERVER_CLIENT_MAX))
-                {
-                  msg = String( String(SOCK_COMMAND_MAC) + "," + g_webSocketClient[i].macAddr );
-                  g_webSocketServer.sendTXT(g_webSocketClient[i].socketID, stringObjToConstCharString(&msg), msg.length());
-                  if (g_debug_prints_enabled)
-                  {
-                    Serial.println(msg);
-                  }
-                }
-              }
 
               g_http_server.handleClient();
               g_webSocketServer.loop();
-
-              if (g_debug_prints_enabled)
-              {
-                Serial.println("Sending SSID:");
-              }
-
-              msg = String( String(SOCK_COMMAND_SSID) + "," + g_AP_NameString );
-              g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-              if (g_debug_prints_enabled)
-              {
-                Serial.println(msg);
-              }
 
               if (g_eventsRead)
               {
@@ -1942,6 +1949,7 @@ void httpWebServerLoop()
           }
           break;
 
+        default:
         case TX_WAITING_FOR_INSTRUCTIONS:
           {
             serialIndex = 0;
@@ -2135,10 +2143,11 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           p = p.substring(p.indexOf(',') + 1);
           p.toUpperCase();
 
-          if (g_debug_prints_enabled)
-          {
-            Serial.printf(String("Pattern: \"" + p + "\"\n").c_str());
-          }
+//          if (g_debug_prints_enabled)
+//          {
+//            Serial.printf(String("Pattern: \"" + p + "\"\n").c_str());
+//          }
+            
           String lbMsg = String(LB_MESSAGE_PATTERN_SET + p + ";");
           Serial.println(stringObjToConstCharString(&lbMsg)); // Send to Transmitter
 
@@ -2177,6 +2186,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         }
         else if (msgHeader == SOCK_COMMAND_CLEAR_ACTIVE_EVENT)
         {
+            String lbMsg = String(LB_MESSAGE_KEY_UP);
+            Serial.printf(stringObjToConstCharString(&lbMsg)); // Send message to ATMEGA
             if(g_activeEvent) delete(g_activeEvent);
             g_activeEvent = NULL;
         }
@@ -2300,6 +2311,15 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
                         Serial.println(msg);
                     }
                 }
+            }
+        }
+        else if (msgHeader == SOCK_COMMAND_SSID)
+        {
+            String msg = String( String(SOCK_COMMAND_SSID) + "," + g_AP_NameString );
+            g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+            if (g_debug_prints_enabled)
+            {
+              Serial.println(msg);
             }
         }
         else if (msgHeader == SOCK_COMMAND_KEY_DOWN)
@@ -2937,6 +2957,44 @@ void saveDefaultsFile()
 
   Serial.println(String("\tFile Not Found: ") + path);  // If the file doesn't exist, return false
 }
+               
+void handleFileDelete()
+{
+  String path = g_http_server.arg(0);
+  bool abort = false;
+    
+  if (g_debug_prints_enabled)
+  {
+    Serial.println("\nhandleFileDelete: " + path);
+  }
+
+  if (path.endsWith("/")) abort = true;   // If a folder is requested consider it an error
+    
+  if (!abort && SPIFFS.exists(stringObjToConstCharString(&path)))
+  { // If the file exists
+    SPIFFS.remove(path);
+
+    if (g_debug_prints_enabled)
+    {
+      Serial.println(String(path + " Deleted."));
+    }
+      
+    fileDeleteWithMessage("<p>File deleted successfully!</p>");
+  }
+  else
+  {
+    if (g_debug_prints_enabled)
+    {
+      Serial.println(String("File not found in SPIFFS: ") + path);
+    }
+      
+    fileDeleteWithMessage("<p>File deletion failed!</p>");
+  }
+    
+
+  return;
+}
+
 
 void handleFileDownload()
 {
@@ -2951,14 +3009,13 @@ void handleFileDownload()
   String contentType = "text/plain";      // Always use text MIME type
   if (SPIFFS.exists(stringObjToConstCharString(&path)))
   { // If the file exists, either as a compressed archive, or normal
-      File file = SPIFFS.open(path, "r"); // Open the file
+    File file = SPIFFS.open(path, "r"); // Open the file
     size_t sent = g_http_server.streamFile(file, contentType);  // Send it to the client
     file.close();                       // Close the file 
     if (g_debug_prints_enabled)
     {
       Serial.println(String("\tSent " + String(sent) + "bytes from file: ") + path);
     }
-    return;
   }
   else
   {
@@ -3170,10 +3227,10 @@ void handleLBMessage(String message)
     g_timeOfDayFromTx = payload.toInt();
     unsigned long epoch = g_timeOfDayFromTx;
 
-    if (g_debug_prints_enabled)
-    {
-        Serial.println("T=" + String(epoch));
-    }
+//    if (g_debug_prints_enabled)
+//    {
+//        Serial.println("T=" + String(epoch));
+//    }
 
     if (epoch)
     {
@@ -3208,15 +3265,35 @@ void handleLBMessage(String message)
   {
     String code = payload;
 
-    if (g_debug_prints_enabled)
-    {
-        Serial.println("status=" + String(code));
-    }
+//    if (g_debug_prints_enabled)
+//    {
+//        Serial.println("status=" + String(code));
+//    }
 
       if (g_numberOfSocketClients) {
         String msg = String(String(SOCK_COMMAND_STATUS) + "," + code);
         g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
     }
+  }
+  else if (type == LB_MESSAGE_TX_POWER)
+  {
+      String code = payload;
+      int mLocation = code.indexOf('M');
+      
+      if(mLocation >= 0)
+      {
+          code = code.substring(mLocation+2);
+      }
+      
+//      if (g_debug_prints_enabled)
+//      {
+//          Serial.println("tx power=" + code);
+//      }
+
+      if (g_numberOfSocketClients) {
+        String msg = String(String(SOCK_COMMAND_TYPE_PWR) + "," + code);
+        g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+      }
   }
   else if (type == LB_MESSAGE_TEMP)
   {
@@ -3244,10 +3321,10 @@ void handleLBMessage(String message)
   {
     float temp = payload.toInt();
 
-    if (g_debug_prints_enabled)
-    {
-      Serial.println("B=" + String(temp));
-    }
+//    if (g_debug_prints_enabled)
+//    {
+//      Serial.println("B=" + String(temp));
+//    }
 
     char dataStr[4];
     dtostrf(temp, 3, 0, dataStr);
