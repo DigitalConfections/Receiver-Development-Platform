@@ -869,6 +869,12 @@
                                         }
                                         break;
 
+                                    case 0xF5: // ERROR_CODE_POWER_LEVEL_NOT_SUPPORTED = 0xF5
+                                        {
+                                            text = "Transmit power level not supported";
+                                        }
+                                        break;
+
                                     case 0xF6: // ERROR_CODE_NO_ANTENNA_PREVENTS_POWER_SETTING = 0xF6
                                         {
                                             text = "Missing antenna prevents setting transmit power";
@@ -1184,6 +1190,23 @@
                                     console.log("role name: ", arr[1]);
                                 }
                             }
+                            break;
+
+                        case "POWER":
+                            {
+                                var mw = arr[1];
+
+                                console.log("tx power: ", arr[1]);
+                                var pe = document.getElementById("pwrSelect");
+
+                                if (pe != null) {
+                                    pe.value = arr[1];
+                                }
+                            }
+							break;
+
+                        case "TEST":
+                            {}
                             break;
 
                         default:

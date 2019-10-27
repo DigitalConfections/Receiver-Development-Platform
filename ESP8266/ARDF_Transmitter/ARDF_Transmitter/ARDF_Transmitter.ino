@@ -63,10 +63,9 @@
 #include <time.h>
 #include "Transmitter.h"
 #include "Event.h"
-
-
 /* #include <Wire.h> */
 #include "Helpers.h"
+#include "CircularStringBuff.h"
 
 /* Global variables are always prefixed with g_ */
 
@@ -162,6 +161,10 @@ int g_eventsRead = 0;
 int g_numberOfScheduledEvents = 0;
 TxCommState g_ESP_ATMEGA_Comm_State = TX_WAKE_UP;
 
+CircularStringBuff *g_LBOutputBuff = NULL;
+int g_linkBusAckPending = 0;
+int g_linkBusAckTimeout = 10;
+
 bool populateEventFileList(void);
 bool readDefaultsFile(void);
 void saveDefaultsFile(void);
@@ -198,6 +201,9 @@ void setup()
 #endif // WIFI_DEBUG_PRINTS_ENABLED
 
   g_xmtr = new Transmitter(g_debug_prints_enabled);
+
+ #define LB_OUTPUT_BUFF_SIZE 25
+  g_LBOutputBuff = new CircularStringBuff(LB_OUTPUT_BUFF_SIZE);
 }
 
 /*******************************************************
@@ -559,8 +565,8 @@ void onStationDisconnect(WiFiEventSoftAPModeStationDisconnected sta_info) {
 
   g_numberOfWebClients = WiFi.softAPgetStationNum();
   g_numberOfSocketClients = g_webSocketServer.connectedClients(false);
-  Serial.printf(LB_MESSAGE_ESP_SAVE); /* Save any event changes */
-
+  g_LBOutputBuff->put(LB_MESSAGE_ESP_SAVE);
+  
   if (g_debug_prints_enabled)
   {
     Serial.println("Station Exit:");
@@ -734,7 +740,7 @@ void loop()
 
   g_debug_prints_enabled = DEBUG_PRINTS_ENABLE_DEFAULT; // kluge override of saved settings
 
-  if (!skipInitialCommand)
+if (!skipInitialCommand)
   {
     while (!done)
     {
@@ -1228,7 +1234,7 @@ void httpWebServerLoop()
             {
               done = true;
               escapeCount = 0;
-              Serial.println("Web Server closed");
+ //             Serial.println("Web Server closed");
               WiFi.softAPdisconnect(true);
             }
           }
@@ -1341,23 +1347,38 @@ void httpWebServerLoop()
         {
           if (!sentComsOFF)
           {
-            Serial.printf(LB_MESSAGE_WIFI_COMS_OFF);
+            Serial.printf(LB_MESSAGE_WIFI_COMS_OFF); // send immediate
             sentComsOFF = true;
           }
         }
+
+        if(g_linkBusAckTimeout) g_linkBusAckTimeout--;
       }
 
       if (g_numberOfSocketClients)
       {
-//        if (toggle) Serial.printf(LB_MESSAGE_TIME_REQUEST); // request latest time once per second
-
         if (!(holdTime % 61))
         {
-          Serial.printf(LB_MESSAGE_TEMP_REQUEST); // request temperature reading
+           g_LBOutputBuff->put(LB_MESSAGE_TEMP_REQUEST);
         }
         else if (!(holdTime % 17))
         {
-          Serial.printf(LB_MESSAGE_BATTERY_REQUEST); // request battery level reading
+          g_LBOutputBuff->put(LB_MESSAGE_BATTERY_REQUEST);
+        }
+
+        if(!g_LBOutputBuff->empty() && !g_linkBusAckPending)
+        {
+          String msg = g_LBOutputBuff->get();
+          Serial.println(stringObjToConstCharString(&msg));
+          g_linkBusAckPending++;
+          g_linkBusAckTimeout = 10;
+        }
+        else
+        {
+          if(!g_linkBusAckTimeout && g_linkBusAckPending) {
+            g_linkBusAckPending = 0;
+            Serial.println("ACK Timeout");
+          }
         }
       }
 
@@ -1366,8 +1387,8 @@ void httpWebServerLoop()
         case TX_WAKE_UP:
           {
             /* Inform the ATMEGA that WiFi power up is complete */
-            Serial.printf(LB_MESSAGE_ESP_WAKEUP); // Send ESP message to ATMEGA
             g_ESP_ATMEGA_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
+            g_LBOutputBuff->put(LB_MESSAGE_ESP_WAKEUP);
           }
           break;
 
@@ -1382,16 +1403,12 @@ void httpWebServerLoop()
               if (g_activeEvent == NULL) g_activeEvent = new Event(g_debug_prints_enabled);
               g_activeEvent->readEventFile(g_eventList[0].path);
               g_activeEventIndex = 0;
-              // String lbMsg = String(LB_MESSAGE_ESP_ACTIVE);
-              //              Serial.printf(stringObjToConstCharString(&lbMsg)); // Send ESP message to ATMEGA
-
-                /* TODO: configure the transmitter for the scheduled event, then shut down WiFi */
             }
             else
             {
               /* Inform the ATMEGA that no events are scheduled */
-              Serial.printf(LB_MESSAGE_ESP_KEEPALIVE); // Send ESP keep-alive message to ATMEGA
-            }
+              g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
+           }
 
             g_ESP_ATMEGA_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
           }
@@ -1470,16 +1487,6 @@ void httpWebServerLoop()
                 }
 
                 String msg;
-                //                String msg = String(String(SOCK_COMMAND_EVENT_NAME) + "," + g_activeEvent->getEventName() );
-                //                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                //                if (g_debug_prints_enabled)
-                //                {
-                //                  Serial.println(msg);
-                //                }
-
-                //                g_http_server.handleClient();
-                //                g_webSocketServer.loop();
-
                 for (int i = 0; i < g_eventsRead; i++)
                 {
                   msg = String(String(SOCK_COMMAND_REFRESH) + "," + g_eventList[i].ename + "," + g_eventList[i].vers + "," +  g_eventList[i].startDateTimeEpoch + "," +  g_eventList[i].finishDateTimeEpoch + "," + g_eventList[i].role + "," + g_eventList[i].callsign + "," + g_eventList[i].freq);
@@ -1491,32 +1498,6 @@ void httpWebServerLoop()
 
                 g_http_server.handleClient();
                 g_webSocketServer.loop();
-
-                //                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
-                //                {
-                //                  for (int j = 0; j < g_activeEvent->getNumberOfTxsForRole(i); j++)
-                //                  {
-                //                    String role_tx = String(String(i) + ":" + String(j));
-                //                    msg = String(String(SOCK_COMMAND_TYPE_NAME) + "," + g_activeEvent->getTxDescriptiveName(role_tx) + "," + role_tx);
-                //                    g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                //                    g_webSocketServer.loop();
-                //                    g_http_server.handleClient();
-                //                  }
-                //                }
-
-                //                msg = String(String(SOCK_COMMAND_TYPE_NAME) + ",Done,Done");
-                //                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                //                g_webSocketServer.loop();
-                //                g_http_server.handleClient();
-
-                //                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
-                //                {
-                //                  msg = String(String(SOCK_COMMAND_TYPE_TX_COUNT) + "," + String(g_activeEvent->getNumberOfTxsForRole(i)));
-                //                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                //                  g_webSocketServer.loop();
-                //                }
-
-                //                g_http_server.handleClient();
 
                 for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
                 {
@@ -1536,34 +1517,6 @@ void httpWebServerLoop()
                 }
 
                 g_http_server.handleClient();
-
-
-
-                //                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
-                //                {
-                //                  msg = String(String(SOCK_COMMAND_TYPE_WPM) + "," + String(g_activeEvent->getCodeSpeedForRole(i)));
-                //                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                //                  if (g_debug_prints_enabled)
-                //                  {
-                //                    Serial.println(msg);
-                //                  }
-                //                }
-
-                //                g_http_server.handleClient();
-                //                g_webSocketServer.loop();
-
-                //                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
-                //                {
-                //                  msg = String(String(SOCK_COMMAND_TYPE_ID_INTERVAL) + "," + String(g_activeEvent->getIDIntervalForRole(i)));
-                //                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                //                  if (g_debug_prints_enabled)
-                //                  {
-                //                    Serial.println(msg);
-                //                  }
-                //                }
-
-                //                g_http_server.handleClient();
-                //                g_webSocketServer.loop();
 
                 msg = String(String(SOCK_COMMAND_TX_ROLE) + "," + g_activeEvent->getTxAssignment());
                 g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
@@ -1665,44 +1618,6 @@ void httpWebServerLoop()
                   g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
                 }
 
-                //                msg = String(String(SOCK_COMMAND_EVENT_FILE_VERSION) + "," + g_activeEvent->getEventFileVersion() );
-                //                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                //                if (g_debug_prints_enabled)
-                //                {
-                //                  Serial.println(msg);
-                //                }
-                //
-
-                //                g_http_server.handleClient();
-                //                g_webSocketServer.loop();
-
-                //                msg = String(String(SOCK_COMMAND_CALLSIGN) + "," + g_activeEvent->getCallsign());
-                //                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                //                if (g_debug_prints_enabled)
-                //                {
-                //                  Serial.println(msg);
-                //                }
-
-                //                g_http_server.handleClient();
-                //                g_webSocketServer.loop();
-
-                //                msg = String(String(SOCK_COMMAND_START_TIME) + "," + g_activeEvent->getEventStartDateTime());
-                //                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                //                if (g_debug_prints_enabled)
-                //                {
-                //                  Serial.println(msg);
-                //                }
-
-                //                g_http_server.handleClient();
-                //                g_webSocketServer.loop();
-
-                //                msg = String(String(SOCK_COMMAND_FINISH_TIME) + "," + g_activeEvent->getEventFinishDateTime());
-                //                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                //                if (g_debug_prints_enabled)
-                //                {
-                //                  Serial.println(msg);
-                //                }
-
                 g_http_server.handleClient();
                 g_webSocketServer.loop();
 
@@ -1723,15 +1638,6 @@ void httpWebServerLoop()
                 g_webSocketServer.loop();
                 g_http_server.handleClient();
 
-                //                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
-                //                {
-                //                  msg = String(String(SOCK_COMMAND_TYPE_TX_COUNT) + "," + String(g_activeEvent->getNumberOfTxsForRole(i)));
-                //                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                //                  g_webSocketServer.loop();
-                //                }
-
-                //                g_http_server.handleClient();
-
                 for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
                 {
                   msg = String(String(SOCK_COMMAND_TYPE_FREQ) + "," + String(g_activeEvent->getFrequencyForRole(i)) + "," + g_activeEvent->getRolename(i));
@@ -1750,33 +1656,6 @@ void httpWebServerLoop()
                 }
 
                 g_http_server.handleClient();
-
-
-                //                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
-                //                {
-                //                  msg = String(String(SOCK_COMMAND_TYPE_WPM) + "," + String(g_activeEvent->getCodeSpeedForRole(i)));
-                //                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                //                  if (g_debug_prints_enabled)
-                //                  {
-                //                    Serial.println(msg);
-                //                  }
-                //                }
-
-                //                g_http_server.handleClient();
-                //                g_webSocketServer.loop();
-
-                //                for (int i = 0; i < g_activeEvent->getEventNumberOfTxTypes(); i++)
-                //                {
-                //                  msg = String(String(SOCK_COMMAND_TYPE_ID_INTERVAL) + "," + String(g_activeEvent->getIDIntervalForRole(i)));
-                //                  g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-                //                  if (g_debug_prints_enabled)
-                //                  {
-                //                    Serial.println(msg);
-                //                  }
-                //                }
-
-                //                g_http_server.handleClient();
-                //                g_webSocketServer.loop();
 
                 msg = String(String(SOCK_COMMAND_TX_ROLE) + "," + g_activeEvent->getTxAssignment());
                 g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
@@ -1803,9 +1682,8 @@ void httpWebServerLoop()
             {
               case 0: // Prepare ATMEGA to receive event data
                 {
-                  lbMsg = String(LB_MESSAGE_PREP_FOR_NEW_EVENT);
-                  Serial.println(stringObjToConstCharString(&lbMsg));
                   g_blinkPeriodMillis = 100;
+                  g_LBOutputBuff->put(LB_MESSAGE_PREP_FOR_NEW_EVENT);
                 }
                 break;
                     
@@ -1818,46 +1696,44 @@ void httpWebServerLoop()
                     txData = g_activeEvent->getTxData(role, tx);
                   }
 
-                  //                Serial.println("r=" + String(role) + "; s=" + String(tx));
-
                   /* Finish time should be sent first */
                   lbMsg = String(LB_MESSAGE_STARTFINISH_SET_FINISH + String(convertTimeStringToEpoch(g_activeEvent->getEventFinishDateTime())) + ";");
-                  Serial.println(stringObjToConstCharString(&lbMsg));
+                  g_LBOutputBuff->put(lbMsg);
                 }
                 break;
 
               case 2: // Message pattern
                 {
                   lbMsg = String(LB_MESSAGE_PATTERN_SET + (*txData).pattern + ";");
-                  Serial.println(stringObjToConstCharString(&lbMsg));
+                  g_LBOutputBuff->put(lbMsg);
                 }
                 break;
 
               case 3: // Off time
                 {
                   lbMsg = String(LB_MESSAGE_TIME_INTERVAL_SET0 + String((*txData).offTime) + ";");
-                  Serial.println(stringObjToConstCharString(&lbMsg));
+                  g_LBOutputBuff->put(lbMsg);
                 }
                 break;
                     
               case 4: // On time
                 {
                   lbMsg = String(LB_MESSAGE_TIME_INTERVAL_SET1 + String((*txData).onTime) + ";");
-                  Serial.println(stringObjToConstCharString(&lbMsg));
+                  g_LBOutputBuff->put(lbMsg);
                 }
                 break;
 
               case 5: // Offset time
                 {
                   lbMsg = String(LB_MESSAGE_TIME_INTERVAL_SETD + String((*txData).delayTime) + ";");
-                  Serial.println(stringObjToConstCharString(&lbMsg));
+                  g_LBOutputBuff->put(lbMsg);
                 }
                 break;
 
               case 6: // Station ID transmit interval
                 {
                   lbMsg = String(LB_MESSAGE_TIME_INTERVAL_SETID + String(g_activeEvent->getIDIntervalForRole(role)) + ";");
-                  Serial.println(stringObjToConstCharString(&lbMsg));
+                  g_LBOutputBuff->put(lbMsg);
                 }
                 break;
 
@@ -1875,49 +1751,49 @@ void httpWebServerLoop()
                   }
 
                   lbMsg = String(LB_MESSAGE_TX_BAND_SET + b + ";");
-                  Serial.println(stringObjToConstCharString(&lbMsg));
+                  g_LBOutputBuff->put(lbMsg);
                 }
                 break;
 
               case 8: // Transmit power for role
                 {
                   lbMsg = String(LB_MESSAGE_TX_POWER_SET + String(g_activeEvent->getPowerlevelForRole(role)) + ";");
-                  Serial.println(stringObjToConstCharString(&lbMsg));
+                  g_LBOutputBuff->put(lbMsg);
                 }
                 break;
 
               case 9: // Modulation format
                 {
                   lbMsg = String(LB_MESSAGE_TX_MOD_SET + String(g_activeEvent->getEventModulation()) + ";");
-                  Serial.println(stringObjToConstCharString(&lbMsg));
+                  g_LBOutputBuff->put(lbMsg);
                 }
                 break;
 
               case 10: // Frequency for role
                 {
                   lbMsg = String(LB_MESSAGE_TX_FREQ_SET + String(g_activeEvent->getFrequencyForRole(role)) + ";");
-                  Serial.println(stringObjToConstCharString(&lbMsg));
+                  g_LBOutputBuff->put(lbMsg);
                 }
                 break;
 
               case 11: // Station ID
                 {
                   lbMsg = String(LB_MESSAGE_CALLSIGN_SET + g_activeEvent->getCallsign() + ";");
-                  Serial.println(stringObjToConstCharString(&lbMsg));
+                  g_LBOutputBuff->put(lbMsg);
                 }
                 break;
 
               case 12: // Message code speed
                 {
                   lbMsg = String(LB_MESSAGE_CODE_SPEED_SETPAT + String(g_activeEvent->getCodeSpeedForRole(role)) + ";");
-                  Serial.println(stringObjToConstCharString(&lbMsg));
+                  g_LBOutputBuff->put(lbMsg);
                 }
                 break;
 
               case 13: // ID code speed
                 {
                   lbMsg = String(LB_MESSAGE_CODE_SPEED_SETID + g_activeEvent->getCallsignSpeed() + ";");
-                  Serial.println(stringObjToConstCharString(&lbMsg));
+                  g_LBOutputBuff->put(lbMsg);
                 }
                 break;
 
@@ -1925,22 +1801,21 @@ void httpWebServerLoop()
                 {
                   /* Start time is sent last */
                   lbMsg = String(LB_MESSAGE_STARTFINISH_SET_START + String(convertTimeStringToEpoch(g_activeEvent->getEventStartDateTime())) + ";");
-                  Serial.println(stringObjToConstCharString(&lbMsg));
+                  g_LBOutputBuff->put(lbMsg);
                 }
                 break;
                     
               case 15: // Perm - Have ATMega save everything in EEPROM
                 {
-                  lbMsg = String(LB_MESSAGE_PERM);
-                  Serial.println(stringObjToConstCharString(&lbMsg));
+                  g_LBOutputBuff->put(LB_MESSAGE_PERM);
                 }
+                break;
 
               default: // Tell ATMEGA to begin executing the event
                 {
-                  lbMsg = String(LB_MESSAGE_ACTIVATE_EVENT);
-                  Serial.println(stringObjToConstCharString(&lbMsg));
                   g_ESP_ATMEGA_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
                   g_blinkPeriodMillis = 500;
+                  g_LBOutputBuff->put(LB_MESSAGE_ACTIVATE_EVENT);
                 }
                 break;
             }
@@ -1958,8 +1833,7 @@ void httpWebServerLoop()
             {
               if (!(holdTime % 25))             /* Ask ATMEGA to wait longer before shutting down WiFi */
               {
-                String lbMsg = String(LB_MESSAGE_ESP_KEEPALIVE);
-                Serial.printf(stringObjToConstCharString(&lbMsg)); // Send ESP message to ATMEGA
+                g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
               }
             }
           }
@@ -2037,7 +1911,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           g_numberOfSocketClients = g_webSocketServer.connectedClients(false);
         }
 
-        Serial.printf(LB_MESSAGE_ESP_SAVE); /* Save any event changes */
+        g_LBOutputBuff->put(LB_MESSAGE_ESP_SAVE);
       }
       break;
 
@@ -2063,10 +1937,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         }
 
         g_numberOfSocketClients = g_webSocketServer.connectedClients(false);
-        //g_ESP_ATMEGA_Comm_State = TX_HTML_PAGE_SERVED;
-          
-        Serial.printf(LB_MESSAGE_TEMP_REQUEST); // request temperature reading
-        Serial.printf(LB_MESSAGE_BATTERY_REQUEST); // request battery level reading
+        g_LBOutputBuff->put(LB_MESSAGE_TEMP_REQUEST);
+        g_LBOutputBuff->put(LB_MESSAGE_BATTERY_REQUEST);
       }
       break;
 
@@ -2131,8 +2003,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
             Serial.printf(String("Callsign: \"" + p + "\"\n").c_str());
           }
           String lbMsg = String(LB_MESSAGE_CALLSIGN_SET + p + ";");
-          Serial.println(stringObjToConstCharString(&lbMsg)); // Send to Transmitter
-
+          g_LBOutputBuff->put(lbMsg);
+          
           String msg = String(String(SOCK_COMMAND_CALLSIGN) + "," + p);
 
           g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
@@ -2149,8 +2021,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 //          }
             
           String lbMsg = String(LB_MESSAGE_PATTERN_SET + p + ";");
-          Serial.println(stringObjToConstCharString(&lbMsg)); // Send to Transmitter
-
+          g_LBOutputBuff->put(lbMsg);
+          
           //String msg = String(String(SOCK_COMMAND_PATTERN) + "," + p);
           //g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
         }
@@ -2178,7 +2050,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
             Serial.printf(String("Finish Time: \"" + p + "\"\n").c_str());
           }
           String lbMsg = String(LB_MESSAGE_STARTFINISH_SET_FINISH + p + ";");
-          Serial.printf(stringObjToConstCharString(&lbMsg)); // Send to Transmitter
+          g_LBOutputBuff->put(lbMsg);
 
           g_activeEvent->setEventFinishDateTime(p);
           g_numberOfScheduledEvents = numberOfEventsScheduled(g_timeOfDayFromTx);
@@ -2186,8 +2058,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         }
         else if (msgHeader == SOCK_COMMAND_CLEAR_ACTIVE_EVENT)
         {
-            String lbMsg = String(LB_MESSAGE_KEY_UP);
-            Serial.printf(stringObjToConstCharString(&lbMsg)); // Send message to ATMEGA
+            g_LBOutputBuff->put(LB_MESSAGE_KEY_UP);
             if(g_activeEvent) delete(g_activeEvent);
             g_activeEvent = NULL;
         }
@@ -2211,7 +2082,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
               }
             } else {
               String lbMsg = String(LB_MESSAGE_TX_FREQ_SET + String(freq) + ";");
-              Serial.println(stringObjToConstCharString(&lbMsg));
+              g_LBOutputBuff->put(lbMsg);
             }
           }
         }
@@ -2235,7 +2106,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
               }
             } else {
               String lbMsg = String(LB_MESSAGE_TX_POWER_SET + pwr + ";");
-              Serial.println(stringObjToConstCharString(&lbMsg));
+              g_LBOutputBuff->put(lbMsg);
             }
           } else {
               if (g_debug_prints_enabled)
@@ -2261,7 +2132,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
               }
             } else {
               String lbMsg = String(LB_MESSAGE_TX_MOD_SET + mod + ";");
-              Serial.println(stringObjToConstCharString(&lbMsg));
+              g_LBOutputBuff->put(lbMsg);
             }
           }
         }
@@ -2282,7 +2153,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
               }
             } else {
               String lbMsg = String(LB_MESSAGE_TX_BAND_SET + band + ";");
-              Serial.println(stringObjToConstCharString(&lbMsg));
+              g_LBOutputBuff->put(lbMsg);
             }
           }
         }
@@ -2325,24 +2196,23 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         else if (msgHeader == SOCK_COMMAND_KEY_DOWN)
         {
           String lbMsg = String(LB_MESSAGE_KEY_DOWN);
-          Serial.printf(stringObjToConstCharString(&lbMsg)); // Send message to ATMEGA
+          g_LBOutputBuff->put(lbMsg);
         }
         else if (msgHeader == SOCK_COMMAND_KEY_UP)
         {
           String lbMsg = String(LB_MESSAGE_KEY_UP);
-          Serial.printf(stringObjToConstCharString(&lbMsg)); // Send message to ATMEGA
+          g_LBOutputBuff->put(lbMsg);
         }
         else if (msgHeader == SOCK_COMMAND_WIFI_OFF)
         {
           String lbMsg = String(LB_MESSAGE_WIFI_OFF);
-          Serial.printf(stringObjToConstCharString(&lbMsg)); // Send message to ATMEGA
+          g_LBOutputBuff->put(lbMsg);
         }
         else if (msgHeader == SOCK_COMMAND_PASSTHRU)
         {
           int firstComma = p.indexOf(',');
           String lbMsg = (p.substring(firstComma + 1));
-
-          Serial.println(stringObjToConstCharString(&lbMsg));
+          g_LBOutputBuff->put(lbMsg);
         }
       }
       break;
@@ -3200,25 +3070,35 @@ void handleLBMessage(String message)
   // e.g., "$EC,247;"
   int firstDelimit = message.indexOf(',');
   if(firstDelimit < 0) firstDelimit = message.indexOf(';');
-  if(firstDelimit < 0) firstDelimit = 4;
+  if(firstDelimit < 0) firstDelimit = message.length() - 1;
+  if(firstDelimit < 0) {
+    Serial.println("Bad LB msg rcvd!");
+    return;
+  }
+  
   String type = message.substring(1, firstDelimit);
   String payload = "";
   if(message.indexOf(',') >= 0) payload = message.substring(firstDelimit+1, message.indexOf(';'));
 
-  if (type == LB_MESSAGE_ESP)
+  if (type == LB_MESSAGE_ACK)
+  {
+     if(g_linkBusAckPending) g_linkBusAckPending--;
+     Serial.println("ACK");
+  }
+  else if (type == LB_MESSAGE_ESP)
   {
     if (payload.equals("1")) // Atmega is asking to receive the next active event
     {
         if(g_numberOfScheduledEvents && (g_activeEvent != NULL))
         {
-            Serial.printf(LB_MESSAGE_ESP_KEEPALIVE); // Send ESP keep-alive message to ATMEGA
             g_ESP_ATMEGA_Comm_State = TX_RECD_START_EVENT_REQUEST;
+            g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
         }
     }
     if (payload.equals("2"))
     {
       if (g_activeEvent != NULL) g_activeEvent->writeEventFile(); /* save any changes */
-      Serial.printf(LB_MESSAGE_ESP_KEEPALIVE); // Send ESP keep-alive message to ATMEGA
+      g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
     }
   }
   else if (type == LB_MESSAGE_TIME)

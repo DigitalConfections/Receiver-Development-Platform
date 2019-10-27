@@ -170,9 +170,10 @@ typedef enum {
 #define SOCK_COMMAND_PASSTHRU "PASS"
 
 // LinkBus Messages
+#define LB_MESSAGE_ACK "ACK"
 #define LB_MESSAGE_ERROR_CODE "EC"
 #define LB_MESSAGE_STATUS_CODE "SC"
-#define LB_MESSAGE_PERM "$P;"
+#define LB_MESSAGE_PERM "$PRM;"
 #define LB_MESSAGE_ESP "ESP"
 #define LB_MESSAGE_ESP_WAKEUP "$ESP,0;" /* Wake up from reset */
 #define LB_MESSAGE_ESP_ACTIVE "$ESP,1;" /* Ready with active event data */

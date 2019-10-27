@@ -1465,6 +1465,7 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 {
 	LinkbusRxBuffer* lb_buff;
 	static uint8_t event_parameter_count = 0;
+	BOOL send_ack = TRUE;
 
 	while((lb_buff = nextFullRxBuffer()))
 	{
@@ -1481,9 +1482,14 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					result = atoi(lb_buff->fields[FIELD1]);
 
 					cli();
+					g_on_the_air = 0; //  stop transmitting
+					g_event_commenced = FALSE; // get things stopped immediately
+					g_event_enabled = FALSE; // get things stopped immediately
 					linkbus_disable();
 					g_WiFi_shutdown_seconds = 0; // disable shutdown
 					sei();
+					keyTransmitter(OFF);
+					powerToTransmitter(OFF);
 
 					if(result == 0) // shut off power to WiFi
 					{
@@ -1921,7 +1927,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 				if(lb_buff->fields[FIELD1][0])  /* band field */
 				{
 					EC ec = ERROR_CODE_ILLEGAL_COMMAND_RCVD;
-
 					int b = atoi(lb_buff->fields[FIELD1]);
 
 					if(b == 80)
@@ -1981,6 +1986,7 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 		}
 
 		lb_buff->id = MESSAGE_EMPTY;
+		if(send_ack) linkbus_send_text(MESSAGE_ACK);
 	}
 }
 
