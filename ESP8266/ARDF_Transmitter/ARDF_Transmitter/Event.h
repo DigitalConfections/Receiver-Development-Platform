@@ -81,7 +81,7 @@ typedef struct TxDataStruct {
   String pattern;
   String onTime;
   String offTime;
-  int delayTime;
+  String delayTime;
 } TxDataType;
 
 /* This structure holds all the data that defines a transmitter Role */
@@ -170,6 +170,7 @@ class Event {
     bool setIDIntervalForRole(int roleIndex, String str);
     int getIDIntervalForRole(int roleIndex) const;
 
+    bool validateEvent(void);
     bool readEventFile(String path);
     bool writeEventFile(void);
 

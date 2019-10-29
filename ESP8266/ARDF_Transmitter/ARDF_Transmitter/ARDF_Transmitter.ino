@@ -192,7 +192,7 @@ void setup()
     saveDefaultsFile();
   }
 
-  populateEventFileList();
+  // populateEventFileList();
 
   //  showSettings();
 
@@ -379,10 +379,10 @@ void handleNotFound()
       Serial.println("File read:" + filename);
     }
 
-    if (filename.indexOf("events.html") >= 0)
-    {
-      g_ESP_ATMEGA_Comm_State = TX_HTML_PAGE_SERVED;
-    }
+//    if (filename.indexOf("events.html") >= 0)
+//    {
+//      g_ESP_ATMEGA_Comm_State = TX_HTML_PAGE_SERVED;
+//    }
   }
 }
 
@@ -740,7 +740,7 @@ void loop()
 
   g_debug_prints_enabled = DEBUG_PRINTS_ENABLE_DEFAULT; // kluge override of saved settings
 
-if (!skipInitialCommand)
+  if (!skipInitialCommand)
   {
     while (!done)
     {
@@ -1170,24 +1170,25 @@ void httpWebServerLoop()
 
   if (g_numberOfWebClients > 0)
   {
-    if (g_debug_prints_enabled)
-    {
-      Serial.println(String("Stations already connected:" + String(g_numberOfWebClients)));
-      Serial.println(String("Existing socket connections:" + String(g_numberOfSocketClients)));
-    }
-    //    WiFi.disconnect();
-    //    ESP.restart();
-    //    WiFi.mode(WIFI_OFF);
-    WiFi.mode(WIFI_STA);
-    WiFi.mode(WIFI_AP_STA);
-    // Event subscription
-    e1 = WiFi.onSoftAPModeStationConnected(onNewStation);
-    e2 = WiFi.onSoftAPModeStationDisconnected(onStationDisconnect);
-    i = WiFi.softAPgetStationNum();
-    if (g_debug_prints_enabled)
-    {
-      Serial.println(String("Stations already connected:" + String(i)));
-    }
+        if (g_debug_prints_enabled)
+        {
+          Serial.println(String("Stations already connected:" + String(g_numberOfWebClients)));
+          Serial.println(String("Existing socket connections:" + String(g_numberOfSocketClients)));
+        }
+        //    WiFi.disconnect();
+        //    ESP.restart();
+        //    WiFi.mode(WIFI_OFF);
+        WiFi.mode(WIFI_STA);
+        WiFi.mode(WIFI_AP_STA);
+        // Event subscription
+        e1 = WiFi.onSoftAPModeStationConnected(onNewStation);
+        e2 = WiFi.onSoftAPModeStationDisconnected(onStationDisconnect);
+        i = WiFi.softAPgetStationNum();
+      
+        if (g_debug_prints_enabled)
+        {
+          Serial.println(String("Stations already connected:" + String(i)));
+        }
   }
 
   while (!done)
@@ -1267,125 +1268,129 @@ void httpWebServerLoop()
       
     if (holdTime != g_relativeTimeSeconds)
     {
-      holdTime = g_relativeTimeSeconds;
-      toggle = !toggle;
+        holdTime = g_relativeTimeSeconds;
+        toggle = !toggle;
 
-      if (progButtonPressed)
-      {
-        digitalWrite(BLUE_LED, LOW);   /* Turn on blue LED */
-        digitalWrite(RED_LED, LOW);    /* Turn on red LED */
-      }
-      else if (!g_LEDs_enabled)
-      {
-        digitalWrite(BLUE_LED, HIGH);   /* Turn off blue LED */
-        digitalWrite(RED_LED, HIGH);    /* Turn off red LED */
-      }
-      else
-      {
-        if (g_numberOfSocketClients)
+        if(!g_LBOutputBuff->empty() && !g_linkBusAckPending)
         {
-          digitalWrite(BLUE_LED, toggle); /* Blink blue LED */
-          digitalWrite(RED_LED, !toggle); /* Blink red LED */
-          //          Serial.println("web sockets: " + String(g_numberOfSocketClients));
-          if (toggle)
-          {
-            pinMode(RED_LED, INPUT);       /* Allow GPIO0 to be read */
-            if(!digitalRead(RED_LED)) {
-                debounceProgButton--;
-                if(!debounceProgButton) {
-                    progButtonPressed = true;
-                    debounceProgButton = 3;
-                }
-            } else {
-                debounceProgButton = 3;
-            }
-            pinMode(RED_LED, OUTPUT);
-          }
-        }
-        else if (g_numberOfWebClients)
-        {
-          digitalWrite(BLUE_LED, toggle); /* Blink blue LED */
-          //   digitalWrite(RED_LED, HIGH); /* Turn off red LED */
-          //          Serial.println("web clients: " + String(g_numberOfWebClients));
-
-          digitalWrite(RED_LED, LOW); /* Turn on red LED */
-          pinMode(RED_LED, INPUT);    /* Allow GPIO0 to be read */
-            if(!digitalRead(RED_LED)) {
-                debounceProgButton--;
-                if(!debounceProgButton) {
-                    progButtonPressed = true;
-                    debounceProgButton = 3;
-                }
-            } else {
-                debounceProgButton = 3;
-            }
-          pinMode(RED_LED, OUTPUT);
-          digitalWrite(RED_LED, HIGH); /* Turn off red LED */
+            String msg = g_LBOutputBuff->get();
+            Serial.println(stringObjToConstCharString(&msg));
+            g_linkBusAckPending++;
+            g_linkBusAckTimeout = 10;
         }
         else
         {
-          digitalWrite(RED_LED, toggle); /* Blink red LED */
-          digitalWrite(BLUE_LED, HIGH); /* Turn off blue LED */
-
-          if (!toggle)
-          {
-            pinMode(RED_LED, INPUT);       /* Allow GPIO0 to be read */
-            if(!digitalRead(RED_LED)) {
-                debounceProgButton--;
-                if(!debounceProgButton) {
-                    progButtonPressed = true;
-                    debounceProgButton = 3;
-                }
-            } else {
-               debounceProgButton = 3;
+            if(!g_linkBusAckTimeout && g_linkBusAckPending) {
+                g_linkBusAckPending = 0;
+                Serial.println("ACK Timeout");
             }
-            pinMode(RED_LED, OUTPUT);
-          }
         }
 
         if (progButtonPressed)
         {
-          if (!sentComsOFF)
-          {
-            Serial.printf(LB_MESSAGE_WIFI_COMS_OFF); // send immediate
-            sentComsOFF = true;
-          }
+            digitalWrite(BLUE_LED, LOW);   /* Turn on blue LED */
+            digitalWrite(RED_LED, LOW);    /* Turn on red LED */
         }
-
-        if(g_linkBusAckTimeout) g_linkBusAckTimeout--;
-      }
-
-      if (g_numberOfSocketClients)
-      {
-        if (!(holdTime % 61))
+        else if (!g_LEDs_enabled)
         {
-           g_LBOutputBuff->put(LB_MESSAGE_TEMP_REQUEST);
-        }
-        else if (!(holdTime % 17))
-        {
-          g_LBOutputBuff->put(LB_MESSAGE_BATTERY_REQUEST);
-        }
-
-        if(!g_LBOutputBuff->empty() && !g_linkBusAckPending)
-        {
-          String msg = g_LBOutputBuff->get();
-          Serial.println(stringObjToConstCharString(&msg));
-          g_linkBusAckPending++;
-          g_linkBusAckTimeout = 10;
+            digitalWrite(BLUE_LED, HIGH);   /* Turn off blue LED */
+            digitalWrite(RED_LED, HIGH);    /* Turn off red LED */
         }
         else
         {
-          if(!g_linkBusAckTimeout && g_linkBusAckPending) {
-            g_linkBusAckPending = 0;
-            Serial.println("ACK Timeout");
-          }
-        }
-      }
+            if (g_numberOfSocketClients)
+            {
+                digitalWrite(BLUE_LED, toggle); /* Blink blue LED */
+                digitalWrite(RED_LED, !toggle); /* Blink red LED */
+                //          Serial.println("web sockets: " + String(g_numberOfSocketClients));
+                if (toggle)
+                {
+                    pinMode(RED_LED, INPUT);       /* Allow GPIO0 to be read */
+                    if(!digitalRead(RED_LED)) {
+                        debounceProgButton--;
+                        if(!debounceProgButton) {
+                            progButtonPressed = true;
+                            debounceProgButton = 3;
+                        }
+                    } else {
+                        debounceProgButton = 3;
+                    }
+                    
+                    pinMode(RED_LED, OUTPUT);
+                }
+            }
+            else if (g_numberOfWebClients)
+            {
+                digitalWrite(BLUE_LED, toggle); /* Blink blue LED */
+                //   digitalWrite(RED_LED, HIGH); /* Turn off red LED */
+                //          Serial.println("web clients: " + String(g_numberOfWebClients));
 
-      switch (g_ESP_ATMEGA_Comm_State)
-      {
-        case TX_WAKE_UP:
+                digitalWrite(RED_LED, LOW); /* Turn on red LED */
+                pinMode(RED_LED, INPUT);    /* Allow GPIO0 to be read */
+                if(!digitalRead(RED_LED)) {
+                    debounceProgButton--;
+                    if(!debounceProgButton) {
+                        progButtonPressed = true;
+                        debounceProgButton = 3;
+                    }
+                } else {
+                    debounceProgButton = 3;
+                }
+                
+                pinMode(RED_LED, OUTPUT);
+                digitalWrite(RED_LED, HIGH); /* Turn off red LED */
+            }
+            else
+            {
+              digitalWrite(RED_LED, toggle); /* Blink red LED */
+              digitalWrite(BLUE_LED, HIGH); /* Turn off blue LED */
+
+              if (!toggle)
+              {
+                pinMode(RED_LED, INPUT);       /* Allow GPIO0 to be read */
+                if(!digitalRead(RED_LED)) {
+                    debounceProgButton--;
+                    if(!debounceProgButton) {
+                        progButtonPressed = true;
+                        debounceProgButton = 3;
+                    }
+                } else {
+                   debounceProgButton = 3;
+                }
+                  
+                pinMode(RED_LED, OUTPUT);
+              }
+            }
+
+            if (progButtonPressed)
+            {
+                if (!sentComsOFF)
+                {
+                    Serial.printf(LB_MESSAGE_WIFI_COMS_OFF); // send immediate
+                    sentComsOFF = true;
+                }
+            }
+
+            if(g_linkBusAckTimeout) g_linkBusAckTimeout--;
+        }
+
+        if (g_numberOfSocketClients)
+        {
+            if (!(holdTime % 61))
+            {
+               g_LBOutputBuff->put(LB_MESSAGE_TEMP_REQUEST);
+            }
+            else if (!(holdTime % 17))
+            {
+              g_LBOutputBuff->put(LB_MESSAGE_BATTERY_REQUEST);
+            }
+        }
+
+        switch (g_ESP_ATMEGA_Comm_State)
+        {
+          case TX_WAKE_UP:
           {
+            if(g_debug_prints_enabled) Serial.println("S=TX_WAKE_UP");
             /* Inform the ATMEGA that WiFi power up is complete */
             g_ESP_ATMEGA_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
             g_LBOutputBuff->put(LB_MESSAGE_ESP_WAKEUP);
@@ -1394,21 +1399,23 @@ void httpWebServerLoop()
 
         case TX_INITIAL_TIME_RECEIVED:
           {
-            g_numberOfScheduledEvents = numberOfEventsScheduled(g_timeOfDayFromTx);
+              if(g_debug_prints_enabled) Serial.println("S=TX_INITIAL_TIME_RECEIVED");
+
+        //           g_numberOfScheduledEvents = numberOfEventsScheduled(g_timeOfDayFromTx);
 
             /* check to see if an event is scheduled for this time */
-            if (g_numberOfScheduledEvents)
-            {
-              /* Send messages to ATMEGA informing it of the time of the next scheduled event */
-              if (g_activeEvent == NULL) g_activeEvent = new Event(g_debug_prints_enabled);
-              g_activeEvent->readEventFile(g_eventList[0].path);
-              g_activeEventIndex = 0;
-            }
-            else
-            {
+        //            if (g_numberOfScheduledEvents)
+        //            {
+        //              /* Send messages to ATMEGA informing it of the time of the next scheduled event */
+        //              if (g_activeEvent == NULL) g_activeEvent = new Event(g_debug_prints_enabled);
+        //              g_activeEvent->readEventFile(g_eventList[0].path);
+        //              g_activeEventIndex = 0;
+        //            }
+        //            else
+        //            {
               /* Inform the ATMEGA that no events are scheduled */
               g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
-           }
+        //           }
 
             g_ESP_ATMEGA_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
           }
@@ -1416,6 +1423,7 @@ void httpWebServerLoop()
 
         case TX_READ_ALL_EVENTS_FILES:
           {
+            if(g_debug_prints_enabled) Serial.println("S=TX_READ_ALL_EVENTS_FILES");
             populateEventFileList();
             g_numberOfScheduledEvents = numberOfEventsScheduled(g_timeOfDayFromTx);
             g_ESP_ATMEGA_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
@@ -1424,13 +1432,15 @@ void httpWebServerLoop()
 
         case TX_HTML_SAVE_CHANGES:
           {
+            if(g_debug_prints_enabled) Serial.println("S=TX_HTML_SAVE_CHANGES");
             if (g_activeEvent != NULL) g_activeEvent->writeEventFile(); /* save any changes made to the active event */
             g_ESP_ATMEGA_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
           }
           break;
-              
+
         case TX_HTML_REFRESH_EVENTS:
           {
+            if(g_debug_prints_enabled) Serial.println("S=TX_HTML_REFRESH_EVENTS");
             if (g_activeEvent != NULL) g_activeEvent->writeEventFile(); /* save any changes made to the active event */
             populateEventFileList(); /* read any values that might have changed into the event list */
             g_numberOfScheduledEvents = numberOfEventsScheduled(g_timeOfDayFromTx);
@@ -1537,25 +1547,36 @@ void httpWebServerLoop()
 
         case TX_HTML_PAGE_SERVED:
           {
+            if(g_debug_prints_enabled) Serial.println("S=TX_HTML_PAGE_SERVED");
             firstPageLoad = true;
 
-            populateEventFileList();
-            g_numberOfScheduledEvents = numberOfEventsScheduled(g_timeOfDayFromTx);
+//            populateEventFileList();
+//            g_numberOfScheduledEvents = numberOfEventsScheduled(g_timeOfDayFromTx);
 
-            if (g_eventsRead) {
-              if (g_activeEvent == NULL) g_activeEvent = new Event(g_debug_prints_enabled);
-              g_activeEventIndex = 0;
-              g_activeEvent->readEventFile(g_eventList[0].path);
-            }
+//            if (g_eventsRead) {
+//              if (g_activeEvent == NULL) g_activeEvent = new Event(g_debug_prints_enabled);
+//              g_activeEventIndex = 0;
+//              g_activeEvent->readEventFile(g_eventList[0].path);
+//            }
           }
         /* Intentional Fall-through */
         // break;
 
         case TX_HTML_NEXT_EVENT:
           {
+            if(g_debug_prints_enabled) Serial.println("S=TX_HTML_NEXT_EVENT");
             if (g_activeEvent != NULL) g_activeEvent->writeEventFile(); /* save any changes made to the active event */
             populateEventFileList(); /* read any values that might have changed into the event list */
             g_numberOfScheduledEvents = numberOfEventsScheduled(g_timeOfDayFromTx);
+              
+            if(firstPageLoad)
+            {
+                if (g_eventsRead) {
+                  if (g_activeEvent == NULL) g_activeEvent = new Event(g_debug_prints_enabled);
+                  g_activeEventIndex = 0;
+                  g_activeEvent->readEventFile(g_eventList[0].path);
+                }
+            }
 
             if (g_numberOfSocketClients) {
               String msg;
@@ -1675,6 +1696,7 @@ void httpWebServerLoop()
 
         case TX_RECD_START_EVENT_REQUEST:
           {
+            if(g_debug_prints_enabled) Serial.println("S=TX_RECD_START_EVENT_REQUEST");
             /*  ATMEGA has determined it is time to start the countdown to the event, so WiFi needs to
                 configure the ATMEGA appropriately for its role in the scheduled event.
             */
@@ -1686,7 +1708,7 @@ void httpWebServerLoop()
                   g_LBOutputBuff->put(LB_MESSAGE_PREP_FOR_NEW_EVENT);
                 }
                 break;
-                    
+
               case 1: // send finish time
                 {
                   tx = g_activeEvent->getTxSlotIndex();
@@ -1715,7 +1737,7 @@ void httpWebServerLoop()
                   g_LBOutputBuff->put(lbMsg);
                 }
                 break;
-                    
+
               case 4: // On time
                 {
                   lbMsg = String(LB_MESSAGE_TIME_INTERVAL_SET1 + String((*txData).onTime) + ";");
@@ -1804,7 +1826,7 @@ void httpWebServerLoop()
                   g_LBOutputBuff->put(lbMsg);
                 }
                 break;
-                    
+
               case 15: // Perm - Have ATMega save everything in EEPROM
                 {
                   g_LBOutputBuff->put(LB_MESSAGE_PERM);
@@ -1838,7 +1860,7 @@ void httpWebServerLoop()
             }
           }
           break;
-      }
+        }
     }
   }
 }
@@ -2319,18 +2341,22 @@ int numberOfEventsScheduled(unsigned long epoch)
 
   for (int i = 0; i < g_eventsRead; i++)
   {
-    if (g_eventList[i].startDateTimeEpoch > epoch) /* scheduled to start in the future */
-    {
-      numberScheduled++;
-    }
-    else if ((g_eventList[i].startDateTimeEpoch <= epoch) && (g_eventList[i].finishDateTimeEpoch > epoch)) /* event is now in progress */
-    {
-      numberScheduled++;
-    }
-    else /* the sorted list will not contain any additional scheduled events */
-    {
-      break;
-    }
+      bool iRunsForever = a.startDateTimeEpoch >= a.finishDateTimeEpoch;
+      bool iStartedInThePast = a.startDateTimeEpoch <= epoch;
+      bool iFinishedInThePast = (a.finishDateTimeEpoch <= epoch) && !iRunsForever;
+
+      if (!iStartedInThePast) /* scheduled to start in the future */
+      {
+          numberScheduled++;
+      }
+      else if (!iFinishedInThePast) /* event is now in progress */
+      {
+          numberScheduled++;
+      }
+      else /* the sorted list will not contain any additional scheduled events */
+      {
+          break;
+      }
   }
 
   return numberScheduled;
@@ -2420,7 +2446,7 @@ bool readEventTimes(String path, EventFileRef* fileRef)
 
     if (g_debug_prints_enabled)
     {
-      Serial.println(String("Read times: ") + path);
+      Serial.println(String("Times read for file: ") + path);
     }
   }
 

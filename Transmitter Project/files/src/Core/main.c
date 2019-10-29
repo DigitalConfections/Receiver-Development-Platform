@@ -178,7 +178,7 @@ EC rtc_init(void);
 void set_ports(InitActionType initType);
 BOOL antennaIsConnected(void);
 void initializeAllEventSettings(BOOL disableEvent);
-
+void suspendEvent(void);
 
 /***********************************************************************
  * Watchdog Timer ISR
@@ -1475,21 +1475,15 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 		{
 			case MESSAGE_WIFI:
 			{
-				BOOL result = wifi_enabled();
+				BOOL result;
 
 				if(lb_buff->fields[FIELD1][0])
 				{
 					result = atoi(lb_buff->fields[FIELD1]);
 
-					cli();
-					g_on_the_air = 0; //  stop transmitting
-					g_event_commenced = FALSE; // get things stopped immediately
-					g_event_enabled = FALSE; // get things stopped immediately
+					suspendEvent();
 					linkbus_disable();
-					g_WiFi_shutdown_seconds = 0; // disable shutdown
-					sei();
-					keyTransmitter(OFF);
-					powerToTransmitter(OFF);
+					g_WiFi_shutdown_seconds = 0; // disable sleep
 
 					if(result == 0) // shut off power to WiFi
 					{
@@ -1544,12 +1538,13 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 				{
 					/* ESP8266 is ready with event data */
 					// Prepare to receive new event configuration settings
-					g_event_enabled = FALSE;
+					suspendEvent();
 					initializeAllEventSettings(TRUE);
 				}
 				else if(f1 == '2') /* ESP module needs continuous power to save data */
 				{
-					g_WiFi_shutdown_seconds = 0; // disable shutdown
+					suspendEvent();
+					g_WiFi_shutdown_seconds = 0; // disable sleep
 					lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ESP_LABEL, "2"); /* Save data now */
 				}
 				else if(f1 == '3')
@@ -1694,14 +1689,7 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 				}
 				else if(f1 == '0') // Stop continuous transmit (if enabled) and prepare to receive new event data
 				{
-					cli();
-					g_on_the_air = 0; //  stop transmitting
-					g_event_commenced = FALSE; // get things stopped immediately
-					g_event_enabled = FALSE; // get things stopped immediately
-					sei();
-					keyTransmitter(OFF);
-					powerToTransmitter(OFF);
-
+					suspendEvent();
 					// Restore saved event settings
 					event_parameter_count = 0;
 					g_last_status_code = STATUS_CODE_RECEIVING_EVENT_DATA;
@@ -2014,6 +2002,17 @@ BOOL eventEnabled(void)
 	}
 
 	return result;
+}
+
+void suspendEvent()
+{
+	cli();
+	g_on_the_air = 0; //  stop transmitting
+	g_event_commenced = FALSE; // get things stopped immediately
+	g_event_enabled = FALSE; // get things stopped immediately
+	sei();
+	keyTransmitter(OFF);
+	powerToTransmitter(OFF);
 }
 
 EC activateEventUsingCurrentSettings(SC* statusCode)

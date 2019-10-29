@@ -125,30 +125,23 @@ bool Event::parseStringData(String s) {
 */
 bool Event::isSoonerEvent(EventFileRef a, EventFileRef b, unsigned long currentEpoch)
 {
-  if (a.startDateTimeEpoch <= currentEpoch) /* a started in the past */
+  bool aRunsForever = a.startDateTimeEpoch >= a.finishDateTimeEpoch;
+  bool bRunsForever = b.startDateTimeEpoch >= b.finishDateTimeEpoch;
+  bool aStartedInThePast = a.startDateTimeEpoch <= currentEpoch;
+  //bool bStartedInThePast = b.startDateTimeEpoch <= currentEpoch;
+  bool aFinishedInThePast = (a.finishDateTimeEpoch <= currentEpoch) && !aRunsForever;
+  bool bFinishedInThePast = (b.finishDateTimeEpoch <= currentEpoch) && !bRunsForever;   
+    
+  if (aStartedInThePast) /* a started in the past */
   {
-    if (a.finishDateTimeEpoch <= currentEpoch) return false; /* a finished in the past so is disabled */
-
-    if (b.startDateTimeEpoch <= currentEpoch) /* b started in the past */
-    {
-      if (b.finishDateTimeEpoch < currentEpoch) return true; /* b finished in the past so is disabled */
-
-      return (a.startDateTimeEpoch > b.startDateTimeEpoch); /* if a started later than b then it is closer */
-    }
-
-    return true; /* a is in progress and b hasn't started yet, so a is sooner */
+    if (aFinishedInThePast) return false; /* a finished in the past so is disabled */
+    if (bFinishedInThePast) return true; /* b finished in the past so is disabled, and a is still running */
+    return (a.startDateTimeEpoch > b.startDateTimeEpoch); /* if a started later than b then it is closer */
   }
-  else /* a starts in the future */
-  {
-    if (b.startDateTimeEpoch <= currentEpoch) /* b started in the past */
-    {
-      if (b.finishDateTimeEpoch < currentEpoch) return true; /* b finished in the past so is disabled */
-
-      return false; /* a hasn't started yet, and b has, so b is sooner */
-    }
-
-    return (a.startDateTimeEpoch < b.startDateTimeEpoch); /* true if a will start sooner than b */
-  }
+  
+  /* a starts in the future */
+  if (bFinishedInThePast) return true; /* b finished in the past so is disabled, and a has yet to start */
+  return (a.startDateTimeEpoch < b.startDateTimeEpoch); /* a will start sooner than b */
 }
 
 
@@ -374,6 +367,49 @@ void Event::dumpData(void)
   Serial.println("=====");
 }
 
+/**
+ * Returns TRUE if this event contains valid data
+ */
+bool Event::validateEvent(void)
+{
+    bool success;
+
+    success = (this->eventData != NULL);
+    
+    if (success) 
+    {
+      success &= (this->eventData->event_name).length() > 0;
+      success &= (this->eventData->event_file_version).length() > 0;
+      success &= (this->eventData->event_band).length() > 0;
+      //success &= (this->eventData->event_antenna_port);
+      success &= (this->eventData->event_callsign).length() > 2;
+      success &= (this->eventData->event_callsign_speed).length() > 0;
+      success &= (this->eventData->event_start_date_time).length() > 19;
+      success &= (this->eventData->event_finish_date_time).length() > 19;
+      success &= (this->eventData->event_modulation).length() > 0;
+      success &= ((this->eventData->event_number_of_tx_types) > 0);
+
+      for (int i = 0; i < this->eventData->event_number_of_tx_types; i++)
+      {
+        success &= (this->eventData->role[i]->rolename).length() > 0;
+        success &= (this->eventData->role[i]->numberOfTxs) > 0;
+        success &= (this->eventData->role[i]->frequency) > 0;
+        success &= (this->eventData->role[i]->powerLevel_mW) > 0;
+        success &= (this->eventData->role[i]->code_speed) > 0;
+        //success &= (this->eventData->role[i]->id_interval);
+  
+        for (int j = 0; j < this->eventData->role[i]->numberOfTxs; j++)
+        {
+          success &= (this->eventData->role[i]->tx[j]->pattern).length() > 0;
+          success &= (this->eventData->role[i]->tx[j]->onTime).length() > 0;
+          success &= (this->eventData->role[i]->tx[j]->offTime).length() > 0;
+          success &= (this->eventData->role[i]->tx[j]->delayTime).length() > 0;
+        }
+      }
+    }
+
+    return success;
+}
 
 bool Event::writeEventFile(void)
 {
@@ -383,6 +419,8 @@ bool Event::writeEventFile(void)
 bool Event::writeEventFile(String path)
 {
   if (this->eventData == NULL) return true;
+  if (!validateEvent()) return true;
+    
   if (this->values_did_change == false)
   {
     if (debug_prints_enabled) Serial.print("Not written: Event did not change."); Serial.println(path);
@@ -447,11 +485,11 @@ bool Event::writeEventFile(String path)
         String txnum = String("TX" + String(j + 1));
         line = String(typenum + "_" + txnum + TYPE_TX_PATTERN + "," + this->eventData->role[i]->tx[j]->pattern);
         eventFile.println(line);
-        line = String(typenum + "_" + txnum + TYPE_TX_ON_TIME + "," + String(this->eventData->role[i]->tx[j]->onTime));
+        line = String(typenum + "_" + txnum + TYPE_TX_ON_TIME + "," + this->eventData->role[i]->tx[j]->onTime);
         eventFile.println(line);
-        line = String(typenum + "_" + txnum + TYPE_TX_OFF_TIME + "," + String(this->eventData->role[i]->tx[j]->offTime));
+        line = String(typenum + "_" + txnum + TYPE_TX_OFF_TIME + "," + this->eventData->role[i]->tx[j]->offTime);
         eventFile.println(line);
-        line = String(typenum + "_" + txnum + TYPE_TX_DELAY_TIME + "," + String(this->eventData->role[i]->tx[j]->delayTime));
+        line = String(typenum + "_" + txnum + TYPE_TX_DELAY_TIME + "," + this->eventData->role[i]->tx[j]->delayTime);
         eventFile.println(line);
       }
     }
@@ -836,10 +874,13 @@ String Event::getRolename(int roleIndex) const
 
 bool Event::setNumberOfTxsForRole(int roleIndex, String str)
 {
+  int num = str.toInt();
+  if (num <1) return true;
   if (this->eventData == NULL) return true;
   if (roleIndex < 0) return true;
   if (roleIndex >= this->eventData->event_number_of_tx_types) return true;
-  this->eventData->role[roleIndex]->numberOfTxs = str.toInt();
+  
+  this->eventData->role[roleIndex]->numberOfTxs = num;
   //  if (debug_prints_enabled) Serial.println("Type" + String(roleIndex) + " No Txs: " + str);
   this->values_did_change = true;
   return false;
@@ -1113,7 +1154,7 @@ bool Event::setEventData(String id, String value) {
 
       if ((txIndex >= 0) && (txIndex < MAXIMUM_NUMBER_OF_TXs_OF_A_TYPE))
       {
-        this->eventData->role[typeIndex]->tx[txIndex]->onTime = value.toInt();
+        this->eventData->role[typeIndex]->tx[txIndex]->onTime = value;
         //        if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + "Tx" + txIndexStr + " on time: " + value + "sec");
       }
     }
@@ -1143,7 +1184,7 @@ bool Event::setEventData(String id, String value) {
 
       if ((txIndex >= 0) && (txIndex < MAXIMUM_NUMBER_OF_TXs_OF_A_TYPE))
       {
-        this->eventData->role[typeIndex]->tx[txIndex]->delayTime = value.toInt();
+        this->eventData->role[typeIndex]->tx[txIndex]->delayTime = value;
         //        if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + "Tx" + txIndexStr + " delay time: " + value + "sec");
       }
     }
