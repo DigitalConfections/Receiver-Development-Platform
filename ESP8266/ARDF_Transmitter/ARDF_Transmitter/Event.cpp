@@ -505,9 +505,12 @@ bool Event::writeEventFile(String path)
     eventFile.println(EVENT_FILE_END);
   }
   else
-  {
+  { 
     return true;
   }
+    
+        
+  eventFile.close(); // Close the file
 
   saveMeData("");
 
