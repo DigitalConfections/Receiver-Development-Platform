@@ -165,6 +165,8 @@ CircularStringBuff *g_LBOutputBuff = NULL;
 int g_linkBusAckPending = 0;
 int g_linkBusAckTimeout = 10;
 
+int g_saveEventToFile = 0;
+
 bool populateEventFileList(void);
 bool readDefaultsFile(void);
 void saveDefaultsFile(void);
@@ -565,7 +567,7 @@ void onStationDisconnect(WiFiEventSoftAPModeStationDisconnected sta_info) {
 
   g_numberOfWebClients = WiFi.softAPgetStationNum();
   g_numberOfSocketClients = g_webSocketServer.connectedClients(false);
-  g_LBOutputBuff->put(LB_MESSAGE_ESP_SAVE);
+ // g_LBOutputBuff->put(LB_MESSAGE_ESP_RETAINPOWER);
   
   if (g_debug_prints_enabled)
   {
@@ -1270,6 +1272,17 @@ void httpWebServerLoop()
     {
         holdTime = g_relativeTimeSeconds;
         toggle = !toggle;
+        
+        if(g_saveEventToFile)
+        {
+            g_saveEventToFile--;
+            
+            if(!g_saveEventToFile)
+            {
+                if (g_activeEvent != NULL) g_activeEvent->writeEventFile(); /* save event changes */
+                g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
+            }
+        }
 
         if(!g_LBOutputBuff->empty() && !g_linkBusAckPending)
         {
@@ -1433,7 +1446,10 @@ void httpWebServerLoop()
         case TX_HTML_SAVE_CHANGES:
           {
             if(g_debug_prints_enabled) Serial.println("S=TX_HTML_SAVE_CHANGES");
-            if (g_activeEvent != NULL) g_activeEvent->writeEventFile(); /* save any changes made to the active event */
+            if (g_activeEvent != NULL) 
+            {
+                Serial.printf(LB_MESSAGE_ESP_RETAINPOWER);
+            }
             g_ESP_ATMEGA_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
           }
           break;
@@ -1933,7 +1949,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           g_numberOfSocketClients = g_webSocketServer.connectedClients(false);
         }
 
-        g_LBOutputBuff->put(LB_MESSAGE_ESP_SAVE);
+//        g_LBOutputBuff->put(LB_MESSAGE_ESP_RETAINPOWER);
       }
       break;
 
@@ -3121,10 +3137,9 @@ void handleLBMessage(String message)
             g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
         }
     }
-    if (payload.equals("2"))
+    else if (payload.equals("2"))
     {
-      if (g_activeEvent != NULL) g_activeEvent->writeEventFile(); /* save any changes */
-      g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
+        g_saveEventToFile = 5;
     }
   }
   else if (type == LB_MESSAGE_TIME)

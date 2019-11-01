@@ -287,6 +287,7 @@ bool Event::extractMeFileData(String path, EventFileRef* eventRef)
 
 bool Event::readEventFile(String path)
 {
+  bool failure = false;
   if (!path.startsWith("/")) path = "/" + path;
 
   if (SPIFFS.exists(path))
@@ -303,17 +304,34 @@ bool Event::readEventFile(String path)
     this->eventData->event_modulation = "";
     this->eventData->event_number_of_tx_types = -1;
     this->myPath = path;
+      
     // Create an object to hold the file data
     File file = SPIFFS.open(path, "r"); // Open the file for reading
     String s = file.readStringUntil('\n');
+    String hold;
+
+    s.trim();
+    if(!s.equalsIgnoreCase(String(EVENT_FILE_START)))
+    {
+        failure = true;
+        if (debug_prints_enabled) Serial.println(String("Err in 1st line: " + s));
+    }
     int count = 0;
 
-    while (s.length() && count++ < MAXIMUM_NUMBER_OF_EVENT_FILE_LINES)
+    while (s.length() && count++ <= MAXIMUM_NUMBER_OF_EVENT_FILE_LINES)
     {
+      hold = s;
       this->parseStringData(s);
       s = file.readStringUntil('\n');
     }
 
+    hold.trim();
+    if(!hold.equalsIgnoreCase(String(EVENT_FILE_END)) || (count > MAXIMUM_NUMBER_OF_EVENT_FILE_LINES))
+    {
+        failure = true;
+        if (debug_prints_enabled) Serial.println(String("Err in last line: " + hold));
+    }
+      
     file.close(); // Close the file
 
     getTxAssignment();
@@ -327,10 +345,17 @@ bool Event::readEventFile(String path)
 
   if (debug_prints_enabled)
   {
-    Serial.println(String("\tRead event: ") + path);
+    if(failure) 
+    {
+        Serial.println(String("\tError reading event: ") + path);
+    }
+    else
+    {
+        Serial.println(String("\tSuccessfully read event: ") + path);
+    }
   }
 
-  return false;
+  return failure;
 }
 
 
@@ -442,57 +467,42 @@ bool Event::writeEventFile(String path)
   File eventFile = SPIFFS.open(path, "w");  // Open the file for writing in SPIFFS (create if it doesn't exist)
   this->myPath = path;
 
+  String typenum, txnum;
+    
   if (eventFile) {
-    String line = String(String(EVENT_NAME) + "," + this->eventData->event_name);
-    eventFile.println(line);
-    line = String(String(EVENT_FILE_VERSION) + "," + this->eventData->event_file_version);
-    eventFile.println(line);
-    line = String(String(EVENT_BAND) + "," + this->eventData->event_band);
-    eventFile.println(line);
-    line = String(String(EVENT_ANTENNA_PORT) + "," + this->eventData->event_antenna_port);
-    eventFile.println(line);
-    line = String(String(EVENT_CALLSIGN) + "," + this->eventData->event_callsign);
-    eventFile.println(line);
-    line = String(String(EVENT_CALLSIGN_SPEED) + "," + this->eventData->event_callsign_speed);
-    eventFile.println(line);
-    line = String(String(EVENT_START_DATE_TIME) + "," + this->eventData->event_start_date_time);
-    eventFile.println(line);
-    line = String(String(EVENT_FINISH_DATE_TIME) + "," + this->eventData->event_finish_date_time);
-    eventFile.println(line);
-    line = String(String(EVENT_MODULATION) + "," + this->eventData->event_modulation);
-    eventFile.println(line);
-    line = String(String(EVENT_NUMBER_OF_TX_TYPES) + "," + this->eventData->event_number_of_tx_types);
-    eventFile.println(line);
+    eventFile.println(EVENT_FILE_START);
+    eventFile.println(String(String(EVENT_NAME) + "," + this->eventData->event_name));
+    eventFile.println(String(String(EVENT_FILE_VERSION) + "," + this->eventData->event_file_version));
+    eventFile.println(String(String(EVENT_BAND) + "," + this->eventData->event_band));
+    eventFile.println(String(String(EVENT_ANTENNA_PORT) + "," + this->eventData->event_antenna_port));
+    eventFile.println(String(String(EVENT_CALLSIGN) + "," + this->eventData->event_callsign));
+    eventFile.println(String(String(EVENT_CALLSIGN_SPEED) + "," + this->eventData->event_callsign_speed));
+    eventFile.println(String(String(EVENT_START_DATE_TIME) + "," + this->eventData->event_start_date_time));
+    eventFile.println(String(String(EVENT_FINISH_DATE_TIME) + "," + this->eventData->event_finish_date_time));
+    eventFile.println(String(String(EVENT_MODULATION) + "," + this->eventData->event_modulation));
+    eventFile.println(String(String(EVENT_NUMBER_OF_TX_TYPES) + "," + this->eventData->event_number_of_tx_types));
 
     for (int i = 0; i < this->eventData->event_number_of_tx_types; i++)
     {
-      String typenum = String("TYPE" + String(i + 1));
-      line = String(typenum + TYPE_NAME + "," + this->eventData->role[i]->rolename);
-      eventFile.println(line);
-      line = String(typenum + TYPE_TX_COUNT + "," + String(this->eventData->role[i]->numberOfTxs));
-      eventFile.println(line);
-      line = String(typenum + TYPE_FREQ + "," + String(this->eventData->role[i]->frequency));
-      eventFile.println(line);
-      line = String(typenum + TYPE_POWER_LEVEL + "," + String(this->eventData->role[i]->powerLevel_mW));
-      eventFile.println(line);
-      line = String(typenum + TYPE_CODE_SPEED + "," + String(this->eventData->role[i]->code_speed));
-      eventFile.println(line);
-      line = String(typenum + TYPE_ID_INTERVAL + "," + String(this->eventData->role[i]->id_interval));
-      eventFile.println(line);
+      typenum = String("TYPE" + String(i + 1));
+      eventFile.println(String(typenum + TYPE_NAME + "," + this->eventData->role[i]->rolename));
+      eventFile.println(String(typenum + TYPE_TX_COUNT + "," + String(this->eventData->role[i]->numberOfTxs)));
+      eventFile.println(String(typenum + TYPE_FREQ + "," + String(this->eventData->role[i]->frequency)));
+      eventFile.println(String(typenum + TYPE_POWER_LEVEL + "," + String(this->eventData->role[i]->powerLevel_mW)));
+      eventFile.println(String(typenum + TYPE_CODE_SPEED + "," + String(this->eventData->role[i]->code_speed)));
+      eventFile.println(String(typenum + TYPE_ID_INTERVAL + "," + String(this->eventData->role[i]->id_interval)));
 
       for (int j = 0; j < this->eventData->role[i]->numberOfTxs; j++)
       {
-        String txnum = String("TX" + String(j + 1));
-        line = String(typenum + "_" + txnum + TYPE_TX_PATTERN + "," + this->eventData->role[i]->tx[j]->pattern);
-        eventFile.println(line);
-        line = String(typenum + "_" + txnum + TYPE_TX_ON_TIME + "," + this->eventData->role[i]->tx[j]->onTime);
-        eventFile.println(line);
-        line = String(typenum + "_" + txnum + TYPE_TX_OFF_TIME + "," + this->eventData->role[i]->tx[j]->offTime);
-        eventFile.println(line);
-        line = String(typenum + "_" + txnum + TYPE_TX_DELAY_TIME + "," + this->eventData->role[i]->tx[j]->delayTime);
-        eventFile.println(line);
+        txnum = String("TX" + String(j + 1));
+        eventFile.println(String(typenum + "_" + txnum + TYPE_TX_PATTERN + "," + this->eventData->role[i]->tx[j]->pattern));
+        eventFile.println(String(typenum + "_" + txnum + TYPE_TX_ON_TIME + "," + this->eventData->role[i]->tx[j]->onTime));
+        eventFile.println(String(typenum + "_" + txnum + TYPE_TX_OFF_TIME + "," + this->eventData->role[i]->tx[j]->offTime));
+        eventFile.println(String(typenum + "_" + txnum + TYPE_TX_DELAY_TIME + "," + this->eventData->role[i]->tx[j]->delayTime));
       }
     }
+
+    eventFile.println(EVENT_FILE_END);
   }
   else
   {

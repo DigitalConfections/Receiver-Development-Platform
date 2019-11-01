@@ -124,6 +124,7 @@ static volatile uint16_t g_time_to_send_ID_countdown = 0;
 static volatile uint16_t g_code_throttle = 50;
 static volatile uint8_t g_WiFi_shutdown_seconds = 120;
 static volatile BOOL g_report_seconds = FALSE;
+static volatile BOOL g_wifi_active = TRUE;
 
 static int16_t g_ID_seconds = 60; /* holds value for g_ID_time adjusted for g_on_air_seconds */
 
@@ -158,21 +159,22 @@ extern BOOL g_am_modulation_enabled;
 
 static volatile BOOL g_go_to_sleep = FALSE;
 static volatile BOOL g_sleeping = FALSE;
-static volatile uint16_t g_seconds_left_to_sleep = 0;
-static volatile uint16_t g_seconds_to_sleep = MAX_UINT16;
+static volatile time_t g_seconds_left_to_sleep = 0;
+static volatile time_t g_seconds_to_sleep = MAX_TIME;
 
 /***********************************************************************
  * Private Function Prototypes
  *
  * These functions are available only within this file
  ************************************************************************/
-BOOL eventEnabled(void);
+BOOL eventEnabled(BOOL noSleep, time_t* time_before_start);
 void handleLinkBusMsgs(void);
 void initializeEEPROMVars(BOOL skipEventEnabled);
 void saveAllEEPROM(void);
 void wdt_init(WDReset resetType);
 uint16_t throttleValue(uint8_t speed);
 EC activateEventUsingCurrentSettings(SC* statusCode);
+EC launchEvent(bool noSleep, SC* statusCode);
 EC hw_init(void);
 EC rtc_init(void);
 void set_ports(InitActionType initType);
@@ -378,7 +380,7 @@ ISR( INT0_vect )
 								/* Enable sleep during off-air periods */
 								if((g_off_air_seconds > 15) && !g_WiFi_shutdown_seconds) // sleep if there is time for it
 								{
-									g_seconds_to_sleep = g_off_air_seconds - 10;
+									g_seconds_to_sleep = (time_t)(g_off_air_seconds - 10);
 									g_go_to_sleep = TRUE;
 								}
 							}
@@ -453,43 +455,32 @@ ISR( INT0_vect )
 				{
 					wifi_reset(ON); // put WiFi into reset
 					wifi_power(OFF); // power off WiFi
+					g_wifi_active = FALSE;
 					g_go_to_sleep = TRUE;
 
-					if(g_event_start_time && !g_event_commenced)
+					if(g_event_enabled)
 					{
-						time(&temp_time);
-						uint32_t dif = timeDif(g_event_start_time, temp_time);
-
-						if(dif < 30)
+						if(!g_event_commenced)
+						{
+							launchEvent(FALSE, NULL);
+						}
+						else if(g_on_the_air > -30)
 						{
 							g_go_to_sleep = FALSE;
 						}
 						else
 						{
-							g_seconds_to_sleep = dif - 10;
-						}
-					}
-					else if(g_event_enabled)
-					{
-						if(g_on_the_air > -20)
-						{
-							g_go_to_sleep = FALSE;
-						}
-						else
-						{
-							g_seconds_to_sleep = -(g_on_the_air + 10);
+							g_seconds_to_sleep = (time_t)(-(g_on_the_air + 10));
 						}
 					}
 					else
 					{
-						g_seconds_to_sleep = MAX_UINT16;
+						g_seconds_to_sleep = MAX_TIME;
 					}
 				}
-				else
-				{
-					g_report_seconds = TRUE;
-				}
 			}
+
+			if(g_wifi_active) g_report_seconds = TRUE;
 		}
 	}
 }
@@ -1267,21 +1258,7 @@ int main( void )
 
 					if(!ec)
 					{
-						ec = activateEventUsingCurrentSettings(&status);
-
-						if(!ec)
-						{
-							if(status)
-							{
-								g_last_status_code = status;
-							}
-
-							g_event_enabled = eventEnabled();
-						}
-						else
-						{
-							g_last_error_code = ec;
-						}
+						ec = launchEvent(TRUE, &status);
 					}
 				}
 			}
@@ -1506,33 +1483,13 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 			{
 				uint8_t f1 = lb_buff->fields[FIELD1][0];
 
+				g_wifi_active = TRUE;
+
 				if(f1 == '0') /* I'm awake message */
 				{
-					SC status = STATUS_CODE_IDLE;
-					EC ec;
-
 					/* WiFi is awake. Send it the current time */
 					sprintf(g_tempStr, "%lu", time(NULL));
 					lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
-
-					ec = activateEventUsingCurrentSettings(&status);
-
-					if(ec || (status == STATUS_CODE_EVENT_FINISHED))
-					{
-						g_event_enabled = FALSE;
-						saveAllEEPROM();
-					}
-					else
-					{
-						g_event_enabled = eventEnabled();
-					}
-
-					if(!g_event_enabled) // no enabled event is stored in EEPROM
-					{
-						// Ask the ESP for the next scheduled event
-						sprintf(g_tempStr, "%lu", time(NULL));
-						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ESP_LABEL, "1");
-					}
 				}
 				else if(f1 == '1')
 				{
@@ -1655,33 +1612,20 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 						else if (f1 == '2') // enables a downloaded event stored in EEPROM
 						{
 							/* This command configures the transmitter to launch an event at its scheduled start time */
-							SC status = STATUS_CODE_IDLE;
-							EC ec;
-
 							if(event_parameter_count < NUMBER_OF_ESSENTIAL_EVENT_PARAMETERS)
 							{
 								g_last_error_code = ERROR_CODE_EVENT_NOT_CONFIGURED;
 							}
 							else
 							{
-								g_event_enabled = FALSE;
-
-								ec = activateEventUsingCurrentSettings(&status);
+								SC status = STATUS_CODE_IDLE;
+								static EC ec;
+								ec = launchEvent(TRUE, &status);
 
 								if(!ec)
 								{
-									if(status)
-									{
-										g_last_status_code = status;
-									}
-
-									g_event_enabled = eventEnabled();
 									saveAllEEPROM();            /* Make sure all  event values get saved */
 									storeTransmitterValues();
-								}
-								else
-								{
-									g_last_error_code = ec;
 								}
 							}
 						}
@@ -1978,26 +1922,50 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 	}
 }
 
-BOOL eventEnabled(void)
+BOOL __attribute__((optimize("O0"))) eventEnabled(BOOL noSleep, time_t* time_before_start)
 {
 	BOOL result = FALSE;
 	time_t now = time(NULL);
-	int32_t dif = timeDif(now, g_event_start_time);
+	int32_t dif = timeDif(g_event_finish_time, g_event_start_time);
+	BOOL runsFinite = (dif > 0);
 
-	if(dif >= -60 ) // if now is within 60 seconds of the start time or later
+	if(noSleep) // consider only whether the event has finished
 	{
-		dif = timeDif(g_event_finish_time, g_event_start_time);
-
-		if(dif > 0) // if finish occurs after the start then the event runs for a limited amount of time
+		if(runsFinite) // runs for a limited amount of time
 		{
-			dif = timeDif(g_event_finish_time, now);
+			dif = timeDif(now, g_event_finish_time);
 
-			// if finish is in the future then the event is still enabled
-			if(dif > 0) result = TRUE;
+			if(dif < 0) //  event has not finished yet
+			{
+				result = TRUE;
+			}
 		}
-		else // if finish occurs before start then the event runs forever
+		else
 		{
 			result = TRUE;
+		}
+	}
+	else // consider if there is time for sleep prior to the event start
+	{
+		dif = timeDif(now, g_event_start_time);
+
+		if(dif >= -60 ) // if now is within 60 seconds of the start time or later
+		{
+			if(runsFinite) // if finish occurs after the start then the event runs for a limited amount of time
+			{
+				dif = timeDif(g_event_finish_time, now);
+
+				// if finish is in the future then the event should still be enabled
+				if(dif > 0) result = TRUE;
+			}
+			else // if finish occurs before start then the event runs forever
+			{
+				result = TRUE;
+			}
+		}
+		else // calculate the right amount of time to sleep
+		{
+			if(time_before_start) *time_before_start = (-dif)-60;
 		}
 	}
 
@@ -2013,6 +1981,34 @@ void suspendEvent()
 	sei();
 	keyTransmitter(OFF);
 	powerToTransmitter(OFF);
+}
+
+EC __attribute__((optimize("O0"))) launchEvent(bool noSleep, SC* statusCode)
+{
+	EC ec = activateEventUsingCurrentSettings(statusCode);
+
+	if(*statusCode)
+	{
+		g_last_status_code = *statusCode;
+	}
+
+	if(ec)
+	{
+		g_last_error_code = ec;
+	}
+	else
+	{
+		time_t time_to_sleep;
+		g_event_enabled = eventEnabled(noSleep, &time_to_sleep);
+
+		if(!g_event_enabled && !noSleep)
+		{
+			g_seconds_to_sleep = time_to_sleep;
+			g_go_to_sleep = TRUE;
+		}
+	}
+
+	return ec;
 }
 
 EC activateEventUsingCurrentSettings(SC* statusCode)

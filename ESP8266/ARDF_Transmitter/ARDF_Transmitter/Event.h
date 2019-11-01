@@ -33,6 +33,9 @@
 #define MAXIMUM_NUMBER_OF_EVENT_TX_TYPES 4
 #define MAXIMUM_NUMBER_OF_TXs_OF_A_TYPE 10
 
+#define EVENT_FILE_START "EVENT_START"
+#define EVENT_FILE_END "EVENT_END"
+
 #define EVENT_NAME "EVENT_NAME" /* Human readable event name. Should contain band that is used: 80M or 2M */
 #define EVENT_FILE_VERSION "EVENT_VERSION" /* Human readable string for tracking event file changes */
 #define EVENT_BAND "EVENT_BAND" /* Band that is used: 80M or 2M - used to restrict frequency choices */
