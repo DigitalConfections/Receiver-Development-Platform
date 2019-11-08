@@ -456,7 +456,6 @@ ISR( INT0_vect )
 					wifi_reset(ON); // put WiFi into reset
 					wifi_power(OFF); // power off WiFi
 					g_wifi_active = FALSE;
-					g_go_to_sleep = TRUE;
 
 					if(g_event_enabled)
 					{
@@ -470,6 +469,7 @@ ISR( INT0_vect )
 						}
 						else
 						{
+							g_go_to_sleep = TRUE;
 							g_seconds_to_sleep = (time_t)(-(g_on_the_air + 10));
 						}
 					}
@@ -1924,52 +1924,36 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 
 BOOL __attribute__((optimize("O0"))) eventEnabled(BOOL noSleep, time_t* time_before_start)
 {
-	BOOL result = FALSE;
-	time_t now = time(NULL);
-	int32_t dif = timeDif(g_event_finish_time, g_event_start_time);
-	BOOL runsFinite = (dif > 0);
+	time_t now;
+	int32_t dif;
+	BOOL runsFinite, isDisabled, hasStarted;
 
-	if(noSleep) // consider only whether the event has finished
+	dif = timeDif(g_event_finish_time, g_event_start_time);
+	runsFinite = (dif > 0);
+
+	time(&now);
+	dif = timeDif(now, g_event_finish_time);
+	isDisabled = ((dif >= 0) && runsFinite);
+
+	if(isDisabled) return FALSE; // completed events are never enabled
+
+	dif = timeDif(now, g_event_start_time);
+	hasStarted = (dif >= -60); // we consider it started if it is withing 60 seconds of its start time
+
+	if(hasStarted || noSleep) // running events, or if we don't care about sleep before they start, are always enabled
 	{
-		if(runsFinite) // runs for a limited amount of time
-		{
-			dif = timeDif(now, g_event_finish_time);
-
-			if(dif < 0) //  event has not finished yet
-			{
-				result = TRUE;
-			}
-		}
-		else
-		{
-			result = TRUE;
-		}
-	}
-	else // consider if there is time for sleep prior to the event start
-	{
-		dif = timeDif(now, g_event_start_time);
-
-		if(dif >= -60 ) // if now is within 60 seconds of the start time or later
-		{
-			if(runsFinite) // if finish occurs after the start then the event runs for a limited amount of time
-			{
-				dif = timeDif(g_event_finish_time, now);
-
-				// if finish is in the future then the event should still be enabled
-				if(dif > 0) result = TRUE;
-			}
-			else // if finish occurs before start then the event runs forever
-			{
-				result = TRUE;
-			}
-		}
-		else // calculate the right amount of time to sleep
-		{
-			if(time_before_start) *time_before_start = (-dif)-60;
-		}
+		if(time_before_start) *time_before_start = 0;
+		return TRUE;
 	}
 
-	return result;
+	// If we reach here, we have an event that has not yet started, and a sleep time needs to be calculated
+	// consider if there is time for sleep prior to the event start
+	if(time_before_start)
+	{
+		*time_before_start = (-dif)-60; // sleep until 60 seconds before its start time
+	}
+
+	return TRUE;
 }
 
 void suspendEvent()
@@ -2001,7 +1985,7 @@ EC __attribute__((optimize("O0"))) launchEvent(bool noSleep, SC* statusCode)
 		time_t time_to_sleep;
 		g_event_enabled = eventEnabled(noSleep, &time_to_sleep);
 
-		if(!g_event_enabled && !noSleep)
+		if(!noSleep)
 		{
 			g_seconds_to_sleep = time_to_sleep;
 			g_go_to_sleep = TRUE;

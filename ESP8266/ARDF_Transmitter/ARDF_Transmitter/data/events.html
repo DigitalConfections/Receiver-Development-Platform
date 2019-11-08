@@ -210,6 +210,7 @@
         var g_transmitterTimeMs = 0;
         var g_websock = null;
         var g_timesync_rcvd = 0;
+        var g_webSocketAliveTimer = 0;
 
         var g_eventIsRunning = false;
 
@@ -400,8 +401,8 @@
                 var entry = rowData.name;
                 btn.type = "button";
                 btn.className = "button";
-                btn.id = "runButton";
                 if (g_selectedEvent == rowData.name) {
+                    btn.id = "activeRunButton";
                     //          btn.style = "font-family:verdana; font-size:17px; color:blue; font-weight:bold; text-align:center;");
                     if (g_eventIsRunning) {
                         btn.value = "Stop";
@@ -422,6 +423,7 @@
                     row.setAttribute("style", "font-family:verdana; font-size:17px; color:blue; font-weight:bold; text-align:center;");
                 } else {
                     //          btn.style = "font-family:verdana; font-size:17px; color:black; font-weight:bold; text-align:center;");
+                    btn.id = "runButton";
                     btn.value = "Select";
                     btn.onclick = (function(entry) {
                         return function() {
@@ -585,7 +587,7 @@
             return row;
         }
 
-        g_timeUpdateTimer = setInterval(function() {
+        g_timeUpdateTimer = setTimeout(function() {
             updateDisplayedLocalTime();
 
             if (g_stillConnected) {
@@ -648,15 +650,19 @@
                     console.log("websock open");
                     websocketcreated = true;
                     g_stillConnected = Math.max(200, g_stillConnected);
+
                     setTimeout(function() {
-                        sendToSocket("MAC");
-                    }, 100);
-                    setTimeout(function() {
-                        sendToSocket("SSID");
+                        sendSocketAlive();
                     }, 250);
                     setTimeout(function() {
-                        sendToSocket("EVENT_NAME,NEW!");
+                        sendToSocket("SSID");
                     }, 500);
+                    setTimeout(function() {
+                        sendToSocket("MAC");
+                    }, 750);
+                    setTimeout(function() {
+                        sendToSocket("EVENT_NAME,NEW!");
+                    }, 1000);
                     g_loading_data = true;
                 };
 
@@ -884,7 +890,7 @@
                                     case 0xF7: // ERROR_CODE_NO_ANTENNA_FOR_BAND = 0xF7
                                         {
                                             text = "No antenna connected for that band";
-                                            var btn = document.getElementById("runButton");
+                                            var btn = document.getElementById("activeRunButton");
                                             if (btn != null) {
                                                 if (btn.value != "run") {
                                                     eventStopSelect();
@@ -1227,6 +1233,20 @@
             return num <= min ? min : num >= max ? max : num;
         }
 
+        function sendSocketAlive() {
+            if (g_webSocketAliveTimer != 0) {
+                clearInterval(g_webSocketAliveTimer);
+                g_webSocketTxTimer = 0;
+            }
+
+            console.log("Alive.");
+            sendToSocket("!&");
+
+            g_webSocketAliveTimer = setTimeout(function() {
+                sendSocketAlive();
+            }, 2000);
+        }
+
         function sendToSocket(msg) {
             var now = Date.now();
             var dif = now - g_lastPacketTime;
@@ -1251,20 +1271,20 @@
                     console.log("Socket null. Command delayed.");
                 }
 
-                g_webSocketTxTimer = setInterval(function() {
+                g_webSocketTxTimer = setTimeout(function() {
                     sendToSocket(msg);
                 }, 5000);
 
             } else {
-                if (dif > 100) {
+                if (dif > 200) {
                     g_websock.send(msg);
                     g_lastPacketTime = now;
                     g_lastSocketTxMessage = msg;
                 } else {
                     console.log("Commands too rapid. Delaying send.");
-                    g_webSocketTxTimer = setInterval(function() {
+                    g_webSocketTxTimer = setTimeout(function() {
                         sendToSocket(msg);
-                    }, 200);
+                    }, 250);
                 }
             }
         }
@@ -1292,7 +1312,7 @@
             sendToSocket(btext);
             updateDisplayedLocalTime();
 
-            g_timeUpdateTimer = setInterval(function() {
+            g_timeUpdateTimer = setTimeout(function() {
                 if (g_stillConnected) {
                     updateDisplayedLocalTime();
                     if (g_stillConnected) {
@@ -1472,8 +1492,11 @@
 
         function updateDisplayedLocalTime() {
             var d = Date();
-            document.getElementById("currentTime").innerHTML = "OS: " + d;
-            updateTextFormatting();
+            var el = document.getElementById("currentTime");
+            if (el != null) {
+                el.innerHTML = "OS: " + d;
+                updateTextFormatting();
+            }
         }
 
         function newStartTime() {
@@ -1655,6 +1678,18 @@
                 var stat = statusMessageText(g_selectedEventStart, g_selectedEventFinish);
                 var statusEl = document.getElementById("statusCell");
                 if (statusEl != null) statusEl.innerHTML = stat;
+
+                var runButton = document.getElementById("activeRunButton");
+
+                if (runButton) {
+                    if ((stat == "Finished") && (runButton.value == "Run")) {
+                        runButton.disabled = true;
+                        runButton.style.backgroundColor = "gray";
+                    } else {
+                        runButton.disabled = false;
+                        runButton.style.backgroundColor = "#4CAF50";
+                    }
+                }
             }
 
             var freq1 = document.getElementById("freq1Text");
@@ -1784,7 +1819,7 @@
             if (f != 0) {
                 if (f < 0) f = -f;
                 var time = 500 - (5 * f);
-                g_timer = setInterval(function() {
+                g_timer = setTimeout(function() {
                     incFreq1();
                 }, time);
             }
@@ -1811,7 +1846,7 @@
             if (f != 0) {
                 if (f < 0) f = -f;
                 var time = 500 - (5 * f);
-                g_homeTimer = setInterval(function() {
+                g_homeTimer = setTimeout(function() {
                     incFreq2();
                 }, time);
             }
@@ -1838,7 +1873,7 @@
             if (f != 0) {
                 if (f < 0) f = -f;
                 var time = 500 - (5 * f);
-                g_timer = setInterval(function() {
+                g_timer = setTimeout(function() {
                     incFreq3();
                 }, time);
             }
@@ -1865,7 +1900,7 @@
             if (f != 0) {
                 if (f < 0) f = -f;
                 var time = 500 - (5 * f);
-                g_homeTimer = setInterval(function() {
+                g_homeTimer = setTimeout(function() {
                     incFreq4();
                 }, time);
             }
@@ -2066,7 +2101,6 @@
                 updateFreqButtonText(0);
 
                 freq1String(g_freq1FrequencyHz);
-                sendFreq(g_freq1FrequencyHz, 1);
             } else {
                 clearInterval(g_timer);
                 g_timer = 0;
@@ -2103,7 +2137,6 @@
                 updateFreqButtonText(1);
 
                 freq2String(g_freq2FrequencyHz);
-                sendFreq(g_freq2FrequencyHz, 2);
             } else {
                 clearInterval(g_homeTimer);
                 g_homeTimer = 0;
@@ -2139,7 +2172,6 @@
                 updateFreqButtonText(2);
 
                 freq3String(g_freq3FrequencyHz);
-                sendFreq(g_freq3FrequencyHz, 3);
             } else {
                 clearInterval(g_timer);
                 g_timer = 0;
@@ -2178,7 +2210,6 @@
                 updateFreqButtonText(3);
 
                 freq4String(g_freq4FrequencyHz);
-                sendFreq(g_freq4FrequencyHz, 4);
             } else {
                 clearInterval(g_homeTimer);
                 g_homeTimer = 0;
@@ -2193,6 +2224,7 @@
 
             freq.value = 0;
             count.textContent = "<<<\xa0\xa0\xa0<<\xa0\xa0\xa0<\xa0\xa0\xa0>\xa0\xa0\xa0>>\xa0\xa0\xa0>>>";
+            sendFreq(g_freq1FrequencyHz, 4);
         }
 
         function resetFreq2Slider() {
@@ -2201,6 +2233,7 @@
 
             freq.value = 0;
             count.textContent = "<<<\xa0\xa0\xa0<<\xa0\xa0\xa0<\xa0\xa0\xa0>\xa0\xa0\xa0>>\xa0\xa0\xa0>>>";
+            sendFreq(g_freq2FrequencyHz, 4);
         }
 
         function resetFreq3Slider() {
@@ -2209,6 +2242,7 @@
 
             freq.value = 0;
             count.textContent = "<<<\xa0\xa0\xa0<<\xa0\xa0\xa0<\xa0\xa0\xa0>\xa0\xa0\xa0>>\xa0\xa0\xa0>>>";
+            sendFreq(g_freq3FrequencyHz, 4);
         }
 
         function resetFreq4Slider() {
@@ -2217,6 +2251,7 @@
 
             freq.value = 0;
             count.textContent = "<<<\xa0\xa0\xa0<<\xa0\xa0\xa0<\xa0\xa0\xa0>\xa0\xa0\xa0>>\xa0\xa0\xa0>>>";
+            sendFreq(g_freq4FrequencyHz, 4);
         }
 
         ////////////////////////////////////////////////////////////
