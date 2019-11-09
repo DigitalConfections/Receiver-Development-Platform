@@ -1643,7 +1643,7 @@ void httpWebServerLoop()
 							String msg;
 							for(int i = 0; i < g_eventsRead; i++)
 							{
-								msg = String(String(SOCK_COMMAND_REFRESH) + "," + g_eventList[i].ename + "," + g_eventList[i].vers + "," +  g_eventList[i].startDateTimeEpoch + "," +  g_eventList[i].finishDateTimeEpoch + "," + g_eventList[i].role + "," + g_eventList[i].callsign + "," + g_eventList[i].freq);
+								msg = String(String(SOCK_COMMAND_REFRESH) + "," + g_eventList[i].ename + "," + g_eventList[i].vers + "," +  g_eventList[i].startDateTimeEpoch + "," +  g_eventList[i].finishDateTimeEpoch + "," + g_eventList[i].role + "," + g_eventList[i].callsign + "," + g_eventList[i].power + "," + g_eventList[i].freq);
 								g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
 							}
 
@@ -1796,7 +1796,7 @@ void httpWebServerLoop()
 
 							for(int i = 0; i < g_eventsRead; i++)
 							{
-								msg = String(String(SOCK_COMMAND_EVENT_DATA) + "," + g_eventList[i].ename + "," + g_eventList[i].vers + "," +  g_eventList[i].startDateTimeEpoch + "," +  g_eventList[i].finishDateTimeEpoch + "," + g_eventList[i].role + "," + g_eventList[i].callsign + "," + g_eventList[i].freq);
+								msg = String(String(SOCK_COMMAND_EVENT_DATA) + "," + g_eventList[i].ename + "," + g_eventList[i].vers + "," +  g_eventList[i].startDateTimeEpoch + "," +  g_eventList[i].finishDateTimeEpoch + "," + g_eventList[i].role + "," + g_eventList[i].callsign + "," + g_eventList[i].power + "," + g_eventList[i].freq);
 								g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
 							}
 
@@ -2705,6 +2705,7 @@ bool populateEventFileList(void)
 			Serial.println( "    " + String(g_eventList[i].ename));
 			Serial.println( "    " + String(g_eventList[i].role));
 			Serial.println( "    " + String(g_eventList[i].callsign));
+			Serial.println( "    " + String(g_eventList[i].power));
 			Serial.println( "    " + String(g_eventList[i].freq));
 		}
 		Serial.printf("\n");

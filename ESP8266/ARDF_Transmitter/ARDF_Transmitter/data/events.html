@@ -236,13 +236,15 @@
             finish: "Finish",
             role: "Fox",
             callsign: "Call",
-            frequency: "Freq",
-            power: "Power"
+            power: "Power",
+            frequency: "Freq"
         }]; /* Event data to display in a table header */
 
+        var g_powerLevels = ["0", "10", "100", "200", "300", "400", "500", "600", "800", "1000", "1500", "2000", "2500", "3000", "4000", "5000"];
         var g_selectedEvent = "";
         var g_selectedEventStart = 0;
         var g_selectedEventFinish = 0;
+        var g_powerLevel = g_powerLevels[0];
 
         ///////////////////////////////
 
@@ -391,12 +393,18 @@
                 row.appendChild(cell0);
 
                 cell0 = document.createElement("td");
+                cellText = document.createTextNode("Power");
+                cell0.setAttribute("border", "1px solid black");
+                cell0.appendChild(cellText);
+                row.appendChild(cell0);
+
+                cell0 = document.createElement("td");
                 cellText = document.createTextNode("Freq");
                 cell0.setAttribute("border", "1px solid black");
                 cell0.appendChild(cellText);
                 row.appendChild(cell0);
             } else {
-                // create cells in row
+                // Create Button
                 var btn = document.createElement('input');
                 var entry = rowData.name;
                 btn.type = "button";
@@ -422,7 +430,6 @@
                     }
                     row.setAttribute("style", "font-family:verdana; font-size:17px; color:blue; font-weight:bold; text-align:center;");
                 } else {
-                    //          btn.style = "font-family:verdana; font-size:17px; color:black; font-weight:bold; text-align:center;");
                     btn.id = "runButton";
                     btn.value = "Select";
                     btn.onclick = (function(entry) {
@@ -438,7 +445,7 @@
                 cell0.appendChild(btn);
                 row.appendChild(cell0);
 
-                // create cells in row
+                // Event Name
                 cell0 = document.createElement("td");
                 cellText = document.createTextNode(rowData.name);
                 cell0.setAttribute("border", "1px solid black");
@@ -450,6 +457,7 @@
                 cell0.appendChild(cellText);
                 row.appendChild(cell0);
 
+                // File Version
                 cell0 = document.createElement("td");
                 cellText = document.createTextNode(rowData.version);
                 cell0.setAttribute("border", "1px solid black");
@@ -461,6 +469,7 @@
                 cell0.appendChild(cellText);
                 row.appendChild(cell0);
 
+                // Start Time
                 cell0 = document.createElement("td");
                 var start = new Date(Number(rowData.start));
                 cellText = document.createTextNode(start);
@@ -482,6 +491,7 @@
                 }
                 row.appendChild(cell0);
 
+                // Finish Time
                 cell0 = document.createElement("td");
                 cell0.setAttribute("border", "1px solid black");
                 if (g_selectedEvent == rowData.name) {
@@ -514,6 +524,7 @@
                 cell0.appendChild(cellText);
                 row.appendChild(cell0);
 
+                // Role
                 cell0 = document.createElement("td");
                 cell0.setAttribute("border", "1px solid black");
                 if (g_selectedEvent == rowData.name) {
@@ -546,6 +557,7 @@
                 }
                 row.appendChild(cell0);
 
+                // Call Sign
                 cell0 = document.createElement("td");
                 console.log("Event Call:", rowData.callsign);
                 cell0.setAttribute("border", "1px solid black");
@@ -566,6 +578,44 @@
                 }
                 row.appendChild(cell0);
 
+
+                // Power Level mW
+                cell0 = document.createElement("td");
+                cell0.setAttribute("border", "1px solid black");
+
+                if (g_selectedEvent == rowData.name) {
+                    var sel, option, i, il;
+                    sel = document.createElement('select'),
+                        option,
+                        i = 0,
+                        il = g_powerLevels.length;
+
+                    sel.setAttribute("onchange", "pwrClick()");
+                    sel.setAttribute("id", "pwrSelect");
+                    sel.setAttribute("style", "font-family:verdana; font-size:15px; color:blue; font-weight:bold;");
+
+                    for (; i < il; i += 1) {
+                        option = document.createElement('option');
+                        option.setAttribute('value', g_powerLevels[i]);
+                        option.appendChild(document.createTextNode(g_powerLevels[i]));
+                        if (g_powerLevels[i] == g_powerLevel) {
+                            option.setAttribute("selected", "true");
+                        }
+                        console.log("Power option:", g_powerLevels[i]);
+
+                        sel.appendChild(option);
+                    }
+
+                    cell0.appendChild(sel);
+                } else {
+                    cellText = document.createTextNode(rowData.power);
+                    cell0.appendChild(cellText);
+                }
+
+                row.appendChild(cell0);
+
+
+                // Frequency
                 cell0 = document.createElement("td");
                 if (g_selectedEvent == rowData.name) {
                     var b = document.createElement('input');
@@ -1000,7 +1050,7 @@
                         case "REFRESH":
                             {
                                 console.log("Refresh: " + str);
-                                console.log("Parsed data: " + arr[1] + "; " + arr[2] + "; " + arr[3] + "; " + arr[4] + "; " + arr[5] + "; " + arr[6] + "; " + arr[7] + ";");
+                                console.log("Parsed data: " + arr[1] + "; " + arr[2] + "; " + arr[3] + "; " + arr[4] + "; " + arr[5] + "; " + arr[6] + "; " + arr[7] + "; " + arr[8] + ";");
                                 if (typeof arr[1] == 'undefined') arr[1] = '?';
                                 if (typeof arr[2] == 'undefined') arr[2] = '?';
                                 if (typeof arr[3] == 'undefined') arr[3] = '0';
@@ -1008,6 +1058,7 @@
                                 if (typeof arr[5] == 'undefined') arr[5] = '?';
                                 if (typeof arr[6] == 'undefined') arr[6] = '?';
                                 if (typeof arr[7] == 'undefined') arr[7] = '?';
+                                if (typeof arr[8] == 'undefined') arr[8] = '?';
 
                                 if (arr[1] == "Done") {
                                     displayEvents(false);
@@ -1020,7 +1071,8 @@
                                         finish: 1000 * Number(arr[4]),
                                         role: arr[5],
                                         callsign: arr[6],
-                                        freq: arr[7]
+                                        power: arr[7],
+                                        freq: arr[8]
                                     };
 
                                     var theEvent = g_eventTableData.find(g_eventTableData => g_eventTableData.name == g_selectedEvent);
@@ -1049,7 +1101,8 @@
                                     finish: 1000 * Number(arr[4]),
                                     role: arr[5],
                                     callsign: arr[6],
-                                    freq: arr[7]
+                                    power: arr[7],
+                                    freq: arr[8]
                                 };
                                 g_eventTableData.push(eventLine);
                             }
@@ -1209,7 +1262,7 @@
                                     pe.value = arr[1];
                                 }
                             }
-							break;
+                            break;
 
                         case "TEST":
                             {}
@@ -1350,6 +1403,14 @@
             console.log(btext);
         }
 
+        function sendPower() {
+            var power = document.getElementById("pwrSelect").value;
+            var msgText = "POWER,0," + power;
+            sendToSocket(msgText);
+            console.log(msgText);
+            g_powerLevel = power;
+        }
+
         function sendFreq(freq, row) {
             var msgText = "";
 
@@ -1426,6 +1487,16 @@
             freqButton.value = freqDotFormat(g_typeFrequency[currentRoleIndex()].frequency);
             console.log(msgText);
             sendToSocket(msgText);
+        }
+
+        function pwrClick() {
+            var x = document.getElementById("errorreport");
+            if (x != null) x.style.display = "none";
+
+            x = document.getElementById("statusreport");
+            if (x != null) x.style.display = "none";
+
+            sendPower();
         }
 
         function setOverlay(msgTxt) {

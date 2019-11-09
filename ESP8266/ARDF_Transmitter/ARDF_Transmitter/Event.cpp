@@ -243,6 +243,7 @@ String Event::readMeFile(String path)
 		{
 			file.println(TX_ASSIGNMENT + String(",0:0"));
 			file.println(String(TX_DESCRIPTIVE_NAME) + "," + getTxDescriptiveName("0:0"));
+            file.println(String(TX_ROLE_POWER) + "," + String(this->getPowerlevelForRole(0)));
 			file.println(String(TX_ROLE_FREQ) + "," + String(this->getFrequencyForRole(0)));
 			file.println(TX_ASSIGNMENT_IS_DEFAULT + String(",true"));
 			file.close();   /* Close the file */
@@ -294,10 +295,11 @@ bool Event::extractMeFileData(String path, EventFileRef *eventRef)
 		{
 			String s = file.readStringUntil('\n');
 			int count = 0;
+            int items = 0;
 
 			EventLineData data;
 
-			while(s.length() && count++ < MAXIMUM_NUMBER_OF_ME_FILE_LINES)
+			while(s.length() && (items < 4) && (count++ < MAXIMUM_NUMBER_OF_ME_FILE_LINES))
 			{
 				Event::extractLineData(s, &data);
 
@@ -305,12 +307,20 @@ bool Event::extractMeFileData(String path, EventFileRef *eventRef)
 				{
 					eventRef->role = data.value;
 					fail = false;
+                    items++;
 				}
 				else if(data.id.equalsIgnoreCase(TX_ROLE_FREQ))
 				{
 					eventRef->freq = data.value;
 					fail = false;
+                    items++;
 				}
+                else if(data.id.equalsIgnoreCase(TX_ROLE_POWER))
+                {
+                    eventRef->power = data.value;
+                    fail = false;
+                    items++;
+                }
 				/* ignore TX_ASSIGNMENT "TX_ASSIGNMENT" / *Which role and time slot is assigned to this transmitter: "r:t" * / */
 
 				s = file.readStringUntil('\n');
@@ -327,6 +337,7 @@ bool Event::extractMeFileData(String path, EventFileRef *eventRef)
 		{
 			file.println(TX_ASSIGNMENT + String(",0:0"));
 			file.println(String(TX_DESCRIPTIVE_NAME) + ",Finish - MO");
+            file.println(String(TX_ROLE_POWER) + ",1000");
 			file.println(String(TX_ROLE_FREQ) + ",3550000");
 			file.println(TX_ASSIGNMENT_IS_DEFAULT + String(",true"));
 			file.close();   /* Close the file */
@@ -651,6 +662,7 @@ void Event::saveMeData(String newAssignment)
 			file.println(EVENT_FILE_START);
 			file.println(String(TX_ASSIGNMENT) + "," + holdTxAssignment);
 			file.println(String(TX_DESCRIPTIVE_NAME) + "," + getTxDescriptiveName(holdTxAssignment));
+            file.println(String(TX_ROLE_POWER) + "," + String(this->getPowerlevelForRole(role.toInt())));
 			file.println(String(TX_ROLE_FREQ) + "," + String(this->getFrequencyForRole(role.toInt())));
 			file.println(String(TX_ASSIGNMENT_IS_DEFAULT) + ",false");
 			file.println(EVENT_FILE_END);
@@ -686,6 +698,7 @@ bool Event::setTxAssignment(String role_slot)
 		String r = role_slot.substring(0, c - 1);
 		this->eventData->tx_assignment = role_slot;
 		this->eventData->tx_role_name = Event::getTxDescriptiveName(role_slot);
+        this->eventData->tx_role_pwr = Event::getPowerlevelForRole(r.toInt());
 		this->eventData->tx_role_freq = Event::getFrequencyForRole(r.toInt());
 		this->values_did_change = true;
 		Serial.println("Set role: " + this->eventData->tx_assignment);

@@ -29,7 +29,7 @@
 
 #define MAXIMUM_NUMBER_OF_EVENTS 20
 #define MAXIMUM_NUMBER_OF_EVENT_FILE_LINES 200
-#define MAXIMUM_NUMBER_OF_ME_FILE_LINES 4
+#define MAXIMUM_NUMBER_OF_ME_FILE_LINES 6
 #define MAXIMUM_NUMBER_OF_EVENT_TX_TYPES 4
 #define MAXIMUM_NUMBER_OF_TXs_OF_A_TYPE 10
 
@@ -59,6 +59,7 @@
 #define TX_ASSIGNMENT "TX_ASSIGNMENT"                       /* Which role and time slot is assigned to this transmitter: "r:t" */
 #define TX_DESCRIPTIVE_NAME "TX_ROLE_NAME"                  /* Descriptive name of role assignment */
 #define TX_ROLE_FREQ "TX_ROLE_FREQ"                         /* Frequency of role assignment */
+#define TX_ROLE_POWER "TX_ROLE_PWR"                         /* Power in mW of role assignment */
 #define TX_ASSIGNMENT_IS_DEFAULT "TX_DEFAULT"               /* Identifies the assignment as the default assignment */
 
 /* This structure contains all the essential information needed to summarize the contents of an Event file */
@@ -71,6 +72,7 @@ typedef struct
 	String ename;
 	String role;
 	String callsign;
+    String power;
 	String freq;
 } EventFileRef;
 
@@ -107,6 +109,7 @@ typedef struct EventDataStruct
 {
 	String tx_assignment;           /* <- Role and time slot assigned to this tx: "r:t" */
 	String tx_role_name;            /* <- Descriptive name ofassigned Role */
+    String tx_role_pwr;             /* <- Power level of the assigned Role */
 	String tx_role_freq;            /* <- Frequency of the assigned Role */
 	bool tx_assignment_is_default;  /* <- Indicates that the transmitter has never receieved a specific role assignment */
 	String event_name;              /* "Classic 2m"      <- Human-readable event name */
