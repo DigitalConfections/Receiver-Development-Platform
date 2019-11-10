@@ -2268,10 +2268,34 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 				long freq;
 				int firstComma = p.indexOf(',');
 				int secondComma = p.lastIndexOf(',');
-				typeIndex = (p.substring(firstComma + 1, secondComma)).toInt();
-				freq = (p.substring(secondComma + 1)).toInt();
+				bool indexOnly = (secondComma == firstComma);
+                
+				if(indexOnly)
+				{
+				    typeIndex = (p.substring(firstComma + 1)).toInt();
+				}
+				else
+				{
+				    typeIndex = (p.substring(firstComma + 1, secondComma)).toInt();
+				    freq = (p.substring(secondComma + 1)).toInt();
+				}
 
-				if((freq >= TX_MIN_ALLOWED_FREQUENCY_HZ) && (freq <= TX_MAX_ALLOWED_FREQUENCY_HZ) && (typeIndex >= 0) && (typeIndex < MAXIMUM_NUMBER_OF_EVENT_TX_TYPES))
+				if(indexOnly) /* request for frequency of typeIndex */
+				{
+				    if(g_activeEvent != NULL)
+				    {
+				        freq = g_activeEvent->getFrequencyForRole(typeIndex);
+                        
+				        String msg = String(String(SOCK_COMMAND_TYPE_FREQ) + "," + freq);
+				        g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+
+ 				        if(g_debug_prints_enabled)
+					{
+							Serial.println("Freq" + String(typeIndex) + ": " + freq);
+					}
+				    }
+				}
+				else if((freq >= TX_MIN_ALLOWED_FREQUENCY_HZ) && (freq <= TX_MAX_ALLOWED_FREQUENCY_HZ) && (typeIndex >= 0) && (typeIndex < MAXIMUM_NUMBER_OF_EVENT_TX_TYPES))
 				{
 					if(g_activeEvent != NULL)
 					{
@@ -2296,10 +2320,34 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 				String pwr;
 				int firstComma = p.indexOf(',');
 				int secondComma = p.lastIndexOf(',');
-				typeIndex = (p.substring(firstComma + 1, secondComma)).toInt();
-				pwr = (p.substring(secondComma + 1));
+				bool indexOnly = (secondComma == firstComma);
+                
+				if(indexOnly)
+				{
+				    typeIndex = (p.substring(firstComma + 1)).toInt();
+				}
+				else
+				{
+				    typeIndex = (p.substring(firstComma + 1, secondComma)).toInt();
+				    pwr = (p.substring(secondComma + 1));    
+				}
+                
+				if(indexOnly) /* request for power level of typeIndex */
+				{
+				    if(g_activeEvent != NULL)
+				    {
+				        pwr = g_activeEvent->getPowerlevelForRole(typeIndex);
+                        
+				        String msg = String(String(SOCK_COMMAND_TYPE_PWR) + "," + pwr);
+				        g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
 
-				if((pwr.toInt() >= 0) && (pwr.toInt() < TX_MAX_ALLOWED_POWER_MW) && (typeIndex >= 0) && (typeIndex < MAXIMUM_NUMBER_OF_EVENT_TX_TYPES))
+				        if(g_debug_prints_enabled)
+				        {
+							Serial.println("Pwr" + String(typeIndex) + ": " + pwr);
+				        }
+				    }
+				}
+				else if((pwr.toInt() >= 0) && (pwr.toInt() < TX_MAX_ALLOWED_POWER_MW) && (typeIndex >= 0) && (typeIndex < MAXIMUM_NUMBER_OF_EVENT_TX_TYPES))
 				{
 					if(g_activeEvent != NULL)
 					{

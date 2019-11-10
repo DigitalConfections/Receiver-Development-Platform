@@ -205,7 +205,6 @@
         var g_stillConnected = 0;
         var g_stillDisconnected = 60;
         var g_lastPacketTime = 0;
-        var g_webSocketTxTimer = 0;
         var g_lastSocketTxMessage;
         var g_transmitterTimeMs = 0;
         var g_websock = null;
@@ -1219,20 +1218,28 @@
 
                         case "FREQ":
                             {
-                                var freqStr = {
-                                    frequency: arr[1],
-                                    role: arr[2]
-                                };
-                                g_typeFrequency.push(freqStr);
-                                var freq = Number(arr[1]);
+                                if (arr.length > 2) {
+                                    var freqStr = {
+                                        frequency: arr[1],
+                                        role: arr[2]
+                                    };
 
-                                if ((freq < Number("4000000")) && (freq > Number("3500000"))) {
-                                    g_eventRadioBand = "80m";
-                                } else if ((freq < Number("148000000")) && (freq > Number("144000000"))) {
-                                    g_eventRadioBand = "2m";
+                                    g_typeFrequency.push(freqStr);
+                                    console.log(g_typeFrequency.length, "Freq: ", freqStr);
+                                    var freq = Number(arr[1]);
+
+                                    if ((freq < Number("4000000")) && (freq > Number("3500000"))) {
+                                        g_eventRadioBand = "80m";
+                                    } else if ((freq < Number("148000000")) && (freq > Number("144000000"))) {
+                                        g_eventRadioBand = "2m";
+                                    }
+                                } else if (arr[1].length > 0) {
+                                    var freq = Number(arr[1]);
+                                    var b = document.getElementById("frequencyButton");
+                                    if (b != null) {
+                                        b.setAttribute("value", freqDotFormat(freq));
+                                    }
                                 }
-
-                                console.log(g_typeFrequency.length, "Freq: ", freqStr);
                             }
                             break;
 
@@ -1287,16 +1294,11 @@
         }
 
         function sendSocketAlive() {
-            if (g_webSocketAliveTimer != 0) {
-                clearInterval(g_webSocketAliveTimer);
-                g_webSocketTxTimer = 0;
-            }
-
             console.log("Alive.");
-            sendToSocket("!&");
 
-            g_webSocketAliveTimer = setTimeout(function() {
-                sendSocketAlive();
+            if (g_webSocketAliveTimer) clearInterval(g_webSocketAliveTimer);
+            g_webSocketAliveTimer = setInterval(function() {
+                sendToSocket("!&");
             }, 2000);
         }
 
@@ -1311,10 +1313,10 @@
             //                }
             //            }
 
-            if (g_webSocketTxTimer != 0) {
-                clearInterval(g_webSocketTxTimer);
-                g_webSocketTxTimer = 0;
-            }
+            //            if (g_webSocketTxTimer != 0) {
+            //                clearTimeout(g_webSocketTxTimer);
+            //                g_webSocketTxTimer = 0;
+            //            }
 
             if ((g_websock == null) || (g_websock.readyState != g_websock.OPEN)) // wait 5 seconds and try again
             {
@@ -1324,7 +1326,7 @@
                     console.log("Socket null. Command delayed.");
                 }
 
-                g_webSocketTxTimer = setTimeout(function() {
+                setTimeout(function() {
                     sendToSocket(msg);
                 }, 5000);
 
@@ -1335,7 +1337,7 @@
                     g_lastSocketTxMessage = msg;
                 } else {
                     console.log("Commands too rapid. Delaying send.");
-                    g_webSocketTxTimer = setTimeout(function() {
+                    setTimeout(function() {
                         sendToSocket(msg);
                     }, 250);
                 }
@@ -1346,7 +1348,7 @@
             var d = Date();
 
             if (g_timeUpdateTimer != 0) {
-                clearInterval(g_timeUpdateTimer);
+                clearTimeout(g_timeUpdateTimer);
                 g_timeUpdateTimer = 0;
             }
 
@@ -1405,7 +1407,8 @@
 
         function sendPower() {
             var power = document.getElementById("pwrSelect").value;
-            var msgText = "POWER,0," + power;
+            var type = currentRoleIndex();
+            var msgText = "POWER," + type + "," + power;
             sendToSocket(msgText);
             console.log(msgText);
             g_powerLevel = power;
@@ -1481,11 +1484,15 @@
             g_selectedTxType = document.getElementById("roleSelect").value;
             var indices = g_typeTxNames.find(g_typeTxNames => g_typeTxNames.name == g_selectedTxType).indices;
             var msgText = "TX_ROLE," + indices;
+            sendToSocket(msgText);
             var theEvent = g_eventTableData.find(g_eventTableData => g_eventTableData.name == g_selectedEvent);
             theEvent.role = g_selectedTxType;
-            var freqButton = document.getElementById("frequencyButton");
-            freqButton.value = freqDotFormat(g_typeFrequency[currentRoleIndex()].frequency);
-            console.log(msgText);
+            //var freqButton = document.getElementById("frequencyButton");
+            //freqButton.value = freqDotFormat(g_typeFrequency[currentRoleIndex()].frequency);
+            //console.log(msgText);
+            msgText = "FREQ," + currentRoleIndex();
+            sendToSocket(msgText);
+            msgText = "POWER," + currentRoleIndex();
             sendToSocket(msgText);
         }
 
@@ -1883,7 +1890,7 @@
             }
 
             if (g_timer != 0) {
-                clearInterval(g_timer);
+                clearTimeout(g_timer);
                 g_timer = 0;
             }
 
@@ -1910,7 +1917,7 @@
             }
 
             if (g_homeTimer != 0) {
-                clearInterval(g_homeTimer);
+                clearTimeout(g_homeTimer);
                 g_homeTimer = 0;
             }
 
@@ -1937,7 +1944,7 @@
             }
 
             if (g_timer != 0) {
-                clearInterval(g_timer);
+                clearTimeout(g_timer);
                 g_timer = 0;
             }
 
@@ -1964,7 +1971,7 @@
             }
 
             if (g_homeTimer != 0) {
-                clearInterval(g_homeTimer);
+                clearTimeout(g_homeTimer);
                 g_homeTimer = 0;
             }
 
@@ -2173,7 +2180,7 @@
 
                 freq1String(g_freq1FrequencyHz);
             } else {
-                clearInterval(g_timer);
+                clearTimeout(g_timer);
                 g_timer = 0;
             }
         }
@@ -2209,7 +2216,7 @@
 
                 freq2String(g_freq2FrequencyHz);
             } else {
-                clearInterval(g_homeTimer);
+                clearTimeout(g_homeTimer);
                 g_homeTimer = 0;
             }
         }
@@ -2244,7 +2251,7 @@
 
                 freq3String(g_freq3FrequencyHz);
             } else {
-                clearInterval(g_timer);
+                clearTimeout(g_timer);
                 g_timer = 0;
             }
         }
@@ -2282,7 +2289,7 @@
 
                 freq4String(g_freq4FrequencyHz);
             } else {
-                clearInterval(g_homeTimer);
+                clearTimeout(g_homeTimer);
                 g_homeTimer = 0;
             }
         }

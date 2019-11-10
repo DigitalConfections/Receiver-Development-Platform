@@ -1328,6 +1328,10 @@ bool Event::setEventData(String id, String value)
 	{
 		this->eventData->tx_role_name = value;
 	}
+    else if(id.equalsIgnoreCase(TX_ROLE_POWER))
+    {
+        this->eventData->tx_role_pwr = value;
+    }
 	else if(id.equalsIgnoreCase(TX_ROLE_FREQ))
 	{
 		this->eventData->tx_role_freq = value;
