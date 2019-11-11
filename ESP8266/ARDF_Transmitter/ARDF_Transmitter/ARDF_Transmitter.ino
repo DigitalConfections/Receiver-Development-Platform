@@ -151,6 +151,9 @@ unsigned long g_lastAccessToNISTServers = 0;
 bool g_timeWasSet = false;
 int g_blinkPeriodMillis = 500;
 
+#define NO_ACTIVITY_TIMEOUT (60*5)
+int g_noActivityTimeoutSeconds = NO_ACTIVITY_TIMEOUT;
+
 unsigned long g_timeOfDayFromTx = 0;
 
 static WiFiEventHandler e1, e2;
@@ -597,6 +600,7 @@ void onNewStation(WiFiEventSoftAPModeStationConnected sta_info)
 		}
 	}
 
+    g_noActivityTimeoutSeconds = NO_ACTIVITY_TIMEOUT;
 	startWebSocketServer(); /* Start a WebSocket server */
 }
 
@@ -1276,10 +1280,6 @@ void httpWebServerLoop()
 			{
 				g_webSocketServer.disconnect(); /* ensure all web socket clients are disconnected - this might not happen if WiFi connection was broken */
 			}
-            else
-            {
-               g_socket_timeout = 10;
-            }
 		}
         
 		/*check UART for data */
@@ -1335,6 +1335,16 @@ void httpWebServerLoop()
         if(g_relativeTimeSeconds != holdSeconds)
         {
             holdSeconds = g_relativeTimeSeconds;
+            
+            if(g_noActivityTimeoutSeconds) 
+            {
+                g_noActivityTimeoutSeconds--;
+                
+                if(!g_noActivityTimeoutSeconds)
+                {
+					g_LBOutputBuff->put(LB_MESSAGE_ESP_SHUTDOWN); /* shut down immediately */
+                }
+            }
             
             if(g_socket_timeout) 
             {
@@ -2132,6 +2142,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 			g_numberOfSocketClients = g_webSocketServer.connectedClients(false);
 			g_LBOutputBuff->put(LB_MESSAGE_TEMP_REQUEST);
 			g_LBOutputBuff->put(LB_MESSAGE_BATTERY_REQUEST);
+			g_noActivityTimeoutSeconds = NO_ACTIVITY_TIMEOUT;
 		}
 		break;
 
@@ -2141,6 +2152,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 			/*        { */
 			/*          Serial.printf("[%u] get Text: %s\r\n", num, payload); */
 			/*        } */
+			g_noActivityTimeoutSeconds = NO_ACTIVITY_TIMEOUT;
 
 			String p = String((char*)payload);
 			String msgHeader = p.substring(0, p.indexOf(','));
