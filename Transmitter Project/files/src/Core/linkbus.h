@@ -96,7 +96,7 @@ typedef enum
 	MESSAGE_TIME = 'S' * 10 + 'F',					/* Sets the start and finish times */
 	MESSAGE_BAT = 'B' * 100 + 'A' * 10 + 'T',       /* Battery charge data */
 	MESSAGE_TEMP = 'T' * 100 + 'E' * 10 + 'M',      /* Temperature  data */
-	MESSAGE_PERM = 'P',								/* Saves most settings to EEPROM "perm" */
+	MESSAGE_PERM = 'P' * 100 + 'R' * 10 + 'M',		/* Saves most settings to EEPROM "perm" */
 	MESSAGE_TX_POWER = 'P' * 100 + 'O' * 10 + 'W',	/* Sets transmit power level */
 	MESSAGE_TX_MOD = 'M' * 100 + 'O' * 10 + 'D',    /* Sets 2m modulation format to AM or CW */
 #ifdef DONOTUSE
@@ -123,6 +123,7 @@ typedef enum
 #define MESSAGE_BAND_LABEL "BND"
 #define MESSAGE_SET_FREQ_LABEL "FRE"
 #define MESSAGE_TX_POWER_LABEL "POW"
+#define MESSAGE_ACK "!ACK;"
 
 typedef enum
 {
@@ -214,6 +215,10 @@ LinkbusRxBuffer* nextFullRxBuffer(void);
 /**
  */
 void lb_send_sync(void);
+
+/**
+ */
+BOOL linkbus_send_text(char* text);
 
 /**
 */

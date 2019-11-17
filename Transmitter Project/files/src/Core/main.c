@@ -112,7 +112,7 @@ static volatile uint16_t g_time_needed_for_ID = 0;
 static volatile int16_t g_on_air_seconds = EEPROM_ON_AIR_TIME_DEFAULT; /* amount of time to spend on the air */
 static volatile int16_t g_off_air_seconds = EEPROM_OFF_AIR_TIME_DEFAULT; /* amount of time to wait before returning to the air */
 static volatile int16_t g_intra_cycle_delay_time = EEPROM_INTRA_CYCLE_DELAY_TIME_DEFAULT; /* offset time into a repeating transmit cycle */
-static volatile int16_t g_ID_time = EEPROM_ID_TIME_INTERVAL_DEFAULT; /* amount of time between ID/callsign transmissions */
+static volatile int16_t g_ID_period_seconds = EEPROM_ID_TIME_INTERVAL_DEFAULT; /* amount of time between ID/callsign transmissions */
 static volatile time_t g_event_start_time = EEPROM_START_TIME_DEFAULT;
 static volatile time_t g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
 static volatile BOOL g_event_enabled = EEPROM_EVENT_ENABLED_DEFAULT; /* indicates that the conditions for executing the event are set */
@@ -124,8 +124,7 @@ static volatile uint16_t g_time_to_send_ID_countdown = 0;
 static volatile uint16_t g_code_throttle = 50;
 static volatile uint8_t g_WiFi_shutdown_seconds = 120;
 static volatile BOOL g_report_seconds = FALSE;
-
-static int16_t g_ID_seconds = 60; /* holds value for g_ID_time adjusted for g_on_air_seconds */
+static volatile BOOL g_wifi_active = TRUE;
 
 /* ADC Defines */
 
@@ -158,27 +157,28 @@ extern BOOL g_am_modulation_enabled;
 
 static volatile BOOL g_go_to_sleep = FALSE;
 static volatile BOOL g_sleeping = FALSE;
-static volatile uint16_t g_seconds_left_to_sleep = 0;
-static volatile uint16_t g_seconds_to_sleep = MAX_UINT16;
+static volatile time_t g_seconds_left_to_sleep = 0;
+static volatile time_t g_seconds_to_sleep = MAX_TIME;
 
 /***********************************************************************
  * Private Function Prototypes
  *
  * These functions are available only within this file
  ************************************************************************/
-BOOL eventEnabled(void);
+BOOL eventEnabled(BOOL noSleep, time_t* time_before_start);
 void handleLinkBusMsgs(void);
 void initializeEEPROMVars(BOOL skipEventEnabled);
 void saveAllEEPROM(void);
 void wdt_init(WDReset resetType);
 uint16_t throttleValue(uint8_t speed);
 EC activateEventUsingCurrentSettings(SC* statusCode);
+EC launchEvent(bool noSleep, SC* statusCode);
 EC hw_init(void);
 EC rtc_init(void);
 void set_ports(InitActionType initType);
 BOOL antennaIsConnected(void);
 void initializeAllEventSettings(BOOL disableEvent);
-
+void suspendEvent(void);
 
 /***********************************************************************
  * Watchdog Timer ISR
@@ -357,7 +357,7 @@ ISR( INT0_vect )
 							if(g_on_the_air == g_time_needed_for_ID) // wait until the end of a transmission
 							{
 								g_last_status_code = STATUS_CODE_SENDING_ID;
-								g_time_to_send_ID_countdown = g_ID_seconds;
+								g_time_to_send_ID_countdown = g_ID_period_seconds;
 								g_code_throttle = throttleValue(g_id_codespeed);
 								repeat = FALSE;
 								makeMorse(g_messages_text[STATION_ID], &repeat, NULL); /* Send only once */
@@ -378,7 +378,7 @@ ISR( INT0_vect )
 								/* Enable sleep during off-air periods */
 								if((g_off_air_seconds > 15) && !g_WiFi_shutdown_seconds) // sleep if there is time for it
 								{
-									g_seconds_to_sleep = g_off_air_seconds - 10;
+									g_seconds_to_sleep = (time_t)(g_off_air_seconds - 10);
 									g_go_to_sleep = TRUE;
 								}
 							}
@@ -414,17 +414,18 @@ ISR( INT0_vect )
 					{
 						g_last_status_code = STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT;
 						g_on_the_air = -g_intra_cycle_delay_time;
+						g_time_to_send_ID_countdown = g_intra_cycle_delay_time + g_on_air_seconds - g_time_needed_for_ID;
 					}
 					else
 					{
 						g_last_status_code = STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING;
 						g_on_the_air = g_on_air_seconds;
+						g_time_to_send_ID_countdown = g_on_air_seconds - g_time_needed_for_ID;
 						g_code_throttle = throttleValue(g_pattern_codespeed);
 						BOOL repeat = TRUE;
 						makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
 					}
 
-					g_time_to_send_ID_countdown = g_ID_seconds;
 					g_event_commenced = TRUE;
 				}
 			}
@@ -453,43 +454,33 @@ ISR( INT0_vect )
 				{
 					wifi_reset(ON); // put WiFi into reset
 					wifi_power(OFF); // power off WiFi
-					g_go_to_sleep = TRUE;
+					g_wifi_active = FALSE;
 
-					if(g_event_start_time && !g_event_commenced)
+					if(g_event_enabled)
 					{
-						time(&temp_time);
-						uint32_t dif = timeDif(g_event_start_time, temp_time);
-
-						if(dif < 30)
+						if(!g_event_commenced)
+						{
+							launchEvent(FALSE, NULL);
+						}
+						else if(g_on_the_air > -30)
 						{
 							g_go_to_sleep = FALSE;
 						}
 						else
 						{
-							g_seconds_to_sleep = dif - 10;
-						}
-					}
-					else if(g_event_enabled)
-					{
-						if(g_on_the_air > -20)
-						{
-							g_go_to_sleep = FALSE;
-						}
-						else
-						{
-							g_seconds_to_sleep = -(g_on_the_air + 10);
+							g_go_to_sleep = TRUE;
+							g_seconds_to_sleep = (time_t)(-(g_on_the_air + 10));
 						}
 					}
 					else
 					{
-						g_seconds_to_sleep = MAX_UINT16;
+						g_go_to_sleep = TRUE;
+						g_seconds_to_sleep = MAX_TIME;
 					}
 				}
-				else
-				{
-					g_report_seconds = TRUE;
-				}
 			}
+
+			if(g_wifi_active) g_report_seconds = TRUE;
 		}
 	}
 }
@@ -1267,21 +1258,7 @@ int main( void )
 
 					if(!ec)
 					{
-						ec = activateEventUsingCurrentSettings(&status);
-
-						if(!ec)
-						{
-							if(status)
-							{
-								g_last_status_code = status;
-							}
-
-							g_event_enabled = eventEnabled();
-						}
-						else
-						{
-							g_last_error_code = ec;
-						}
+						ec = launchEvent(TRUE, &status);
 					}
 				}
 			}
@@ -1442,10 +1419,10 @@ int main( void )
 
 		if(g_check_for_next_event)
 		{
-			/* Power up the WiFi module if it isn't already powered up */
-			if(!wifi_enabled())
+			if(!g_WiFi_shutdown_seconds) // For now just go to sleep forever
 			{
-
+				g_go_to_sleep = TRUE;
+				g_seconds_to_sleep = MAX_TIME;
 			}
 
 			/* If WiFi is powered up, send it a request for the next active event */
@@ -1465,6 +1442,7 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 {
 	LinkbusRxBuffer* lb_buff;
 	static uint8_t event_parameter_count = 0;
+	BOOL send_ack = TRUE;
 
 	while((lb_buff = nextFullRxBuffer()))
 	{
@@ -1474,16 +1452,15 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 		{
 			case MESSAGE_WIFI:
 			{
-				BOOL result = wifi_enabled();
+				BOOL result;
 
 				if(lb_buff->fields[FIELD1][0])
 				{
 					result = atoi(lb_buff->fields[FIELD1]);
 
-					cli();
+					suspendEvent();
 					linkbus_disable();
-					g_WiFi_shutdown_seconds = 0; // disable shutdown
-					sei();
+					g_WiFi_shutdown_seconds = 0; // disable sleep
 
 					if(result == 0) // shut off power to WiFi
 					{
@@ -1506,44 +1483,25 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 			{
 				uint8_t f1 = lb_buff->fields[FIELD1][0];
 
+				g_wifi_active = TRUE;
+
 				if(f1 == '0') /* I'm awake message */
 				{
-					SC status = STATUS_CODE_IDLE;
-					EC ec;
-
 					/* WiFi is awake. Send it the current time */
 					sprintf(g_tempStr, "%lu", time(NULL));
 					lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
-
-					ec = activateEventUsingCurrentSettings(&status);
-
-					if(ec || (status == STATUS_CODE_EVENT_FINISHED))
-					{
-						g_event_enabled = FALSE;
-						saveAllEEPROM();
-					}
-					else
-					{
-						g_event_enabled = eventEnabled();
-					}
-
-					if(!g_event_enabled) // no enabled event is stored in EEPROM
-					{
-						// Ask the ESP for the next scheduled event
-						sprintf(g_tempStr, "%lu", time(NULL));
-						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ESP_LABEL, "1");
-					}
 				}
 				else if(f1 == '1')
 				{
 					/* ESP8266 is ready with event data */
 					// Prepare to receive new event configuration settings
-					g_event_enabled = FALSE;
+					suspendEvent();
 					initializeAllEventSettings(TRUE);
 				}
 				else if(f1 == '2') /* ESP module needs continuous power to save data */
 				{
-					g_WiFi_shutdown_seconds = 0; // disable shutdown
+					//suspendEvent();
+					g_WiFi_shutdown_seconds = 0; // disable sleep
 					lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ESP_LABEL, "2"); /* Save data now */
 				}
 				else if(f1 == '3')
@@ -1654,33 +1612,20 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 						else if (f1 == '2') // enables a downloaded event stored in EEPROM
 						{
 							/* This command configures the transmitter to launch an event at its scheduled start time */
-							SC status = STATUS_CODE_IDLE;
-							EC ec;
-
 							if(event_parameter_count < NUMBER_OF_ESSENTIAL_EVENT_PARAMETERS)
 							{
 								g_last_error_code = ERROR_CODE_EVENT_NOT_CONFIGURED;
 							}
 							else
 							{
-								g_event_enabled = FALSE;
-
-								ec = activateEventUsingCurrentSettings(&status);
+								SC status = STATUS_CODE_IDLE;
+								static EC ec;
+								ec = launchEvent(TRUE, &status);
 
 								if(!ec)
 								{
-									if(status)
-									{
-										g_last_status_code = status;
-									}
-
-									g_event_enabled = eventEnabled();
 									saveAllEEPROM();            /* Make sure all  event values get saved */
 									storeTransmitterValues();
-								}
-								else
-								{
-									g_last_error_code = ec;
 								}
 							}
 						}
@@ -1688,14 +1633,7 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 				}
 				else if(f1 == '0') // Stop continuous transmit (if enabled) and prepare to receive new event data
 				{
-					cli();
-					g_on_the_air = 0; //  stop transmitting
-					g_event_commenced = FALSE; // get things stopped immediately
-					g_event_enabled = FALSE; // get things stopped immediately
-					sei();
-					keyTransmitter(OFF);
-					powerToTransmitter(OFF);
-
+					suspendEvent();
 					// Restore saved event settings
 					event_parameter_count = 0;
 					g_last_status_code = STATUS_CODE_RECEIVING_EVENT_DATA;
@@ -1855,7 +1793,7 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					if(lb_buff->fields[FIELD2][0])
 					{
 						time = atol(lb_buff->fields[FIELD2]);
-						g_ID_time = time;
+						g_ID_period_seconds = time;
 						saveAllEEPROM();
 						event_parameter_count++;
 					}
@@ -1921,7 +1859,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 				if(lb_buff->fields[FIELD1][0])  /* band field */
 				{
 					EC ec = ERROR_CODE_ILLEGAL_COMMAND_RCVD;
-
 					int b = atoi(lb_buff->fields[FIELD1]);
 
 					if(b == 80)
@@ -1981,33 +1918,81 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 		}
 
 		lb_buff->id = MESSAGE_EMPTY;
+		if(send_ack) linkbus_send_text(MESSAGE_ACK);
 	}
 }
 
-BOOL eventEnabled(void)
+BOOL __attribute__((optimize("O0"))) eventEnabled(BOOL noSleep, time_t* time_before_start)
 {
-	BOOL result = FALSE;
-	time_t now = time(NULL);
-	int32_t dif = timeDif(now, g_event_start_time);
+	time_t now;
+	int32_t dif;
+	BOOL runsFinite, isDisabled, hasStarted;
 
-	if(dif >= -60 ) // if now is within 60 seconds of the start time or later
+	dif = timeDif(g_event_finish_time, g_event_start_time);
+	runsFinite = (dif > 0);
+
+	time(&now);
+	dif = timeDif(now, g_event_finish_time);
+	isDisabled = ((dif >= 0) && runsFinite);
+
+	if(isDisabled) return FALSE; // completed events are never enabled
+
+	dif = timeDif(now, g_event_start_time);
+	hasStarted = (dif >= -60); // we consider it started if it is withing 60 seconds of its start time
+
+	if(hasStarted || noSleep) // running events, or if we don't care about sleep before they start, are always enabled
 	{
-		dif = timeDif(g_event_finish_time, g_event_start_time);
+		if(time_before_start) *time_before_start = 0;
+		return TRUE;
+	}
 
-		if(dif > 0) // if finish occurs after the start then the event runs for a limited amount of time
-		{
-			dif = timeDif(g_event_finish_time, now);
+	// If we reach here, we have an event that has not yet started, and a sleep time needs to be calculated
+	// consider if there is time for sleep prior to the event start
+	if(time_before_start)
+	{
+		*time_before_start = (-dif)-60; // sleep until 60 seconds before its start time
+	}
 
-			// if finish is in the future then the event is still enabled
-			if(dif > 0) result = TRUE;
-		}
-		else // if finish occurs before start then the event runs forever
+	return TRUE;
+}
+
+void suspendEvent()
+{
+	cli();
+	g_on_the_air = 0; //  stop transmitting
+	g_event_commenced = FALSE; // get things stopped immediately
+	g_event_enabled = FALSE; // get things stopped immediately
+	sei();
+	keyTransmitter(OFF);
+	powerToTransmitter(OFF);
+}
+
+EC __attribute__((optimize("O0"))) launchEvent(bool noSleep, SC* statusCode)
+{
+	EC ec = activateEventUsingCurrentSettings(statusCode);
+
+	if(*statusCode)
+	{
+		g_last_status_code = *statusCode;
+	}
+
+	if(ec)
+	{
+		g_last_error_code = ec;
+	}
+	else
+	{
+		time_t time_to_sleep;
+		g_event_enabled = eventEnabled(noSleep, &time_to_sleep);
+
+		if(!noSleep)
 		{
-			result = TRUE;
+			g_seconds_to_sleep = time_to_sleep;
+			g_go_to_sleep = TRUE;
 		}
 	}
 
-	return result;
+	return ec;
 }
 
 EC activateEventUsingCurrentSettings(SC* statusCode)
@@ -2020,11 +2005,9 @@ EC activateEventUsingCurrentSettings(SC* statusCode)
 	if(!g_pattern_codespeed) return ERROR_CODE_EVENT_PATTERN_CODE_SPEED_NOT_SPECIFIED;
 	if(g_messages_text[STATION_ID][0] != '\0')
 	{
-		if((!g_id_codespeed || !g_ID_time)) return ERROR_CODE_EVENT_STATION_ID_ERROR;
+		if((!g_id_codespeed || !g_ID_period_seconds)) return ERROR_CODE_EVENT_STATION_ID_ERROR;
 
 		g_time_needed_for_ID = (500 + timeRequiredToSendStrAtWPM(g_messages_text[STATION_ID], g_id_codespeed)) / 1000;
-		g_ID_seconds = g_ID_time;
-		g_time_to_send_ID_countdown = g_ID_seconds; // countdown will not commence until event commences
 	}
 	else
 	{
@@ -2058,18 +2041,24 @@ EC activateEventUsingCurrentSettings(SC* statusCode)
 				{
 					g_on_the_air = -(cyclePeriod + timeTillTransmit);
 					if(statusCode) *statusCode = STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT;
+					g_time_to_send_ID_countdown = (g_on_air_seconds - g_on_the_air) - g_time_needed_for_ID;
 				}
 				else // we should be transmitting right now
 				{
 					g_on_the_air = g_on_air_seconds + timeTillTransmit;
 					turnOnTransmitter = TRUE;
 					if(statusCode) *statusCode = STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING;
+					if(g_time_needed_for_ID < g_on_the_air)
+					{
+						g_time_to_send_ID_countdown = g_on_the_air - g_time_needed_for_ID;
+					}
 				}
 			}
-			else // not yet time time to transmit in this cycle
+			else // it is not yet time to transmit in this cycle
 			{
 				g_on_the_air = -timeTillTransmit;
 				if(statusCode) *statusCode = STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT;
+				g_time_to_send_ID_countdown = timeTillTransmit + g_on_air_seconds - g_time_needed_for_ID;
 			}
 
 			if(turnOnTransmitter)
@@ -2115,7 +2104,7 @@ void initializeEEPROMVars(BOOL skipEventEnabled)
 		g_on_air_seconds = eeprom_read_word(&ee_on_air_time);
 		g_off_air_seconds = eeprom_read_word(&ee_off_air_time);
 		g_intra_cycle_delay_time = eeprom_read_word(&ee_intra_cycle_delay_time);
-		g_ID_time = eeprom_read_word(&ee_ID_time);
+		g_ID_period_seconds = eeprom_read_word(&ee_ID_time);
 
 		for(i=0; i<20; i++)
 		{
@@ -2141,7 +2130,7 @@ void initializeEEPROMVars(BOOL skipEventEnabled)
 		g_on_air_seconds = EEPROM_ON_AIR_TIME_DEFAULT;
 		g_off_air_seconds = EEPROM_OFF_AIR_TIME_DEFAULT;
 		g_intra_cycle_delay_time = EEPROM_INTRA_CYCLE_DELAY_TIME_DEFAULT;
-		g_ID_time = EEPROM_ID_TIME_INTERVAL_DEFAULT;
+		g_ID_period_seconds = EEPROM_ID_TIME_INTERVAL_DEFAULT;
 
 		strncpy(g_messages_text[STATION_ID], EEPROM_STATION_ID_DEFAULT, MAX_PATTERN_TEXT_LENGTH);
 		strncpy(g_messages_text[PATTERN_TEXT], EEPROM_PATTERN_TEXT_DEFAULT, MAX_PATTERN_TEXT_LENGTH);
@@ -2166,7 +2155,7 @@ void saveAllEEPROM()
 	eeprom_update_word(&ee_on_air_time, g_on_air_seconds);
 	eeprom_update_word(&ee_off_air_time, g_off_air_seconds);
 	eeprom_update_word(&ee_intra_cycle_delay_time, g_intra_cycle_delay_time);
-	eeprom_update_word(&ee_ID_time, g_ID_time);
+	eeprom_update_word(&ee_ID_time, g_ID_period_seconds);
 
 	for(i=0; i<strlen(g_messages_text[STATION_ID]); i++)
 	{

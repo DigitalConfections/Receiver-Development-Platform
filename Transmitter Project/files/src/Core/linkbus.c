@@ -36,7 +36,6 @@ static volatile BOOL g_bus_disabled = TRUE;
 static char g_tempMsgBuff[LINKBUS_MAX_MSG_LENGTH];
 
 /* Local function prototypes */
-BOOL linkbus_send_text(char* text);
 BOOL linkbus_start_tx(void);
 
 /* Module global variables */

@@ -209,6 +209,7 @@
         var g_transmitterTimeMs = 0;
         var g_websock = null;
         var g_timesync_rcvd = 0;
+        var g_webSocketAliveTimer = 0;
 
         var g_eventIsRunning = false;
 
@@ -587,7 +588,7 @@
             return row;
         }
 
-        g_timeUpdateTimer = setInterval(function() {
+        g_timeUpdateTimer = setTimeout(function() {
             updateDisplayedLocalTime();
 
             if (g_stillConnected) {
@@ -650,16 +651,17 @@
                     console.log("websock open");
                     websocketcreated = true;
                     g_stillConnected = Math.max(200, g_stillConnected);
+
                     setTimeout(function() {
-                        sendToSocket("MAC");
-                    }, 100);
-                    setTimeout(function() {
-                        sendBand();
-                    }, 300);
+                        sendSocketAlive();
+                    }, 250);
                     setTimeout(function() {
                         sendToSocket("SSID");
                     }, 500);
-                };
+                    setTimeout(function() {
+                        sendToSocket("MAC");
+                    }, 750);
+                }
 
                 g_websock.onclose = function(evt) {
                     if (g_numberOfOpenWebSockets) g_numberOfOpenWebSockets--;
@@ -809,8 +811,7 @@
                                 var ec = parseInt(arr[1], 10);
 
                                 switch (ec) {
-                                    //	ERROR_CODE_NO_ERROR = 0x00,
-                                    case 0x00:
+                                    case 0x00: //	ERROR_CODE_NO_ERROR = 0x00
                                         {
                                             text = "No error";
                                         }
@@ -901,50 +902,49 @@
                                         }
                                         break;
 
-                                        //	ERROR_CODE_SUPPLY_VOLTAGE_ERROR = 0xF9,
+                                        //	ERROR_CODE_SUPPLY_VOLTAGE_ERROR = 0xF9
                                     case 0xF9:
                                         {
                                             text = "Supply voltage out of range";
                                         }
                                         break;
 
-                                        //	ERROR_CODE_BUCK_REG_OUTOFSPEC = 0xFA,
+                                        //	ERROR_CODE_BUCK_REG_OUTOFSPEC = 0xFA
                                     case 0xFA:
                                         {
                                             text = "Power amplifier voltage out of range";
                                         }
                                         break;
 
-                                        //	ERROR_CODE_CLKGEN_NONRESPONSIVE = 0xFB,
+                                        //	ERROR_CODE_CLKGEN_NONRESPONSIVE = 0xFB
                                     case 0xFB:
                                         {
                                             text = "Signal generator not responding";
                                         }
                                         break;
 
-                                        //	ERROR_CODE_RTC_NONRESPONSIVE = 0xFC,
+                                        //	ERROR_CODE_RTC_NONRESPONSIVE = 0xFC
                                     case 0xFC:
                                         {
                                             text = "Real-time clock not responding";
                                         }
                                         break;
 
-                                        //	ERROR_CODE_DAC3_NONRESPONSIVE = 0xFD,
+                                        //	ERROR_CODE_DAC3_NONRESPONSIVE = 0xFD
                                     case 0xFD:
                                         {
                                             text = "DAC3 not responding";
                                         }
                                         break;
 
-                                        //	ERROR_CODE_DAC2_NONRESPONSIVE = 0xFE,
+                                        //	ERROR_CODE_DAC2_NONRESPONSIVE = 0xFE
                                     case 0xFE:
                                         {
                                             text = "DAC2 not responding";
                                         }
                                         break;
 
-                                        //	ERROR_CODE_DAC1_NONRESPONSIVE = 0xFF
-                                    case 0xFF:
+                                    case 0xFF: //	ERROR_CODE_DAC1_NONRESPONSIVE = 0xFF
                                         {
                                             text = "DAC1 not responding";
                                         }
@@ -1200,10 +1200,6 @@
                                 }
                             }
 
-                        case "TEST":
-                            {}
-                            break;
-
                         default:
                             console.log("Unrecognized message: ", str);
                             break;
@@ -1263,6 +1259,20 @@
             return num <= min ? min : num >= max ? max : num;
         }
 
+        function sendSocketAlive() {
+            if (g_webSocketAliveTimer != 0) {
+                clearInterval(g_webSocketAliveTimer);
+                g_webSocketTxTimer = 0;
+            }
+
+            console.log("Alive.");
+            sendToSocket("!&");
+
+            g_webSocketAliveTimer = setTimeout(function() {
+                sendSocketAlive();
+            }, 2000);
+        }
+
         function sendToSocket(msg) {
             var now = Date.now();
             var dif = now - g_lastPacketTime;
@@ -1286,7 +1296,7 @@
                     console.log("Socket null. Command delayed.");
                 }
 
-                g_webSocketTxTimer = setInterval(function() {
+                g_webSocketTxTimer = setTimeout(function() {
                     sendToSocket(msg);
                 }, 5000);
 
@@ -1297,7 +1307,7 @@
                     g_lastSocketTxMessage = msg;
                 } else {
                     console.log("Commands too rapid. Delaying send.");
-                    g_webSocketTxTimer = setInterval(function() {
+                    g_webSocketTxTimer = setTimeout(function() {
                         sendToSocket(msg);
                     }, 150);
                 }
@@ -1327,7 +1337,7 @@
             sendToSocket(btext);
             updateDisplayedLocalTime();
 
-            g_timeUpdateTimer = setInterval(function() {
+            g_timeUpdateTimer = setTimeout(function() {
                 if (g_stillConnected) {
                     updateDisplayedLocalTime();
                     if (g_stillConnected) {
@@ -1470,7 +1480,7 @@
                 }
             } else {
                 console.log("Freq too fast. Delaying send.");
-                g_webSocketTxFreqTimer = setInterval(function() {
+                g_webSocketTxFreqTimer = setTimeout(function() {
                     sendFreq(freq);
                 }, 300);
             }
@@ -1959,7 +1969,7 @@
             if (f != 0) {
                 if (f < 0) f = -f;
                 var time = 500 - (5 * f);
-                g_timer = setInterval(function() {
+                g_timer = setTimeout(function() {
                     incFreq1();
                 }, time);
             }
@@ -2040,7 +2050,6 @@
 
                 updateFreqButtonText();
                 freq1String(val);
-                sendFreq(val);
             } else {
                 clearInterval(g_timer);
                 g_timer = 0;
@@ -2055,6 +2064,7 @@
 
             freq.value = 0;
             count.textContent = "<<<\xa0\xa0\xa0<<\xa0\xa0\xa0<\xa0\xa0\xa0>\xa0\xa0\xa0>>\xa0\xa0\xa0>>>";
+            sendFreq(g_freq1FrequencyHz, 4);
         }
 
         ////////////////////////////////////////////////////////////

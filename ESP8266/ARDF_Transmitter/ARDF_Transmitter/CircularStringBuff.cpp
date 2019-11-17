@@ -19,52 +19,81 @@
 *   DEALINGS IN THE SOFTWARE.
 *
 **********************************************************************************************/
+#include <Arduino.h>
+#include "CircularStringBuff.h"
 
-#ifndef _HELPERS_H_
-#define _HELPERS_H_
-
-#include <ESP8266WiFi.h>
-
-#ifndef SecondsFromHours
-#define SecondsFromHours(hours) ((hours) * 3600)
-#endif
-
-#ifndef SecondsFromMinutes
-#define SecondsFromMinutes(min) ((min) * 60)
-#endif
-
-#ifndef HoursFromSeconds
-#define HoursFromSeconds(seconds) ((seconds) / 3600)
-#endif
-
-#ifndef MinutesFromSeconds
-#define MinutesFromSeconds(seconds) ((seconds) / 60)
-#endif
-
-#ifndef min
-#define min(x, y)  ((x) < (y) ? (x) : (y))
-#endif
-
-typedef struct
+CircularStringBuff::CircularStringBuff(size_t size)
 {
-	int tm_sec;
-	int tm_min;
-	int tm_hour;
-	int tm_mday;
-	int tm_yday;
-	int tm_mon;
-	int tm_year;
-	int tm_ym4;
-} Tyme;
+	buf_ = new String[size];
+	max_size_ = size;
+}
 
-const char * stringObjToConstCharString(String *val);
-IPAddress stringToIP(String addr);
-String formatBytes(size_t bytes);
-String getContentType(String filename);
-bool isLeapYear(int year);
-unsigned long convertTimeStringToEpoch(String s);
-bool mystrptime(String s, Tyme* tm);
-String checksum(String str);
-bool validateMessage(String str);
+void CircularStringBuff::reset()
+{
+	head_ = tail_;
+	full_ = false;
+}
 
-#endif  /*_HELPERS_H_ */
+bool CircularStringBuff::empty() const
+{
+	/*if head and tail are equal, we are empty */
+	return(!full_ && (head_ == tail_));
+}
+
+bool CircularStringBuff::full() const
+{
+	return(full_);
+}
+
+size_t CircularStringBuff::capacity() const
+{
+	return(max_size_);
+}
+
+size_t CircularStringBuff::size() const
+{
+	size_t size = max_size_;
+
+	if(!full_)
+	{
+		if(head_ >= tail_)
+		{
+			size = head_ - tail_;
+		}
+		else
+		{
+			size = max_size_ + head_ - tail_;
+		}
+	}
+
+	return(size);
+}
+
+void CircularStringBuff::put(String item)
+{
+	buf_[head_] = item;
+
+	if(full_)
+	{
+		tail_ = (tail_ + 1) % max_size_;
+	}
+
+	head_ = (head_ + 1) % max_size_;
+
+	full_ = head_ == tail_;
+}
+
+String CircularStringBuff::get()
+{
+	if(empty())
+	{
+		return("");
+	}
+
+	/*Read data and advance the tail (we now have a free space) */
+	String val = buf_[tail_];
+	full_ = false;
+	tail_ = (tail_ + 1) % max_size_;
+
+	return(val);
+}
