@@ -1,30 +1,30 @@
 /**********************************************************************************************
-   Copyright © 2019 Digital Confections LLC
-
-   Permission is hereby granted, free of charge, to any person obtaining a copy of
-   this software and associated documentation files (the "Software"), to deal in the
-   Software without restriction, including without limitation the rights to use, copy,
-   modify, merge, publish, distribute, sublicense, and/or sell copies of the Software,
-   and to permit persons to whom the Software is furnished to do so, subject to the
-   following conditions:
-
-   The above copyright notice and this permission notice shall be included in all
-   copies or substantial portions of the Software.
-
-   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
-   INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
-   PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
-   FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-   OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-   DEALINGS IN THE SOFTWARE.
-
+ *  Copyright © 2019 Digital Confections LLC
+ *
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy of
+ *  this software and associated documentation files (the "Software"), to deal in the
+ *  Software without restriction, including without limitation the rights to use, copy,
+ *  modify, merge, publish, distribute, sublicense, and/or sell copies of the Software,
+ *  and to permit persons to whom the Software is furnished to do so, subject to the
+ *  following conditions:
+ *
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
+ *
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+ *  INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+ *  PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+ *  FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+ *  OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ *  DEALINGS IN THE SOFTWARE.
+ *
  **********************************************************************************************
-
-   esp8266.h
-
-   Created: 6/18/2017 2:08:00 PM
-   Author: Digital Confections LLC
-*/
+ *
+ *  esp8266.h
+ *
+ *  Created: 6/18/2017 2:08:00 PM
+ *  Author: Digital Confections LLC
+ */
 
 
 #ifndef ESP8266_H_
@@ -34,6 +34,7 @@
 #define USE_UDP_FOR_TIME_RETRIEVAL
 #define MULTI_ACCESS_POINT_SUPPORT
 #define SERIAL_BAUD_RATE 9600
+//#define SERIAL_BAUD_RATE 19200
 
 #define MAX_NUMBER_OF_WEB_CLIENTS WEBSOCKETS_SERVER_CLIENT_MAX
 
@@ -52,29 +53,29 @@
 #define BRIDGE_PW_DEFAULT ""
 #define BRIDGE_TCP_PORT_DEFAULT String("73")
 #define LEDS_ENABLE_DEFAULT true
-#define DEBUG_PRINTS_ENABLE_DEFAULT true
+#define DEBUG_PRINTS_ENABLE_DEFAULT false
 #define WIFI_DEBUG_PRINTS_ENABLED false
 
 
 typedef enum
 {
-  HOTSPOT_SSID1,
-  HOTSPOT_PW1,
-  HOTSPOT_SSID2,
-  HOTSPOT_PW2,
-  HOTSPOT_SSID3,
-  HOTSPOT_PW3,
-  MDNS_RESPONDER,
-  SOFT_AP_IP_ADDR,
-  TIME_HOST,
-  TIME_HTTP_PORT,
-  BRIDGE_IP_ADDR,
-  BRIDGE_SSID,
-  BRIDGE_PW,
-  BRIDGE_TCP_PORT,
-  LEDS_ENABLE,
-  DEBUG_PRINTS_ENABLE,
-  NUMBER_OF_SETTABLE_VARIABLES
+	HOTSPOT_SSID1,
+	HOTSPOT_PW1,
+	HOTSPOT_SSID2,
+	HOTSPOT_PW2,
+	HOTSPOT_SSID3,
+	HOTSPOT_PW3,
+	MDNS_RESPONDER,
+	SOFT_AP_IP_ADDR,
+	TIME_HOST,
+	TIME_HTTP_PORT,
+	BRIDGE_IP_ADDR,
+	BRIDGE_SSID,
+	BRIDGE_PW,
+	BRIDGE_TCP_PORT,
+	LEDS_ENABLE,
+	DEBUG_PRINTS_ENABLE,
+	NUMBER_OF_SETTABLE_VARIABLES
 } WiFiMemory;
 
-#endif /* ESP8266_H_ */
+#endif  /* ESP8266_H_ */

@@ -819,10 +819,34 @@ BOOL txSleeping(BOOL enableSleep)
 	if(ec == ERROR_CODE_NO_ERROR)
 	{
 		uint8_t val;
+		static uint8_t timeOut = 30; /* don't wait forever for success */
 
 		if(!dac081c_read_dac(&val, BIAS_DAC)) // ensure the DAC is set to zero
 		{
-			if(!val) return TRUE;
+			if(!val)
+			{
+				 return TRUE;
+			}
+			else
+			{
+				if(timeOut) timeOut--;
+				
+				if(!timeOut)
+				{
+					timeOut = 10;
+					return TRUE;
+				}
+			}
+		}
+		else
+		{
+			if(timeOut) timeOut--;
+				
+			if(!timeOut)
+			{
+				timeOut = 10;
+				return TRUE;
+			}
 		}
 	}
 	else if(enableSleep)

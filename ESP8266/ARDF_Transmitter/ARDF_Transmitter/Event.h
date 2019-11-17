@@ -180,6 +180,9 @@ bool setCodeSpeedForRole(int roleIndex, String str);
 int getCodeSpeedForRole(int roleIndex) const;
 bool setIDIntervalForRole(int roleIndex, String str);
 int getIDIntervalForRole(int roleIndex) const;
+    
+bool setPatternForTx(int typeIndex, int txIndex, String str);
+String getPatternForTx(int typeIndex, int txIndex) const;
 
 bool validateEvent(void);
 bool readEventFile(String path);

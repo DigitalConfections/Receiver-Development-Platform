@@ -211,6 +211,7 @@
         var g_eventIsRunning = false;
 
         var g_loading_data = true;
+        var g_event_changes_saved = true;
 
         ///////////////////////////////
         // Settings
@@ -222,8 +223,13 @@
         var g_selectedTxType;
         var g_typeFrequency = [{
             frequency: 3510000,
-            role: "Role",
+            role: "Role"
         }]; /* Frequency used by transmitters in that "role" */
+
+        var g_typePower = [{
+            power: "2000",
+            role: "Role"
+        }]
 
         var g_eventTableData = [{
             name: "Event",
@@ -447,6 +453,7 @@
                 cell0.setAttribute("border", "1px solid black");
                 if (g_selectedEvent == rowData.name) {
                     cell0.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold; color:black; text-align:center;");
+                    cell0.id = "eventName";
                 } else {
                     cell0.setAttribute("style", "font-family:verdana; font-size:15px; color:black; text-align:center;");
                 }
@@ -459,6 +466,7 @@
                 cell0.setAttribute("border", "1px solid black");
                 if (g_selectedEvent == rowData.name) {
                     cell0.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold; color:black; text-align:center;");
+                    cell0.id = "eventVersion";
                 } else {
                     cell0.setAttribute("style", "font-family:verdana; font-size:15px; color:black; text-align:center;");
                 }
@@ -594,7 +602,7 @@
                         option = document.createElement('option');
                         option.setAttribute('value', g_powerLevels[i]);
                         option.appendChild(document.createTextNode(g_powerLevels[i]));
-                        if (g_powerLevels[i] == g_powerLevel) {
+                        if (g_powerLevels[i] == rowData.power) {
                             option.setAttribute("selected", "true");
                         }
                         console.log("Power option:", g_powerLevels[i]);
@@ -1023,6 +1031,7 @@
                                 g_selectedEvent = arr[1];
                                 g_typeTxNames = [];
                                 g_typeFrequency = [];
+                                g_typePower = [];
                                 g_selectedTxType = "";
                                 hideFreqSettings();
 
@@ -1030,11 +1039,14 @@
                                 hideFreqSet1();
                                 updateTextFormatting();
                                 g_eventTableData = [{
-                                    name: "-",
-                                    version: "-",
-                                    start: "-",
-                                    finish: "-",
-                                    role: "-"
+                                    name: "Event",
+                                    version: "Ver.",
+                                    start: "Start Time",
+                                    finish: "Finish Time",
+                                    role: "Fox",
+                                    callsign: "Call",
+                                    power: "Power",
+                                    frequency: "Freq"
                                 }];
                                 displayEvents(true);
                             }
@@ -1216,7 +1228,7 @@
                                     var freqStr = {
                                         frequency: arr[1],
                                         role: arr[2]
-                                    };
+                                    }
 
                                     g_typeFrequency.push(freqStr);
                                     console.log(g_typeFrequency.length, "Freq: ", freqStr);
@@ -1254,14 +1266,30 @@
 
                         case "POWER":
                             {
-                                var mw = arr[1];
+                                if (arr.length > 2) {
+                                    var powerStr = {
+                                        power: arr[1],
+                                        role: arr[2]
+                                    }
 
-                                console.log("tx power: ", arr[1]);
-                                var pe = document.getElementById("pwrSelect");
+                                    g_typePower.push(powerStr);
+                                    console.log(g_typePower.length, "Power: ", powerStr);
+                                } else if (arr[1].length > 0) {
+                                    var mw = arr[1];
 
-                                if (pe != null) {
-                                    pe.value = arr[1];
+                                    console.log("tx power: ", arr[1]);
+                                    var pe = document.getElementById("pwrSelect");
+
+                                    if (pe != null) {
+                                        pe.value = arr[1];
+                                    }
                                 }
+                            }
+                            break;
+
+                        case "SAVED_EVENT":
+                            {
+                                g_event_changes_saved = true;
                             }
                             break;
 
@@ -1390,6 +1418,7 @@
                 btext = b.value;
                 btext = "CALLSIGN," + btext;
                 sendToSocket(btext);
+                g_event_changes_saved = false;
             }
 
             console.log(btext);
@@ -1404,6 +1433,7 @@
                 sendToSocket(msgText);
                 console.log(msgText);
                 g_powerLevel = power;
+                g_event_changes_saved = false;
             }
         }
 
@@ -1416,6 +1446,7 @@
                 console.log(msgText);
                 sendToSocket(msgText);
                 g_freq1FrequencyHz = freqStr;
+                g_event_changes_saved = false;
             }
         }
 
@@ -1457,6 +1488,7 @@
             sendToSocket(msgText);
             msgText = "POWER," + currentRoleIndex();
             sendToSocket(msgText);
+            g_event_changes_saved = false;
         }
 
         function pwrClick() {
@@ -1557,6 +1589,7 @@
 
             console.log(msgText);
             sendToSocket(msgText);
+            g_event_changes_saved = false;
         }
 
         function applyNewStartTime(t) {
@@ -1607,6 +1640,7 @@
 
             console.log(msgText);
             sendToSocket(msgText);
+            g_event_changes_saved = false;
         }
 
         function applyNewFinishTime(t) {
@@ -1723,7 +1757,7 @@
                 var runButton = document.getElementById("activeRunButton");
 
                 if (runButton) {
-                    if ((stat == "Finished") && (runButton.value == "Run")) {
+                    if ((!g_event_changes_saved || (stat == "Finished")) && (runButton.value == "Run")) {
                         runButton.disabled = true;
                         runButton.style.backgroundColor = "gray";
                     } else {
@@ -1735,10 +1769,12 @@
 
             var fTime = document.getElementById("xmtrTime");
 
-            if (fTime.innerHTML.indexOf("Disconnected") !== -1) {
-                fTime.style.color = "red";
-            } else {
-                fTime.style.color = "black";
+            if (fTime) {
+                if (fTime.innerHTML.indexOf("Disconnected") !== -1) {
+                    fTime.style.color = "red";
+                } else {
+                    fTime.style.color = "black";
+                }
             }
         }
 

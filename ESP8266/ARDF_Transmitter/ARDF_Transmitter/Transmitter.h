@@ -137,6 +137,9 @@ typedef enum
 	STATUS_CODE_WAITING_FOR_EVENT_START = 0xFF
 } SC;
 
+/* Websocket Info Messages */
+#define SOCK_MESSAGE_EVENT_SAVED "SAVED_EVENT"
+
 /* Websocket Command Messages */
 #define SOCK_COMMAND_ALIVE "!&"
 #define SOCK_COMMAND_ERROR "ERR_CODE"

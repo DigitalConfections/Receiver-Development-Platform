@@ -112,7 +112,7 @@ static volatile uint16_t g_time_needed_for_ID = 0;
 static volatile int16_t g_on_air_seconds = EEPROM_ON_AIR_TIME_DEFAULT; /* amount of time to spend on the air */
 static volatile int16_t g_off_air_seconds = EEPROM_OFF_AIR_TIME_DEFAULT; /* amount of time to wait before returning to the air */
 static volatile int16_t g_intra_cycle_delay_time = EEPROM_INTRA_CYCLE_DELAY_TIME_DEFAULT; /* offset time into a repeating transmit cycle */
-static volatile int16_t g_ID_time = EEPROM_ID_TIME_INTERVAL_DEFAULT; /* amount of time between ID/callsign transmissions */
+static volatile int16_t g_ID_period_seconds = EEPROM_ID_TIME_INTERVAL_DEFAULT; /* amount of time between ID/callsign transmissions */
 static volatile time_t g_event_start_time = EEPROM_START_TIME_DEFAULT;
 static volatile time_t g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
 static volatile BOOL g_event_enabled = EEPROM_EVENT_ENABLED_DEFAULT; /* indicates that the conditions for executing the event are set */
@@ -125,8 +125,6 @@ static volatile uint16_t g_code_throttle = 50;
 static volatile uint8_t g_WiFi_shutdown_seconds = 120;
 static volatile BOOL g_report_seconds = FALSE;
 static volatile BOOL g_wifi_active = TRUE;
-
-static int16_t g_ID_seconds = 60; /* holds value for g_ID_time adjusted for g_on_air_seconds */
 
 /* ADC Defines */
 
@@ -359,7 +357,7 @@ ISR( INT0_vect )
 							if(g_on_the_air == g_time_needed_for_ID) // wait until the end of a transmission
 							{
 								g_last_status_code = STATUS_CODE_SENDING_ID;
-								g_time_to_send_ID_countdown = g_ID_seconds;
+								g_time_to_send_ID_countdown = g_ID_period_seconds;
 								g_code_throttle = throttleValue(g_id_codespeed);
 								repeat = FALSE;
 								makeMorse(g_messages_text[STATION_ID], &repeat, NULL); /* Send only once */
@@ -416,17 +414,18 @@ ISR( INT0_vect )
 					{
 						g_last_status_code = STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT;
 						g_on_the_air = -g_intra_cycle_delay_time;
+						g_time_to_send_ID_countdown = g_intra_cycle_delay_time + g_on_air_seconds - g_time_needed_for_ID;
 					}
 					else
 					{
 						g_last_status_code = STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING;
 						g_on_the_air = g_on_air_seconds;
+						g_time_to_send_ID_countdown = g_on_air_seconds - g_time_needed_for_ID;
 						g_code_throttle = throttleValue(g_pattern_codespeed);
 						BOOL repeat = TRUE;
 						makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
 					}
 
-					g_time_to_send_ID_countdown = g_ID_seconds;
 					g_event_commenced = TRUE;
 				}
 			}
@@ -475,6 +474,7 @@ ISR( INT0_vect )
 					}
 					else
 					{
+						g_go_to_sleep = TRUE;
 						g_seconds_to_sleep = MAX_TIME;
 					}
 				}
@@ -1419,10 +1419,10 @@ int main( void )
 
 		if(g_check_for_next_event)
 		{
-			/* Power up the WiFi module if it isn't already powered up */
-			if(!wifi_enabled())
+			if(!g_WiFi_shutdown_seconds) // For now just go to sleep forever
 			{
-
+				g_go_to_sleep = TRUE;
+				g_seconds_to_sleep = MAX_TIME;
 			}
 
 			/* If WiFi is powered up, send it a request for the next active event */
@@ -1500,7 +1500,7 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 				}
 				else if(f1 == '2') /* ESP module needs continuous power to save data */
 				{
-					suspendEvent();
+					//suspendEvent();
 					g_WiFi_shutdown_seconds = 0; // disable sleep
 					lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ESP_LABEL, "2"); /* Save data now */
 				}
@@ -1793,7 +1793,7 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					if(lb_buff->fields[FIELD2][0])
 					{
 						time = atol(lb_buff->fields[FIELD2]);
-						g_ID_time = time;
+						g_ID_period_seconds = time;
 						saveAllEEPROM();
 						event_parameter_count++;
 					}
@@ -2005,11 +2005,9 @@ EC activateEventUsingCurrentSettings(SC* statusCode)
 	if(!g_pattern_codespeed) return ERROR_CODE_EVENT_PATTERN_CODE_SPEED_NOT_SPECIFIED;
 	if(g_messages_text[STATION_ID][0] != '\0')
 	{
-		if((!g_id_codespeed || !g_ID_time)) return ERROR_CODE_EVENT_STATION_ID_ERROR;
+		if((!g_id_codespeed || !g_ID_period_seconds)) return ERROR_CODE_EVENT_STATION_ID_ERROR;
 
 		g_time_needed_for_ID = (500 + timeRequiredToSendStrAtWPM(g_messages_text[STATION_ID], g_id_codespeed)) / 1000;
-		g_ID_seconds = g_ID_time;
-		g_time_to_send_ID_countdown = g_ID_seconds; // countdown will not commence until event commences
 	}
 	else
 	{
@@ -2043,18 +2041,24 @@ EC activateEventUsingCurrentSettings(SC* statusCode)
 				{
 					g_on_the_air = -(cyclePeriod + timeTillTransmit);
 					if(statusCode) *statusCode = STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT;
+					g_time_to_send_ID_countdown = (g_on_air_seconds - g_on_the_air) - g_time_needed_for_ID;
 				}
 				else // we should be transmitting right now
 				{
 					g_on_the_air = g_on_air_seconds + timeTillTransmit;
 					turnOnTransmitter = TRUE;
 					if(statusCode) *statusCode = STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING;
+					if(g_time_needed_for_ID < g_on_the_air)
+					{
+						g_time_to_send_ID_countdown = g_on_the_air - g_time_needed_for_ID;
+					}
 				}
 			}
-			else // not yet time time to transmit in this cycle
+			else // it is not yet time to transmit in this cycle
 			{
 				g_on_the_air = -timeTillTransmit;
 				if(statusCode) *statusCode = STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT;
+				g_time_to_send_ID_countdown = timeTillTransmit + g_on_air_seconds - g_time_needed_for_ID;
 			}
 
 			if(turnOnTransmitter)
@@ -2100,7 +2104,7 @@ void initializeEEPROMVars(BOOL skipEventEnabled)
 		g_on_air_seconds = eeprom_read_word(&ee_on_air_time);
 		g_off_air_seconds = eeprom_read_word(&ee_off_air_time);
 		g_intra_cycle_delay_time = eeprom_read_word(&ee_intra_cycle_delay_time);
-		g_ID_time = eeprom_read_word(&ee_ID_time);
+		g_ID_period_seconds = eeprom_read_word(&ee_ID_time);
 
 		for(i=0; i<20; i++)
 		{
@@ -2126,7 +2130,7 @@ void initializeEEPROMVars(BOOL skipEventEnabled)
 		g_on_air_seconds = EEPROM_ON_AIR_TIME_DEFAULT;
 		g_off_air_seconds = EEPROM_OFF_AIR_TIME_DEFAULT;
 		g_intra_cycle_delay_time = EEPROM_INTRA_CYCLE_DELAY_TIME_DEFAULT;
-		g_ID_time = EEPROM_ID_TIME_INTERVAL_DEFAULT;
+		g_ID_period_seconds = EEPROM_ID_TIME_INTERVAL_DEFAULT;
 
 		strncpy(g_messages_text[STATION_ID], EEPROM_STATION_ID_DEFAULT, MAX_PATTERN_TEXT_LENGTH);
 		strncpy(g_messages_text[PATTERN_TEXT], EEPROM_PATTERN_TEXT_DEFAULT, MAX_PATTERN_TEXT_LENGTH);
@@ -2151,7 +2155,7 @@ void saveAllEEPROM()
 	eeprom_update_word(&ee_on_air_time, g_on_air_seconds);
 	eeprom_update_word(&ee_off_air_time, g_off_air_seconds);
 	eeprom_update_word(&ee_intra_cycle_delay_time, g_intra_cycle_delay_time);
-	eeprom_update_word(&ee_ID_time, g_ID_time);
+	eeprom_update_word(&ee_ID_time, g_ID_period_seconds);
 
 	for(i=0; i<strlen(g_messages_text[STATION_ID]); i++)
 	{

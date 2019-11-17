@@ -174,8 +174,11 @@ String Event::getTxDescriptiveName(String role_tx)          /* role_tx = "r:t" *
 	int roleIndex = (role_tx.substring(0, i)).toInt();  /* r */
 	int txIndex = (role_tx.substring(i + 1)).toInt();   /* t */
 
-	Serial.println(String("role = " + String(roleIndex) + "; tx = " + String(txIndex)));
-
+//    if(debug_prints_enabled)
+//    {
+//    	Serial.println(String("role = " + String(roleIndex) + "; tx = " + String(txIndex)));
+//    }
+    
 	if(((roleIndex >= 0) && (roleIndex < this->eventData->event_number_of_tx_types)) && ((txIndex >= 0) && (txIndex < this->eventData->role[roleIndex]->numberOfTxs)))
 	{
 		int txsInRole = this->eventData->role[roleIndex]->numberOfTxs;
@@ -249,10 +252,10 @@ String Event::readMeFile(String path)
 			file.close();   /* Close the file */
 		}
 
-		if(debug_prints_enabled)
-		{
-			Serial.println(String("\tWrote file: ") + path);
-		}
+//		if(debug_prints_enabled)
+//		{
+//			Serial.println(String("\tWrote file: ") + path);
+//		}
 
 		this->eventData->tx_assignment = "0:0";
 		this->eventData->tx_assignment_is_default = true;
@@ -387,10 +390,10 @@ bool Event::readEventFile(String path)
 			if(!s.equalsIgnoreCase(String(EVENT_FILE_START)))
 			{
 				failure = true;
-				if(debug_prints_enabled)
-				{
-					Serial.println(String("Err in 1st line: " + s));
-				}
+//				if(debug_prints_enabled)
+//				{
+//					Serial.println(String("Err in 1st line: " + s));
+//				}
 			}
 			int count = 0;
 
@@ -405,10 +408,10 @@ bool Event::readEventFile(String path)
 			if(!hold.equalsIgnoreCase(String(EVENT_FILE_END)) || (count > MAXIMUM_NUMBER_OF_EVENT_FILE_LINES))
 			{
 				failure = true;
-				if(debug_prints_enabled)
-				{
-					Serial.println(String("Err in last line: " + hold));
-				}
+//				if(debug_prints_enabled)
+//				{
+//					Serial.println(String("Err in last line: " + hold));
+//				}
 			}
 
 			file.close();   /* Close the file */
@@ -423,17 +426,17 @@ bool Event::readEventFile(String path)
 		return( true);
 	}
 
-	if(debug_prints_enabled)
-	{
-		if(failure)
-		{
-			Serial.println(String("\tError reading event: ") + path);
-		}
-		else
-		{
-			Serial.println(String("\tSuccessfully read event: ") + path);
-		}
-	}
+//	if(debug_prints_enabled)
+//	{
+//		if(failure)
+//		{
+//			Serial.println(String("\tError reading event: ") + path);
+//		}
+//		else
+//		{
+//			Serial.println(String("\tSuccessfully read event: ") + path);
+//		}
+//	}
 
 	return( failure);
 }
@@ -537,18 +540,19 @@ bool Event::writeEventFile(String path)
 
 	if(this->values_did_change == false)
 	{
-		if(debug_prints_enabled)
-		{
-			Serial.print("Not written: Event did not change.");
-		}
-		Serial.println(path);
+//		if(debug_prints_enabled)
+//		{
+//			Serial.print("Not written: Event did not change.");
+//			Serial.println(path);
+//        }
+    
 		return( false); /*nothing new to save, return no error */
 	}
-	else if(debug_prints_enabled)
-	{
-		Serial.print("Writing Event changes to:");
-		Serial.println(path);
-	}
+//	else if(debug_prints_enabled)
+//	{
+//		Serial.print("Writing Event changes to:");
+//		Serial.println(path);
+//	}
 
 	if(path == NULL)
 	{
@@ -563,12 +567,16 @@ bool Event::writeEventFile(String path)
 	/*    SPIFFS.remove(path); */
 	/*  } */
 
-	if(debug_prints_enabled)
-	{
-		Serial.print("Writing file: ");
-	}
+//	if(debug_prints_enabled)
+//	{
+//		Serial.print("Writing file: ");
+//	}
     
-	Serial.println(path);
+//    if(debug_prints_enabled)
+//    {
+//        Serial.println(path);
+//    }
+    
 	File eventFile = SPIFFS.open(path, "w");    /* Open the file for writing in SPIFFS (create if it doesn't exist) */
 
 	this->myPath = path;
@@ -668,10 +676,10 @@ void Event::saveMeData(String newAssignment)
 			file.println(EVENT_FILE_END);
 			file.close();   /* Close the file */
 
-			if(debug_prints_enabled)
-			{
-				Serial.println(String("\tWrote file: ") + path);
-			}
+//			if(debug_prints_enabled)
+//			{
+//				Serial.println(String("\tWrote file: ") + path);
+//			}
 		}
 	}
 
@@ -701,7 +709,11 @@ bool Event::setTxAssignment(String role_slot)
         this->eventData->tx_role_pwr = Event::getPowerlevelForRole(r.toInt());
 		this->eventData->tx_role_freq = Event::getFrequencyForRole(r.toInt());
 		this->values_did_change = true;
-		Serial.println("Set role: " + this->eventData->tx_assignment);
+        
+//        if(debug_prints_enabled)
+//        {
+//            Serial.println("Set role: " + this->eventData->tx_assignment);
+//        }
 	}
 
 	return( false);
@@ -711,7 +723,11 @@ String Event::getTxAssignment(void)
 {
 	if((this->eventData->tx_assignment.length() < 1) || (this->eventData->tx_assignment.indexOf(":") < 1))
 	{
-		Serial.println("Reading ME file...");
+//        if(debug_prints_enabled)
+//        {
+//            Serial.println("Reading ME file...");
+//        }
+        
 		readMeFile(this->myPath);
 	}
 
@@ -733,7 +749,11 @@ bool Event::setTxFrequency(String frequency)
 	{
 		this->eventData->tx_role_freq = frequency;
 		this->values_did_change = true;
-		Serial.println("Set frequency: " + this->eventData->tx_role_freq);
+        
+//        if(debug_prints_enabled)
+//        {
+//            Serial.println("Set frequency: " + this->eventData->tx_role_freq);
+//        }
 	}
 
 	return( false);
@@ -743,7 +763,11 @@ String Event::getTxFrequency(void)
 {
 	if((this->eventData->tx_assignment.length() < 1) || (this->eventData->tx_assignment.indexOf(":") < 1))
 	{
-		Serial.println("Reading ME file...");
+//        if(debug_prints_enabled)
+//        {
+//    		Serial.println("Reading ME file...");
+//        }
+        
 		readMeFile(this->myPath);
 	}
 
@@ -1265,6 +1289,50 @@ int Event::getCodeSpeedForRole(int roleIndex) const
 		return( -1);
 	}
 	return( this->eventData->role[roleIndex]->code_speed);
+}
+
+bool Event::setPatternForTx(int typeIndex, int txIndex, String str)
+{
+    if(this->eventData == NULL)
+    {
+        return( true);
+    }
+    if(typeIndex < 0)
+    {
+        return( true);
+    }
+    if(typeIndex >= this->eventData->event_number_of_tx_types)
+    {
+        return( true);
+    }
+    if(txIndex >= this->eventData->role[typeIndex]->numberOfTxs)
+    {
+        return( true);
+    }
+    this->eventData->role[typeIndex]->tx[txIndex]->pattern = str;
+    this->values_did_change = true;
+    return( false);
+}
+
+String Event::getPatternForTx(int roleIndex, int txIndex) const
+{
+	if(this->eventData == NULL)
+	{
+		return( "");
+	}
+	if(roleIndex < 0)
+	{
+		return( "");
+	}
+	if(roleIndex >= this->eventData->event_number_of_tx_types)
+	{
+		return( "");
+	}
+    if(txIndex >= this->eventData->role[roleIndex]->numberOfTxs)
+    {
+        return( "");
+    }
+	return( this->eventData->role[roleIndex]->tx[txIndex]->pattern);
 }
 
 bool Event::setIDIntervalForRole(int roleIndex, String str)
