@@ -167,7 +167,7 @@ static volatile time_t g_seconds_to_sleep = MAX_TIME;
  ************************************************************************/
 BOOL eventEnabled(BOOL noSleep, time_t* time_before_start);
 void handleLinkBusMsgs(void);
-void initializeEEPROMVars(BOOL skipEventEnabled);
+void initializeEEPROMVars(void);
 void saveAllEEPROM(void);
 void wdt_init(WDReset resetType);
 uint16_t throttleValue(uint8_t speed);
@@ -1162,7 +1162,7 @@ int main( void )
 
 	/**
 	 * Initialize vars stored in EEPROM */
-	initializeEEPROMVars(FALSE);
+	initializeEEPROMVars();
 	g_event_enabled = FALSE; // ensure the event is disabled until hardware is initialized
 
 	/**
@@ -2089,7 +2089,7 @@ EC activateEventUsingCurrentSettings(SC* statusCode)
 /**********************
 **********************/
 
-void initializeEEPROMVars(BOOL skipEventEnabled)
+void initializeEEPROMVars()
 {
 	uint8_t i;
 
@@ -2098,7 +2098,6 @@ void initializeEEPROMVars(BOOL skipEventEnabled)
 		g_event_start_time = eeprom_read_dword((uint32_t*)(&ee_start_time));
 		g_event_finish_time = eeprom_read_dword((uint32_t*)(&ee_finish_time));
 
-//		if(!skipEventEnabled) g_event_enabled = eeprom_read_byte(&ee_event_enabled);
 		g_pattern_codespeed = eeprom_read_byte(&ee_pattern_codespeed);
 		g_id_codespeed = eeprom_read_byte(&ee_id_codespeed);
 		g_on_air_seconds = eeprom_read_word(&ee_on_air_time);
@@ -2123,8 +2122,6 @@ void initializeEEPROMVars(BOOL skipEventEnabled)
 		g_event_start_time = EEPROM_START_TIME_DEFAULT;
 		g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
 
-//		if(!skipEventEnabled) g_event_enabled = EEPROM_EVENT_ENABLED_DEFAULT;
-
 		g_id_codespeed = EEPROM_ID_CODE_SPEED_DEFAULT;
 		g_pattern_codespeed = EEPROM_PATTERN_CODE_SPEED_DEFAULT;
 		g_on_air_seconds = EEPROM_ON_AIR_TIME_DEFAULT;
@@ -2143,7 +2140,7 @@ void initializeEEPROMVars(BOOL skipEventEnabled)
 
 void saveAllEEPROM()
 {
-	int i;
+	uint8_t i;
 	wdt_reset();                                    /* HW watchdog */
 
 	eeprom_update_dword((uint32_t*)&ee_start_time, g_event_start_time);
@@ -2198,6 +2195,6 @@ void initializeAllEventSettings(BOOL disableEvent)
 		keyTransmitter(OFF); // turn off the transmit signal
 	}
 
-	initializeEEPROMVars(disableEvent);
+	initializeEEPROMVars();
 	initializeTransmitterEEPROMVars();
 }

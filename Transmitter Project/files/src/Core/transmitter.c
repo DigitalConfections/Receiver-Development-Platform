@@ -267,9 +267,19 @@
 	{
 		BOOL err = FALSE;
 		EC code = ERROR_CODE_NO_ERROR;
+		uint16_t power;
 
 		BOOL isNewBand = FALSE;
 
+		if(power_mW)
+		{
+			power = *power_mW;
+		}
+		else
+		{
+			power = g_80m_power_level_mW;
+		}
+		
 		if(band != NULL)
 		{
 			/* Handle Band Setting */
@@ -281,10 +291,6 @@
 
 				if(*band == BAND_80M)
 				{
-					if(power_mW == NULL)
-					{
-						power_mW = (uint16_t*)g_80m_power_level_mW;
-					}
 					g_new_AM_mod_setting = FALSE;
 					g_new_power_enable_setting = TRUE;
 
@@ -292,7 +298,7 @@
 					{
 						g_new_parameters_received = TRUE;
 						g_new_2m_power_DAC_setting = 0;
-						g_new_power_level_mW = *power_mW;
+						g_new_power_level_mW = power;
 						g_new_band_setting = BAND_80M;
 
 						if(enableAM != NULL)
@@ -329,7 +335,7 @@
 
 					if(power_mW == NULL)
 					{
-						power_mW = (uint16_t*)g_2m_power_level_mW;
+						power = g_2m_power_level_mW;
 					}
 
 					if(enableAM == NULL)
@@ -351,7 +357,7 @@
 					g_am_modulation_enabled = TRUE;
 					if(power_mW == NULL)
 					{
-						power_mW = (uint16_t*)&g_2m_power_level_mW;
+						power = g_2m_power_level_mW;
 					}
 				}
 				else
@@ -363,12 +369,12 @@
 						g_am_modulation_enabled = FALSE;
 						if(power_mW == NULL)
 						{
-							power_mW = (uint16_t*)&g_2m_power_level_mW;
+							power = g_2m_power_level_mW;
 						}
 					}
 					else if(power_mW == NULL)
 					{
-						power_mW = (uint16_t*)&g_80m_power_level_mW;
+						power = g_80m_power_level_mW;
 					}
 				}
 			}
@@ -376,11 +382,11 @@
 
 		if(power_mW != NULL)
 		{
-			if(*power_mW <= MAX_TX_POWER_80M_MW)
+			if(power <= MAX_TX_POWER_80M_MW)
 			{
 				if(!txIsAntennaForBand())   /* no antenna attached */
 				{
-					if(*power_mW > 0)
+					if(power > 0)
 					{
 						code = ERROR_CODE_NO_ANTENNA_PREVENTS_POWER_SETTING;
 						err = TRUE;
@@ -390,7 +396,7 @@
 				if(!err)
 				{
 					uint8_t biasDAC, modLevelHigh, modLevelLow;
-					code = txMilliwattsToSettings(power_mW, &biasDAC, &modLevelHigh, &modLevelLow);
+					code = txMilliwattsToSettings(&power, &biasDAC, &modLevelHigh, &modLevelLow);
 					err = (code == ERROR_CODE_SW_LOGIC_ERROR);
 
 					/* Prevent possible damage to transmitter */
@@ -405,7 +411,7 @@
 						{
 							txGet2mModulationLevels(&modLevelHigh, &modLevelLow);
 
-							g_new_power_level_mW = *power_mW;
+							g_new_power_level_mW = power;
 							g_new_2m_power_DAC_setting = biasDAC;
 
 							BiasStateMachineCommand smc = BIAS_SM_STABILITY_CHECK;
@@ -429,7 +435,7 @@
 					}
 					else
 					{
-						g_80m_power_level_mW = *power_mW;
+						g_80m_power_level_mW = power;
 						err = dac081c_set_dac(biasDAC, PA_DAC);
 						if(err)
 						{
@@ -446,6 +452,8 @@
 						}
 					}
 				}
+				
+				*power_mW = power;
 			}
 		}
 
