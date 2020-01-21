@@ -887,11 +887,6 @@
                                         {
                                             text = "No antenna connected for that band";
                                             var btn = document.getElementById("keyButton");
-                                            if (btn != null) {
-                                                if (btn.value != "Xmit") {
-                                                    keyAction();
-                                                }
-                                            }
                                         }
                                         break;
 
@@ -1199,6 +1194,7 @@
                                     pe.value = arr[1];
                                 }
                             }
+                            break;
 
                         default:
                             console.log("Unrecognized message: ", str);
@@ -1350,13 +1346,6 @@
                     }
                 }
             }, 100);
-        }
-
-        function executeEvent() {
-            sendToSocket("CLEAR");
-            sendToSocket("EXECUTE");
-            console.log("Execute message sent to socket.");
-
         }
 
         function sendRefresh() {
@@ -1969,7 +1958,7 @@
             if (f != 0) {
                 if (f < 0) f = -f;
                 var time = 500 - (5 * f);
-                g_timer = setTimeout(function() {
+                g_timer = setInterval(function() {
                     incFreq1();
                 }, time);
             }
@@ -2051,7 +2040,7 @@
                 updateFreqButtonText();
                 freq1String(val);
             } else {
-                clearInterval(g_timer);
+                clearTimeout(g_timer);
                 g_timer = 0;
             }
         }
