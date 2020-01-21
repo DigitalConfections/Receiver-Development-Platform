@@ -1288,6 +1288,11 @@ void httpWebServerLoop()
 				g_webSocketServer.disconnect(); /* ensure all web socket clients are disconnected - this might not happen if WiFi connection was broken */
 			}
 		}
+        
+		if(g_numberOfWebClients)
+		{
+			g_noActivityTimeoutSeconds = NO_ACTIVITY_TIMEOUT; // keep alive while a station is connected 
+		}
 
 		/*check UART for data */
 		while((bytesAvail = Serial.available()) > 0)
@@ -1915,7 +1920,7 @@ void httpWebServerLoop()
 						case 0: /* Prepare ATMEGA to receive event data */
 						{
 							g_blinkPeriodMillis = 100;
-							g_LBOutputBuff->put(LB_MESSAGE_PREP_FOR_NEW_EVENT);
+							g_LBOutputBuff->put(LB_MESSAGE_KEY_UP);
 						}
 						break;
 

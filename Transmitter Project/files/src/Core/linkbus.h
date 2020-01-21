@@ -37,10 +37,13 @@
 #define LINKBUS_NUMBER_OF_RX_MSG_BUFFERS 2
 #define LINKBUS_NUMBER_OF_TX_MSG_BUFFERS 4
 
+#define LINKBUS_POWERUP_DELAY_SECONDS 6
+
 #define LINKBUS_MIN_TX_INTERVAL_MS 100
 
 #define FOSC 8000000    /* Clock Speed */
 #define BAUD 9600
+//#define BAUD 19200
 #define MYUBRR(b) (FOSC / 16 / (b) - 1)
 
 typedef enum

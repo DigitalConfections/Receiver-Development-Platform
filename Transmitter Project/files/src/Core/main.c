@@ -154,6 +154,7 @@ extern volatile BOOL g_i2c_not_timed_out;
 static volatile BOOL g_sufficient_power_detected = FALSE;
 static volatile BOOL g_enableHardwareWDResets = FALSE;
 extern BOOL g_am_modulation_enabled;
+extern volatile BOOL g_tx_power_is_zero;
 
 static volatile BOOL g_go_to_sleep = FALSE;
 static volatile BOOL g_sleeping = FALSE;
@@ -438,10 +439,14 @@ ISR( INT0_vect )
 		{
 			g_wifi_enable_delay--;
 
-			if(!g_wifi_enable_delay)
+			if(g_wifi_enable_delay == (LINKBUS_POWERUP_DELAY_SECONDS-1))
 			{
 				wifi_power(ON); // power on WiFi
 				wifi_reset(OFF); // bring WiFi out of reset
+			}
+			else if (!g_wifi_enable_delay)
+			{
+				linkbus_init(BAUD);
 			}
 		}
 		else
@@ -1188,8 +1193,8 @@ int main( void )
 
 	g_last_error_code = code;
 
-	linkbus_init(BAUD);
-	g_wifi_enable_delay = 5;
+//	linkbus_init(BAUD);
+	g_wifi_enable_delay = LINKBUS_POWERUP_DELAY_SECONDS;
 
 	wdt_reset();                                    /* HW watchdog */
 
@@ -1481,37 +1486,49 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 
 			case MESSAGE_ESP_COMM:
 			{
-				uint8_t f1 = lb_buff->fields[FIELD1][0];
+				char f1 = lb_buff->fields[FIELD1][0];
 
 				g_wifi_active = TRUE;
 
-				if(f1 == '0') /* I'm awake message */
-				{
-					/* WiFi is awake. Send it the current time */
-					sprintf(g_tempStr, "%lu", time(NULL));
-					lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
-				}
-				else if(f1 == '1')
-				{
-					/* ESP8266 is ready with event data */
-					// Prepare to receive new event configuration settings
-					suspendEvent();
-					initializeAllEventSettings(TRUE);
-				}
-				else if(f1 == '2') /* ESP module needs continuous power to save data */
-				{
-					//suspendEvent();
-					g_WiFi_shutdown_seconds = 0; // disable sleep
-					lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ESP_LABEL, "2"); /* Save data now */
-				}
-				else if(f1 == '3')
-				{
-					g_WiFi_shutdown_seconds = 3; /* Shut down WiFi in 3 seconds */
-				}
-				else if(f1 == 'Z') /* WiFi connected to browzer - keep alive */
+				if(f1 == 'Z') /* WiFi connected to browser - keep alive */
 				{
 					/* shut down WiFi after 2 minutes of inactivity */
 					g_WiFi_shutdown_seconds = 120; // wait 2 more minutes before shutting down WiFi
+				}
+				else
+				{
+					if(f1 == '0') /* I'm awake message */
+					{
+						/* WiFi is awake. Send it the current time */
+						sprintf(g_tempStr, "%lu", time(NULL));
+						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
+					}
+					else
+					{
+						if(f1 == '1')
+						{
+							/* ESP8266 is ready with event data */
+							// Prepare to receive new event configuration settings
+							suspendEvent();
+							initializeAllEventSettings(TRUE);
+						}
+						else
+						{
+							if(f1 == '2') /* ESP module needs continuous power to save data */
+							{
+								//suspendEvent();
+								g_WiFi_shutdown_seconds = 0; // disable sleep
+								lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ESP_LABEL, "2"); /* Save data now */
+							}
+							else
+							{
+								if(f1 == '3')
+								{
+									g_WiFi_shutdown_seconds = 3; /* Shut down WiFi in 3 seconds */
+								}
+							}
+						}
+					}
 				}
 			}
 			break;
@@ -1578,7 +1595,7 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 
 				if((f1 == '1') || (f1 == '2'))
 				{
-					if(!txIsAntennaForBand())
+					if(!txIsAntennaForBand() && !g_tx_power_is_zero)
 					{
 						g_last_error_code = ERROR_CODE_NO_ANTENNA_FOR_BAND;
 					}
@@ -1586,7 +1603,7 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					{
 						if(f1 == '1') // Xmit immediately using current settings
 						{
-							if(txIsAntennaForBand())
+							if(txIsAntennaForBand() || g_tx_power_is_zero)
 							{
 								/* Set the Morse code pattern and speed */
 								cli();
