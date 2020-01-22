@@ -664,7 +664,6 @@ ISR(WDT_vect)
 	static uint8_t limit = 10;
 
 	g_i2c_not_timed_out = FALSE;    /* unstick I2C */
-//	saveAllEEPROM();                /* Make sure changed values get saved */
 
 	/* Don't allow an unlimited number of WD interrupts to occur without enabling
 	 * hardware resets. But a limited number might be required during hardware
@@ -1315,7 +1314,7 @@ int main( void )
 		{
 			g_report_seconds = FALSE;
 			sprintf(g_tempStr, "%lu", time(NULL));
-			lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
+			lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_CLOCK_LABEL, g_tempStr);
 		}
 
 		if(g_last_error_code)
@@ -1501,7 +1500,7 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					{
 						/* WiFi is awake. Send it the current time */
 						sprintf(g_tempStr, "%lu", time(NULL));
-						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
+						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_CLOCK_LABEL, g_tempStr);
 					}
 					else
 					{
@@ -1539,14 +1538,12 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 				{
 					BOOL setAMmodulation = TRUE;
 					txSetParameters(NULL, NULL, &setAMmodulation, NULL);
-					saveAllEEPROM();
 					event_parameter_count++;
 				}
 				else if(lb_buff->fields[FIELD1][0] == 'C') // CW
 				{
 					BOOL setAMmodulation = FALSE;
 					txSetParameters(NULL, NULL, &setAMmodulation, NULL);
-					saveAllEEPROM();
 					event_parameter_count++;
 				}
 			}
@@ -1572,9 +1569,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 
 					ec = txSetParameters(&pwr_mW, NULL, NULL, NULL);
 					if(ec) g_last_error_code = ec;
-
-					//saveAllEEPROM();
-					storeTransmitterValues();
 
 					sprintf(g_tempStr, "M,%u", pwr_mW);
 					lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TX_POWER_LABEL, g_tempStr);
@@ -1658,7 +1652,7 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 			}
 			break;
 
-			case MESSAGE_TIME:
+			case MESSAGE_STARTFINISH:
 			{
 				time_t mtime = 0;
 
@@ -1678,23 +1672,21 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 						event_parameter_count++;
 					}
 				}
-				else if(lb_buff->fields[FIELD1][0] == 'F')
+				else
 				{
-					if(lb_buff->fields[FIELD2][0])
+					if(lb_buff->fields[FIELD1][0] == 'F')
 					{
-						mtime = atol(lb_buff->fields[FIELD2]);
-					}
+						if(lb_buff->fields[FIELD2][0])
+						{
+							mtime = atol(lb_buff->fields[FIELD2]);
+						}
 
-					if(mtime)
-					{
-						g_event_finish_time = mtime;
-						event_parameter_count++;
+						if(mtime)
+						{
+							g_event_finish_time = mtime;
+							event_parameter_count++;
+						}
 					}
-				}
-
-				if(mtime)
-				{
-					saveAllEEPROM();
 				}
 			}
 			break;
@@ -1712,21 +1704,43 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					else
 					{
 						sprintf(g_tempStr, "%lu", time(NULL));
-						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
+						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_CLOCK_LABEL, g_tempStr);
 					}
 				}
-				else if(lb_buff->type == LINKBUS_MSG_QUERY)
+				else
 				{
-					static uint32_t lastTime = 0;
-
-					uint32_t temp_time = ds3231_get_epoch(NULL);
-					set_system_time(temp_time);
-
-					if(temp_time != lastTime)
+					if(lb_buff->type == LINKBUS_MSG_QUERY)
 					{
-						sprintf(g_tempStr, "%lu", temp_time);
-						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
-						lastTime = temp_time;
+						if(lb_buff->fields[FIELD1][0] == 'X')
+						{
+							int8_t age = 0;
+
+							if(lb_buff->fields[FIELD2][0])
+							{
+								age = (int8_t)atoi(lb_buff->fields[FIELD2]);
+								ds3231_set_aging(&age);
+							}
+							else
+							{
+								age = ds3231_get_aging();
+								sprintf(g_tempStr, "X,%d", age);
+								lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_CLOCK_LABEL, g_tempStr);
+							}
+						}
+						else
+						{
+							static uint32_t lastTime = 0;
+
+							uint32_t temp_time = ds3231_get_epoch(NULL);
+							set_system_time(temp_time);
+
+							if(temp_time != lastTime)
+							{
+								sprintf(g_tempStr, "%lu", temp_time);
+								lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_CLOCK_LABEL, g_tempStr);
+								lastTime = temp_time;
+							}
+						}
 					}
 				}
 			}
@@ -1737,7 +1751,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 				if(lb_buff->fields[FIELD1][0])
 				{
 					strncpy(g_messages_text[STATION_ID], lb_buff->fields[FIELD1], MAX_PATTERN_TEXT_LENGTH);
-					saveAllEEPROM();
 					event_parameter_count++;
 
 					if(g_messages_text[STATION_ID][0])
@@ -1758,7 +1771,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					{
 						speed = atol(lb_buff->fields[FIELD2]);
 						g_id_codespeed = CLAMP(5, speed, 20);
-						saveAllEEPROM();
 						event_parameter_count++;
 
 						if(g_messages_text[STATION_ID][0])
@@ -1773,7 +1785,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					{
 						speed = atol(lb_buff->fields[FIELD2]);
 						g_pattern_codespeed = CLAMP(5, speed, 20);
-						saveAllEEPROM();
 						event_parameter_count++;
 						g_code_throttle = (7042 / g_pattern_codespeed) / 10;
 					}
@@ -1791,7 +1802,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					{
 						time = atol(lb_buff->fields[FIELD2]);
 						g_off_air_seconds = time;
-						saveAllEEPROM();
 						event_parameter_count++;
 					}
 				}
@@ -1801,7 +1811,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					{
 						time = atol(lb_buff->fields[FIELD2]);
 						g_on_air_seconds = time;
-						saveAllEEPROM();
 						event_parameter_count++;
 					}
 				}
@@ -1811,7 +1820,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					{
 						time = atol(lb_buff->fields[FIELD2]);
 						g_ID_period_seconds = time;
-						saveAllEEPROM();
 						event_parameter_count++;
 					}
 				}
@@ -1821,7 +1829,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					{
 						time = atol(lb_buff->fields[FIELD2]);
 						g_intra_cycle_delay_time = time;
-						saveAllEEPROM();
 						event_parameter_count++;
 					}
 				}
@@ -1833,7 +1840,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 				if(lb_buff->fields[FIELD1][0])
 				{
 					strncpy(g_messages_text[PATTERN_TEXT], lb_buff->fields[FIELD1], MAX_PATTERN_TEXT_LENGTH);
-					saveAllEEPROM();
 					event_parameter_count++;
 				}
 			}
@@ -1853,7 +1859,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					{
 						transmitter_freq = ff;
 						event_parameter_count++;
-						storeTransmitterValues();
 					}
 				}
 				else

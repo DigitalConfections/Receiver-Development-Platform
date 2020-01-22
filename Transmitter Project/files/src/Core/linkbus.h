@@ -96,7 +96,7 @@ typedef enum
 	/*	DUAL-BAND TX MESSAGE FAMILY (FUNCTIONAL MESSAGING) */
 	MESSAGE_SET_FREQ = 'F' * 100 + 'R' * 10 + 'E',  /* $FRE,Fhz; / $FRE,FHz? / !FRE,; // Set/request current frequency */
 	MESSAGE_CLOCK = 'T' * 100 + 'I' * 10 + 'M',		/* Sets/reads the real-time clock */
-	MESSAGE_TIME = 'S' * 10 + 'F',					/* Sets the start and finish times */
+	MESSAGE_STARTFINISH = 'S' * 10 + 'F',			/* Sets the start and finish times */
 	MESSAGE_BAT = 'B' * 100 + 'A' * 10 + 'T',       /* Battery charge data */
 	MESSAGE_TEMP = 'T' * 100 + 'E' * 10 + 'M',      /* Temperature  data */
 	MESSAGE_PERM = 'P' * 100 + 'R' * 10 + 'M',		/* Saves most settings to EEPROM "perm" */
@@ -119,7 +119,7 @@ typedef enum
 	INVALID_MESSAGE = UINT16_MAX					/* This value must never overlap a valid message ID */
 } LBMessageID;
 
-#define MESSAGE_TIME_LABEL "TIM"
+#define MESSAGE_CLOCK_LABEL "TIM"
 #define MESSAGE_ESP_LABEL "ESP"
 #define MESSAGE_ERRORCODE_LABEL "EC"
 #define MESSAGE_STATUSCODE_LABEL "SC"

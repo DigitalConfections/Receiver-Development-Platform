@@ -886,7 +886,6 @@
                                     case 0xF7: // ERROR_CODE_NO_ANTENNA_FOR_BAND = 0xF7
                                         {
                                             text = "No antenna connected for that band";
-                                            var btn = document.getElementById("keyButton");
                                         }
                                         break;
 
@@ -1530,12 +1529,12 @@
             if (x != null) {
                 var command = x.value.toUpperCase();
                 var isValid = false;
-                var valid = /^[0-9a-zA-Z;,!?$ ]+$/;
+                var valid = /^[0-9a-zA-Z;,!?$ -]+$/;
                 var lastChar = command.substr(command.length - 1);
 
                 if (command.length > 0) {
                     x.value = command;
-                    if (command.match(valid) && ((command[0] == '$') || (command[0] == '!')) && (lastChar == ';')) {
+                    if (command.match(valid) && ((command[0] == '$') || (command[0] == '!')) && ((lastChar == ';') || (lastChar == '?'))) {
                         x.style.color = "blue";
                         isValid = true;
                     } else {
