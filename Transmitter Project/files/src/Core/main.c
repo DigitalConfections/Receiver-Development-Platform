@@ -154,6 +154,7 @@ extern volatile BOOL g_i2c_not_timed_out;
 static volatile BOOL g_sufficient_power_detected = FALSE;
 static volatile BOOL g_enableHardwareWDResets = FALSE;
 extern BOOL g_am_modulation_enabled;
+extern volatile BOOL g_tx_power_is_zero;
 
 static volatile BOOL g_go_to_sleep = FALSE;
 static volatile BOOL g_sleeping = FALSE;
@@ -167,7 +168,7 @@ static volatile time_t g_seconds_to_sleep = MAX_TIME;
  ************************************************************************/
 BOOL eventEnabled(BOOL noSleep, time_t* time_before_start);
 void handleLinkBusMsgs(void);
-void initializeEEPROMVars(BOOL skipEventEnabled);
+void initializeEEPROMVars(void);
 void saveAllEEPROM(void);
 void wdt_init(WDReset resetType);
 uint16_t throttleValue(uint8_t speed);
@@ -438,10 +439,14 @@ ISR( INT0_vect )
 		{
 			g_wifi_enable_delay--;
 
-			if(!g_wifi_enable_delay)
+			if(g_wifi_enable_delay == (LINKBUS_POWERUP_DELAY_SECONDS-1))
 			{
 				wifi_power(ON); // power on WiFi
 				wifi_reset(OFF); // bring WiFi out of reset
+			}
+			else if (!g_wifi_enable_delay)
+			{
+				linkbus_init(BAUD);
 			}
 		}
 		else
@@ -659,7 +664,6 @@ ISR(WDT_vect)
 	static uint8_t limit = 10;
 
 	g_i2c_not_timed_out = FALSE;    /* unstick I2C */
-//	saveAllEEPROM();                /* Make sure changed values get saved */
 
 	/* Don't allow an unlimited number of WD interrupts to occur without enabling
 	 * hardware resets. But a limited number might be required during hardware
@@ -1162,7 +1166,7 @@ int main( void )
 
 	/**
 	 * Initialize vars stored in EEPROM */
-	initializeEEPROMVars(FALSE);
+	initializeEEPROMVars();
 	g_event_enabled = FALSE; // ensure the event is disabled until hardware is initialized
 
 	/**
@@ -1188,8 +1192,8 @@ int main( void )
 
 	g_last_error_code = code;
 
-	linkbus_init(BAUD);
-	g_wifi_enable_delay = 5;
+//	linkbus_init(BAUD);
+	g_wifi_enable_delay = LINKBUS_POWERUP_DELAY_SECONDS;
 
 	wdt_reset();                                    /* HW watchdog */
 
@@ -1310,7 +1314,7 @@ int main( void )
 		{
 			g_report_seconds = FALSE;
 			sprintf(g_tempStr, "%lu", time(NULL));
-			lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
+			lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_CLOCK_LABEL, g_tempStr);
 		}
 
 		if(g_last_error_code)
@@ -1481,37 +1485,49 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 
 			case MESSAGE_ESP_COMM:
 			{
-				uint8_t f1 = lb_buff->fields[FIELD1][0];
+				char f1 = lb_buff->fields[FIELD1][0];
 
 				g_wifi_active = TRUE;
 
-				if(f1 == '0') /* I'm awake message */
-				{
-					/* WiFi is awake. Send it the current time */
-					sprintf(g_tempStr, "%lu", time(NULL));
-					lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
-				}
-				else if(f1 == '1')
-				{
-					/* ESP8266 is ready with event data */
-					// Prepare to receive new event configuration settings
-					suspendEvent();
-					initializeAllEventSettings(TRUE);
-				}
-				else if(f1 == '2') /* ESP module needs continuous power to save data */
-				{
-					//suspendEvent();
-					g_WiFi_shutdown_seconds = 0; // disable sleep
-					lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ESP_LABEL, "2"); /* Save data now */
-				}
-				else if(f1 == '3')
-				{
-					g_WiFi_shutdown_seconds = 3; /* Shut down WiFi in 3 seconds */
-				}
-				else if(f1 == 'Z') /* WiFi connected to browzer - keep alive */
+				if(f1 == 'Z') /* WiFi connected to browser - keep alive */
 				{
 					/* shut down WiFi after 2 minutes of inactivity */
 					g_WiFi_shutdown_seconds = 120; // wait 2 more minutes before shutting down WiFi
+				}
+				else
+				{
+					if(f1 == '0') /* I'm awake message */
+					{
+						/* WiFi is awake. Send it the current time */
+						sprintf(g_tempStr, "%lu", time(NULL));
+						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_CLOCK_LABEL, g_tempStr);
+					}
+					else
+					{
+						if(f1 == '1')
+						{
+							/* ESP8266 is ready with event data */
+							// Prepare to receive new event configuration settings
+							suspendEvent();
+							initializeAllEventSettings(TRUE);
+						}
+						else
+						{
+							if(f1 == '2') /* ESP module needs continuous power to save data */
+							{
+								//suspendEvent();
+								g_WiFi_shutdown_seconds = 0; // disable sleep
+								lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ESP_LABEL, "2"); /* Save data now */
+							}
+							else
+							{
+								if(f1 == '3')
+								{
+									g_WiFi_shutdown_seconds = 3; /* Shut down WiFi in 3 seconds */
+								}
+							}
+						}
+					}
 				}
 			}
 			break;
@@ -1522,14 +1538,12 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 				{
 					BOOL setAMmodulation = TRUE;
 					txSetParameters(NULL, NULL, &setAMmodulation, NULL);
-					saveAllEEPROM();
 					event_parameter_count++;
 				}
 				else if(lb_buff->fields[FIELD1][0] == 'C') // CW
 				{
 					BOOL setAMmodulation = FALSE;
 					txSetParameters(NULL, NULL, &setAMmodulation, NULL);
-					saveAllEEPROM();
 					event_parameter_count++;
 				}
 			}
@@ -1556,9 +1570,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					ec = txSetParameters(&pwr_mW, NULL, NULL, NULL);
 					if(ec) g_last_error_code = ec;
 
-					//saveAllEEPROM();
-					storeTransmitterValues();
-
 					sprintf(g_tempStr, "M,%u", pwr_mW);
 					lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TX_POWER_LABEL, g_tempStr);
 				}
@@ -1578,7 +1589,7 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 
 				if((f1 == '1') || (f1 == '2'))
 				{
-					if(!txIsAntennaForBand())
+					if(!txIsAntennaForBand() && !g_tx_power_is_zero)
 					{
 						g_last_error_code = ERROR_CODE_NO_ANTENNA_FOR_BAND;
 					}
@@ -1586,7 +1597,7 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					{
 						if(f1 == '1') // Xmit immediately using current settings
 						{
-							if(txIsAntennaForBand())
+							if(txIsAntennaForBand() || g_tx_power_is_zero)
 							{
 								/* Set the Morse code pattern and speed */
 								cli();
@@ -1641,7 +1652,7 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 			}
 			break;
 
-			case MESSAGE_TIME:
+			case MESSAGE_STARTFINISH:
 			{
 				time_t mtime = 0;
 
@@ -1661,23 +1672,21 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 						event_parameter_count++;
 					}
 				}
-				else if(lb_buff->fields[FIELD1][0] == 'F')
+				else
 				{
-					if(lb_buff->fields[FIELD2][0])
+					if(lb_buff->fields[FIELD1][0] == 'F')
 					{
-						mtime = atol(lb_buff->fields[FIELD2]);
-					}
+						if(lb_buff->fields[FIELD2][0])
+						{
+							mtime = atol(lb_buff->fields[FIELD2]);
+						}
 
-					if(mtime)
-					{
-						g_event_finish_time = mtime;
-						event_parameter_count++;
+						if(mtime)
+						{
+							g_event_finish_time = mtime;
+							event_parameter_count++;
+						}
 					}
-				}
-
-				if(mtime)
-				{
-					saveAllEEPROM();
 				}
 			}
 			break;
@@ -1695,21 +1704,43 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					else
 					{
 						sprintf(g_tempStr, "%lu", time(NULL));
-						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
+						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_CLOCK_LABEL, g_tempStr);
 					}
 				}
-				else if(lb_buff->type == LINKBUS_MSG_QUERY)
+				else
 				{
-					static uint32_t lastTime = 0;
-
-					uint32_t temp_time = ds3231_get_epoch(NULL);
-					set_system_time(temp_time);
-
-					if(temp_time != lastTime)
+					if(lb_buff->type == LINKBUS_MSG_QUERY)
 					{
-						sprintf(g_tempStr, "%lu", temp_time);
-						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TIME_LABEL, g_tempStr);
-						lastTime = temp_time;
+						if(lb_buff->fields[FIELD1][0] == 'X')
+						{
+							int8_t age = 0;
+
+							if(lb_buff->fields[FIELD2][0])
+							{
+								age = (int8_t)atoi(lb_buff->fields[FIELD2]);
+								ds3231_set_aging(&age);
+							}
+							else
+							{
+								age = ds3231_get_aging();
+								sprintf(g_tempStr, "X,%d", age);
+								lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_CLOCK_LABEL, g_tempStr);
+							}
+						}
+						else
+						{
+							static uint32_t lastTime = 0;
+
+							uint32_t temp_time = ds3231_get_epoch(NULL);
+							set_system_time(temp_time);
+
+							if(temp_time != lastTime)
+							{
+								sprintf(g_tempStr, "%lu", temp_time);
+								lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_CLOCK_LABEL, g_tempStr);
+								lastTime = temp_time;
+							}
+						}
 					}
 				}
 			}
@@ -1720,7 +1751,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 				if(lb_buff->fields[FIELD1][0])
 				{
 					strncpy(g_messages_text[STATION_ID], lb_buff->fields[FIELD1], MAX_PATTERN_TEXT_LENGTH);
-					saveAllEEPROM();
 					event_parameter_count++;
 
 					if(g_messages_text[STATION_ID][0])
@@ -1741,7 +1771,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					{
 						speed = atol(lb_buff->fields[FIELD2]);
 						g_id_codespeed = CLAMP(5, speed, 20);
-						saveAllEEPROM();
 						event_parameter_count++;
 
 						if(g_messages_text[STATION_ID][0])
@@ -1756,7 +1785,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					{
 						speed = atol(lb_buff->fields[FIELD2]);
 						g_pattern_codespeed = CLAMP(5, speed, 20);
-						saveAllEEPROM();
 						event_parameter_count++;
 						g_code_throttle = (7042 / g_pattern_codespeed) / 10;
 					}
@@ -1774,7 +1802,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					{
 						time = atol(lb_buff->fields[FIELD2]);
 						g_off_air_seconds = time;
-						saveAllEEPROM();
 						event_parameter_count++;
 					}
 				}
@@ -1784,7 +1811,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					{
 						time = atol(lb_buff->fields[FIELD2]);
 						g_on_air_seconds = time;
-						saveAllEEPROM();
 						event_parameter_count++;
 					}
 				}
@@ -1794,7 +1820,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					{
 						time = atol(lb_buff->fields[FIELD2]);
 						g_ID_period_seconds = time;
-						saveAllEEPROM();
 						event_parameter_count++;
 					}
 				}
@@ -1804,7 +1829,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					{
 						time = atol(lb_buff->fields[FIELD2]);
 						g_intra_cycle_delay_time = time;
-						saveAllEEPROM();
 						event_parameter_count++;
 					}
 				}
@@ -1816,7 +1840,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 				if(lb_buff->fields[FIELD1][0])
 				{
 					strncpy(g_messages_text[PATTERN_TEXT], lb_buff->fields[FIELD1], MAX_PATTERN_TEXT_LENGTH);
-					saveAllEEPROM();
 					event_parameter_count++;
 				}
 			}
@@ -1836,7 +1859,6 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					{
 						transmitter_freq = ff;
 						event_parameter_count++;
-						storeTransmitterValues();
 					}
 				}
 				else
@@ -2089,7 +2111,7 @@ EC activateEventUsingCurrentSettings(SC* statusCode)
 /**********************
 **********************/
 
-void initializeEEPROMVars(BOOL skipEventEnabled)
+void initializeEEPROMVars()
 {
 	uint8_t i;
 
@@ -2098,7 +2120,6 @@ void initializeEEPROMVars(BOOL skipEventEnabled)
 		g_event_start_time = eeprom_read_dword((uint32_t*)(&ee_start_time));
 		g_event_finish_time = eeprom_read_dword((uint32_t*)(&ee_finish_time));
 
-//		if(!skipEventEnabled) g_event_enabled = eeprom_read_byte(&ee_event_enabled);
 		g_pattern_codespeed = eeprom_read_byte(&ee_pattern_codespeed);
 		g_id_codespeed = eeprom_read_byte(&ee_id_codespeed);
 		g_on_air_seconds = eeprom_read_word(&ee_on_air_time);
@@ -2123,8 +2144,6 @@ void initializeEEPROMVars(BOOL skipEventEnabled)
 		g_event_start_time = EEPROM_START_TIME_DEFAULT;
 		g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
 
-//		if(!skipEventEnabled) g_event_enabled = EEPROM_EVENT_ENABLED_DEFAULT;
-
 		g_id_codespeed = EEPROM_ID_CODE_SPEED_DEFAULT;
 		g_pattern_codespeed = EEPROM_PATTERN_CODE_SPEED_DEFAULT;
 		g_on_air_seconds = EEPROM_ON_AIR_TIME_DEFAULT;
@@ -2143,7 +2162,7 @@ void initializeEEPROMVars(BOOL skipEventEnabled)
 
 void saveAllEEPROM()
 {
-	int i;
+	uint8_t i;
 	wdt_reset();                                    /* HW watchdog */
 
 	eeprom_update_dword((uint32_t*)&ee_start_time, g_event_start_time);
@@ -2198,6 +2217,6 @@ void initializeAllEventSettings(BOOL disableEvent)
 		keyTransmitter(OFF); // turn off the transmit signal
 	}
 
-	initializeEEPROMVars(disableEvent);
+	initializeEEPROMVars();
 	initializeTransmitterEEPROMVars();
 }

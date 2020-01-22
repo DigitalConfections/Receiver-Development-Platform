@@ -219,7 +219,6 @@ typedef enum
 #define LB_MESSAGE_WIFI_COMS_OFF "$WI,2;"           /* Tell ATMEGA to disable linkbus to support ESP8266 programming (no exit without power cycle) */
 #define LB_MESSAGE_KEY_DOWN "$GO,1;"                /* Tell ATMEGA to key transmitter continuously */
 #define LB_MESSAGE_ACTIVATE_EVENT "$GO,2;"          /* Tell ATMEGA to execute the event as it has been configured */
-#define LB_MESSAGE_PREP_FOR_NEW_EVENT "$GO,0;"      /* Tell ATMEGA to prepare to receive event data */
 #define LB_MESSAGE_KEY_UP "$GO,0;"                  /* Tell ATMEGA to stop continuous transmit */
 #define LB_MESSAGE_WIFI_OFF "$WI,0;"                /* Tell ATMEGA to power off WiFi */
 

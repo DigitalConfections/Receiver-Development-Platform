@@ -171,7 +171,11 @@
 #ifdef DEBUGGING_ONLY
 		uint32_t pll_calc(Frequency_Hz, Union_si5351_regs *, int32_t);
 #else
-		uint8_t pll_calc(Frequency_Hz, Union_si5351_regs *, int32_t);
+	#ifdef APPLY_XTAL_CALIBRATION_VALUE
+		BOOL pll_calc(Frequency_Hz, Union_si5351_regs *, int32_t);
+	#else
+		BOOL pll_calc(Frequency_Hz, Union_si5351_regs *);
+	#endif
 #endif
 
 #ifdef SUPPORT_FOUT_BELOW_1024KHZ
@@ -849,7 +853,12 @@
 			Frequency_Hz result = pll_calc(freq_VCO, &pll_reg, g_si5351_ref_correction);
 			Frequency_Hz pll_error = freq_VCO - result;
 #else
-			pll_calc(freq_VCO, &pll_reg, g_si5351_ref_correction);
+	#ifdef APPLY_XTAL_CALIBRATION_VALUE
+		pll_calc(freq_VCO, &pll_reg, g_si5351_ref_correction);
+	#else
+		pll_calc(freq_VCO, &pll_reg);
+	#endif
+
 #endif
 
 		/* Derive the register values to write */
@@ -961,9 +970,13 @@
  *
  */
 #ifdef DEBUGGING_ONLY
-		Frequency_Hz pll_calc(Frequency_Hz vco_freq, Union_si5351_regs *reg, int32_t correction)
+	Frequency_Hz pll_calc(Frequency_Hz vco_freq, Union_si5351_regs *reg, int32_t correction)
 #else
+	#ifdef APPLY_XTAL_CALIBRATION_VALUE
 		BOOL pll_calc(Frequency_Hz vco_freq, Union_si5351_regs *reg, int32_t correction)
+	#else
+		BOOL pll_calc(Frequency_Hz vco_freq, Union_si5351_regs *reg)
+	#endif
 #endif
 	{
 #ifdef DEBUGGING_ONLY

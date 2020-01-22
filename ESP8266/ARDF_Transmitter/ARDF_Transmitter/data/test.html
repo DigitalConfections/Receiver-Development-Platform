@@ -886,12 +886,6 @@
                                     case 0xF7: // ERROR_CODE_NO_ANTENNA_FOR_BAND = 0xF7
                                         {
                                             text = "No antenna connected for that band";
-                                            var btn = document.getElementById("keyButton");
-                                            if (btn != null) {
-                                                if (btn.value != "Xmit") {
-                                                    keyAction();
-                                                }
-                                            }
                                         }
                                         break;
 
@@ -1199,6 +1193,7 @@
                                     pe.value = arr[1];
                                 }
                             }
+                            break;
 
                         default:
                             console.log("Unrecognized message: ", str);
@@ -1350,13 +1345,6 @@
                     }
                 }
             }, 100);
-        }
-
-        function executeEvent() {
-            sendToSocket("CLEAR");
-            sendToSocket("EXECUTE");
-            console.log("Execute message sent to socket.");
-
         }
 
         function sendRefresh() {
@@ -1541,12 +1529,12 @@
             if (x != null) {
                 var command = x.value.toUpperCase();
                 var isValid = false;
-                var valid = /^[0-9a-zA-Z;,!?$ ]+$/;
+                var valid = /^[0-9a-zA-Z;,!?$ -]+$/;
                 var lastChar = command.substr(command.length - 1);
 
                 if (command.length > 0) {
                     x.value = command;
-                    if (command.match(valid) && ((command[0] == '$') || (command[0] == '!')) && (lastChar == ';')) {
+                    if (command.match(valid) && ((command[0] == '$') || (command[0] == '!')) && ((lastChar == ';') || (lastChar == '?'))) {
                         x.style.color = "blue";
                         isValid = true;
                     } else {
@@ -1969,7 +1957,7 @@
             if (f != 0) {
                 if (f < 0) f = -f;
                 var time = 500 - (5 * f);
-                g_timer = setTimeout(function() {
+                g_timer = setInterval(function() {
                     incFreq1();
                 }, time);
             }
@@ -2051,7 +2039,7 @@
                 updateFreqButtonText();
                 freq1String(val);
             } else {
-                clearInterval(g_timer);
+                clearTimeout(g_timer);
                 g_timer = 0;
             }
         }

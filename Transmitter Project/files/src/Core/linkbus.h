@@ -37,10 +37,13 @@
 #define LINKBUS_NUMBER_OF_RX_MSG_BUFFERS 2
 #define LINKBUS_NUMBER_OF_TX_MSG_BUFFERS 4
 
+#define LINKBUS_POWERUP_DELAY_SECONDS 6
+
 #define LINKBUS_MIN_TX_INTERVAL_MS 100
 
 #define FOSC 8000000    /* Clock Speed */
 #define BAUD 9600
+//#define BAUD 19200
 #define MYUBRR(b) (FOSC / 16 / (b) - 1)
 
 typedef enum
@@ -93,7 +96,7 @@ typedef enum
 	/*	DUAL-BAND TX MESSAGE FAMILY (FUNCTIONAL MESSAGING) */
 	MESSAGE_SET_FREQ = 'F' * 100 + 'R' * 10 + 'E',  /* $FRE,Fhz; / $FRE,FHz? / !FRE,; // Set/request current frequency */
 	MESSAGE_CLOCK = 'T' * 100 + 'I' * 10 + 'M',		/* Sets/reads the real-time clock */
-	MESSAGE_TIME = 'S' * 10 + 'F',					/* Sets the start and finish times */
+	MESSAGE_STARTFINISH = 'S' * 10 + 'F',			/* Sets the start and finish times */
 	MESSAGE_BAT = 'B' * 100 + 'A' * 10 + 'T',       /* Battery charge data */
 	MESSAGE_TEMP = 'T' * 100 + 'E' * 10 + 'M',      /* Temperature  data */
 	MESSAGE_PERM = 'P' * 100 + 'R' * 10 + 'M',		/* Saves most settings to EEPROM "perm" */
@@ -116,7 +119,7 @@ typedef enum
 	INVALID_MESSAGE = UINT16_MAX					/* This value must never overlap a valid message ID */
 } LBMessageID;
 
-#define MESSAGE_TIME_LABEL "TIM"
+#define MESSAGE_CLOCK_LABEL "TIM"
 #define MESSAGE_ESP_LABEL "ESP"
 #define MESSAGE_ERRORCODE_LABEL "EC"
 #define MESSAGE_STATUSCODE_LABEL "SC"
