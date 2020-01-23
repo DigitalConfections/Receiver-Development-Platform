@@ -89,4 +89,17 @@ time_t ds3231_get_epoch(BOOL *result);
  */
 	void ds3231_1s_sqw(BOOL enable);
 
+
+/**
+ *
+ */
+	void ds3231_set_aging(int8_t* data);
+
+/**
+ *
+ */
+	int8_t ds3231_get_aging(void);
+
+
+
 #endif  /* DS3231_H_ */

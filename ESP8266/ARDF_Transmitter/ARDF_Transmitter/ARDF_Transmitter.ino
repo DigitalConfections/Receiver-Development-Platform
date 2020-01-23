@@ -345,7 +345,7 @@ String connectionStatus( int which )
  *=============================================================== */
 void handleRoot()
 {
-	g_http_server.send(200, "text/html", "<h2 style=\"font-family:verdana; font-size:30px; color:Black; text-align:left;\">Options</h2> <p>   <a href=\"/test.html\">73.73.73.73/test.html</a>   Testing support</p> <p>   <a href=\"/events.html\">73.73.73.73/events.html</a>   Configure events</p> <p>   <a href=\"/upload.html\">73.73.73.73/upload.html</a> Upload a file</p> <p>   <a href=\"/fs.html\">73.73.73.73/fs.html</a>   Download a file</p> <p>   <a href=\"/fileDelete.html\">73.73.73.73/fileDelete.html</a>   Delete a file (Use with caution!)</p>");
+	g_http_server.send(200, "text/html", "<h2 style=\"font-family:verdana; font-size:30px; color:Black; text-align:left;\">Options</h2><p style=\"font-family:verdana; font-size:20px; color:Black; text-align:left;\">Configure events: <a href=\"/events.html\">73.73.73.73/events.html</a></p> <p style=\"font-family:verdana; font-size:20px; color:Black; text-align:left;\">Upload a file: <a href=\"/upload.html\">73.73.73.73/upload.html</a></p> <p style=\"font-family:verdana; font-size:20px; color:Black; text-align:left;\">Download a file: <a href=\"/fs.html\">73.73.73.73/fs.html</a></p> <p style=\"font-family:verdana; font-size:20px; color:Black; text-align:left;\">Delete a file: <a href=\"/fileDelete.html\">73.73.73.73/fileDelete.html</a> <- Use with caution!</p> <p style=\"font-family:verdana; font-size:20px; color:Black; text-align:left;\">Testing support: <a href=\"/test.html\">73.73.73.73/test.html</a></p> <p style=\"font-size:12\">ESP8266 SW Date: 22-Jan-2020</p> ");
 }
 
 void handleFS()
@@ -1214,7 +1214,7 @@ void httpWebServerLoop()
 	bool toggle = false;
 	bool firstPageLoad = true;
 	unsigned long holdTime = 0;
-	int hold = 0;
+	int holdWebClients = 0;
 
 	int serialIndex = 0;
 	int role = 0, tx = 0;
@@ -1273,9 +1273,9 @@ void httpWebServerLoop()
 		g_numberOfWebClients = WiFi.softAPgetStationNum();
 		g_numberOfSocketClients = g_webSocketServer.connectedClients(false);
 
-		if(g_numberOfWebClients != hold)
+		if(g_numberOfWebClients != holdWebClients)
 		{
-			hold = g_numberOfWebClients;
+			holdWebClients = g_numberOfWebClients;
 
 			if(g_debug_prints_enabled)
 			{
@@ -1287,11 +1287,10 @@ void httpWebServerLoop()
 			{
 				g_webSocketServer.disconnect(); /* ensure all web socket clients are disconnected - this might not happen if WiFi connection was broken */
 			}
-		}
-        
-		if(g_numberOfWebClients)
-		{
-			g_noActivityTimeoutSeconds = NO_ACTIVITY_TIMEOUT; // keep alive while a station is connected 
+			else
+			{
+				g_noActivityTimeoutSeconds = NO_ACTIVITY_TIMEOUT; // keep alive while a station is connected 
+			}
 		}
 
 		/*check UART for data */
