@@ -687,7 +687,7 @@
                     var str = evt.data;
                     var arr = str.split(",");
 
-                    g_stillConnected = 50;
+                    g_stillConnected = Math.max(50, g_stillConnected);
                     if (g_timedOut) {
                         g_timedOut = false;
                     }
@@ -1313,7 +1313,7 @@
             var d = Date();
 
             if (g_timeUpdateTimer != 0) {
-                clearInterval(g_timeUpdateTimer);
+                clearTimeout(g_timeUpdateTimer);
                 g_timeUpdateTimer = 0;
             }
 
@@ -1404,19 +1404,27 @@
         }
 
         function sendPower() {
-            var power = document.getElementById("pwrSelect").value;
-            var msgText = "POWER,0," + power;
-            sendToSocket(msgText);
-            console.log(msgText);
-            g_powerLevel = power;
+            var p = document.getElementById("pwrSelect");
+
+           if(p) {
+                var power = p.value;
+                var msgText = "POWER,0," + power;
+                sendToSocket(msgText);
+                console.log(msgText);
+                g_powerLevel = power;
+			}
         }
 
 
         function sendBand() {
-            var band = document.getElementById("bandSelect").value;
-            var msgText = "BAND," + band;
-            sendToSocket(msgText);
-            console.log(msgText);
+            var b = document.getElementById("bandSelect");
+            
+			if(b) {
+				var band = b.value;
+                var msgText = "BAND," + band;
+                sendToSocket(msgText);
+                console.log(msgText);
+			}
         }
 
         function sendClear() {
@@ -1426,23 +1434,31 @@
 
 
         function sendModulation() {
-            var modulation = document.getElementById("modSelect").value;
-            var msgText = "MOD," + modulation;
-            sendToSocket(msgText);
-            console.log(msgText);
+            var m = document.getElementById("modSelect");
+			
+			if(m) {
+				var modulation = m.value;
+                var msgText = "MOD," + modulation;
+                sendToSocket(msgText);
+                console.log(msgText);
+			}
         }
 
         function sendFrequencyForBand() {
             var f;
-            var band = document.getElementById("bandSelect").value;
-            if (band == "80") {
-                f = g_typeFrequency[0].frequency;
-            } else {
-                f = g_typeFrequency[1].frequency;
-            }
-            var msgText = "FREQ,0," + f;
-            sendToSocket(msgText);
-            console.log(msgText);
+            var b = document.getElementById("bandSelect");
+			
+			if(b) {
+				band = b.value;
+				if (band == "80") {
+					f = g_typeFrequency[0].frequency;
+				} else {
+                	f = g_typeFrequency[1].frequency;
+				}
+				var msgText = "FREQ,0," + f;
+				sendToSocket(msgText);
+				console.log(msgText);
+			}
         }
 
 
@@ -2145,7 +2161,7 @@
     <center>
         <p style="text-align:left;"><a href=\ "73.73.73.73">[HOME]</a></p>
         <h1 id="mainHeading" style="font-family:verdana; font-size:30px; color:Black; text-align:center;">Transmitter Test</h1>
-        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">HTML Ver 0.3 - 30 Apr 2019</p>
+        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">HTML Ver 0.4 - 23 Jan 2020</p>
 
         <div>
             <table>

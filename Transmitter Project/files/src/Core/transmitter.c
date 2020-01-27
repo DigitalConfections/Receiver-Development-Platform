@@ -637,7 +637,7 @@ EC txMilliwattsToSettings(uint16_t* powerMW, uint8_t* driveLevel, uint8_t* modLe
 {
 	EC ec = ERROR_CODE_NO_ERROR;
 	RadioBand band = txGetBand();
-	uint16_t maxPwr;
+	int16_t maxPwr;
 	uint8_t index;
 
 	if(powerMW == NULL) return(ERROR_CODE_SW_LOGIC_ERROR);
@@ -665,9 +665,9 @@ EC txMilliwattsToSettings(uint16_t* powerMW, uint8_t* driveLevel, uint8_t* modLe
 		}
 	}
 
-	if(*powerMW > maxPwr) ec = ERROR_CODE_POWER_LEVEL_NOT_SUPPORTED;
+	if((int16_t)*powerMW > maxPwr) ec = ERROR_CODE_POWER_LEVEL_NOT_SUPPORTED;
 
-	*powerMW = CLAMP(0, *powerMW, maxPwr);
+	*powerMW = CLAMP(0, (int16_t)*powerMW, maxPwr);
 
 	if(*powerMW < 5)
 	{

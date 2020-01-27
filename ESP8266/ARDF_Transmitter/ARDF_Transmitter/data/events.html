@@ -202,6 +202,7 @@
         var g_stillConnected = 0;
         var g_stillDisconnected = 60;
         var g_lastPacketTime = 0;
+        var g_delayedPackets = 0;
         var g_lastSocketTxMessage;
         var g_transmitterTimeMs = 0;
         var g_websock = null;
@@ -279,6 +280,11 @@
                 for (var i = 1; i < eventNum; i++) {
                     eventTable.appendChild(eventRow(g_eventTableData[i], false));
                 }
+
+                var msgText = "FREQ," + currentRoleIndex();
+                sendToSocket(msgText);
+                msgText = "POWER," + currentRoleIndex();
+                sendToSocket(msgText);
             } else {
                 console.log("Refreshing table cells");
                 for (var i = 1, row; row = eventTable.rows[i]; i++) {
@@ -1252,6 +1258,22 @@
                                     var newTypeIndex = parseInt(text.substring(0, colon), 10);
                                     var newSubIndex = parseInt(text.substring(colon + 1), 10);
                                     console.log("role code: ", arr[1]);
+
+                                    var r = document.getElementById("roleSelect");
+
+                                    if (r) {
+
+                                        var roleIndex = 0;
+
+                                        while ((g_typeTxNames[roleIndex].indices != text) && (roleIndex < g_typeTxNames.length)) {
+                                            roleIndex++;
+                                        }
+
+                                        if (roleIndex < g_typeTxNames.length) {
+                                            r[roleIndex].setAttribute("selected", "true");
+                                            g_selectedTxType = r[roleIndex].role;
+                                        }
+                                    }
                                 } else {
                                     console.log("role name: ", arr[1]);
                                 }
@@ -1344,14 +1366,17 @@
 
             } else {
                 if (dif > 200) {
+                    if (g_delayedPackets) g_delayedPackets--;
+                    console.log("Sending now:", now, g_lastPacketTime, dif, g_delayedPackets, msg);
                     g_websock.send(msg);
                     g_lastPacketTime = now;
                     g_lastSocketTxMessage = msg;
                 } else {
-                    console.log("Commands too rapid. Delaying send.");
+                    g_delayedPackets++;
+                    console.log("Commands too rapid. Delaying send.", now, g_lastPacketTime, dif, g_delayedPackets, msg);
                     setTimeout(function() {
                         sendToSocket(msg);
-                    }, 250);
+                    }, g_delayedPackets * 250);
                 }
             }
         }
@@ -1465,9 +1490,13 @@
         }
 
         function currentRoleIndex() {
-            g_selectedTxType = document.getElementById("roleSelect").value;
-            var indices = g_typeTxNames.find(g_typeTxNames => g_typeTxNames.name == g_selectedTxType).indices;
-            return Number(indices.charAt(0));
+            var r = document.getElementById("roleSelect");
+            if (r) {
+                g_selectedTxType = document.getElementById("roleSelect").value;
+                var indices = g_typeTxNames.find(g_typeTxNames => g_typeTxNames.name == g_selectedTxType).indices;
+                return Number(indices.charAt(0));
+            }
+            return (0);
         }
 
         function foxClick() {
@@ -1919,8 +1948,13 @@
         }
 
         function freqDotFormat(freqString) {
-            var val = Number(freqString);
-            var newString = String(Math.floor(val / 1000000)) + "." + pad(Math.floor(((val % 1000000) / 1000)), 3) + "." + pad((val % 1000), 3);
+            var newString;
+            if (freqString === "*") {
+                newString = "*";
+            } else {
+                var val = Number(freqString);
+                newString = String(Math.floor(val / 1000000)) + "." + pad(Math.floor(((val % 1000000) / 1000)), 3) + "." + pad((val % 1000), 3);
+            }
             return newString;
         }
 
@@ -2007,7 +2041,7 @@
     <center>
         <p style="text-align:left;"><a href=\ "73.73.73.73">[HOME]</a></p>
         <h1 id="mainHeading" style="font-family:verdana; font-size:30px; color:Black; text-align:center;">Transmitter Settings</h1>
-        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">HTML Ver 0.1.7 - 6 Mar 2019</p>
+        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">HTML Ver 0.2.0 - 23 Jan 2020</p>
 
         <div>
             <table>

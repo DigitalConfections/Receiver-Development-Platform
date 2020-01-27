@@ -2194,7 +2194,7 @@ void saveAllEEPROM()
 uint16_t throttleValue(uint8_t speed)
 {
 	uint16_t temp;
-	speed = CLAMP(5, speed, 20);
+	speed = CLAMP(5, (int8_t)speed, 20);
 	temp = (7042L / (uint16_t)speed) / 10L;
 	return temp;
 }

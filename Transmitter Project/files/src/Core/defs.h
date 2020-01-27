@@ -112,27 +112,27 @@ typedef enum {
 /* Battery voltage should be read when +12V supply is enabled and all transmitters are fully powered off */
 #define ADC_REF_VOLTAGE_mV 1100UL
 
-#define ADC_MAX_VOLTAGE_MV 4200UL /* maximum voltage the ADC can read */
-#define BATTERY_VOLTAGE_MAX_MV 4200UL /* voltage at which the battery is considered to be fully charged */
-#define BATTERY_VOLTAGE_MIN_MV 3200UL /* voltage at which the battery is considered to be fully depleted */
+#define ADC_MAX_VOLTAGE_MV 4200L /* maximum voltage the ADC can read */
+#define BATTERY_VOLTAGE_MAX_MV 4200L /* voltage at which the battery is considered to be fully charged */
+#define BATTERY_VOLTAGE_MIN_MV 3200L /* voltage at which the battery is considered to be fully depleted */
 #define BATTERY_VOLTAGE_RANGE_MV (BATTERY_VOLTAGE_MAX_MV - BATTERY_VOLTAGE_MIN_MV)
-#define BATTERY_DROP 320UL /* voltage drop between the battery terminals and the ADC input while powering the ESP8266 */
-#define BATTERY_DROP_OFFSET (BATTERY_DROP * 1023UL)
-#define VBAT(x) (BATTERY_DROP + (x * ADC_MAX_VOLTAGE_MV) / 1023)
-#define BATTERY_PERCENTAGE(x) ( ( 100UL * ((x * ADC_MAX_VOLTAGE_MV + BATTERY_DROP_OFFSET) - (1023UL * BATTERY_VOLTAGE_MIN_MV)) )  / (BATTERY_VOLTAGE_RANGE_MV * 1023))
+#define BATTERY_DROP 320L /* voltage drop between the battery terminals and the ADC input while powering the ESP8266 */
+#define BATTERY_DROP_OFFSET (BATTERY_DROP * 1023L)
+#define VBAT(x) (BATTERY_DROP + (x * ADC_MAX_VOLTAGE_MV) / 1023L)
+#define BATTERY_PERCENTAGE(x) ( ( 100L * ((x * ADC_MAX_VOLTAGE_MV + BATTERY_DROP_OFFSET) - (1023L * BATTERY_VOLTAGE_MIN_MV)) )  / (BATTERY_VOLTAGE_RANGE_MV * 1023L))
 
-#define SUPPLY_VOLTAGE_MAX_MV 14100UL
-#define VSUPPLY(x)((x * SUPPLY_VOLTAGE_MAX_MV) / 1023)
+#define SUPPLY_VOLTAGE_MAX_MV 14100L
+#define VSUPPLY(x)((x * SUPPLY_VOLTAGE_MAX_MV) / 1023L)
 
-#define PA_VOLTAGE_MAX_MV 14100UL
-#define VPA(x)((x * PA_VOLTAGE_MAX_MV) / 1023)
+#define PA_VOLTAGE_MAX_MV 14100L
+#define VPA(x)((x * PA_VOLTAGE_MAX_MV) / 1023L)
 
 typedef uint16_t BatteryLevel;  /* in milliVolts */
 
-#define VOLTS_5 (((5000UL - BATTERY_DROP) * 1023UL) / BATTERY_VOLTAGE_MAX_MV)
-#define VOLTS_3_19 (((3190UL - BATTERY_DROP) * 1023UL) / BATTERY_VOLTAGE_MAX_MV)
-#define VOLTS_3_0 (((3000UL - BATTERY_DROP) * 1023UL) / BATTERY_VOLTAGE_MAX_MV)
-#define VOLTS_2_4 (((2400UL - BATTERY_DROP) * 1023UL) / BATTERY_VOLTAGE_MAX_MV)
+#define VOLTS_5 (((5000L - BATTERY_DROP) * 1023L) / BATTERY_VOLTAGE_MAX_MV)
+#define VOLTS_3_19 (((3190L - BATTERY_DROP) * 1023L) / BATTERY_VOLTAGE_MAX_MV)
+#define VOLTS_3_0 (((3000L - BATTERY_DROP) * 1023L) / BATTERY_VOLTAGE_MAX_MV)
+#define VOLTS_2_4 (((2400L - BATTERY_DROP) * 1023L) / BATTERY_VOLTAGE_MAX_MV)
 
 #define POWER_OFF_VOLT_THRESH_MV VOLTS_2_4 /* 2.4 V = 2400 mV */
 #define POWER_ON_VOLT_THRESH_MV VOLTS_3_0  /* 3.0 V = 3000 mV */
