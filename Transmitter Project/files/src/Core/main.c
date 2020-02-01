@@ -103,7 +103,7 @@ static uint16_t EEMEM ee_intra_cycle_delay_time;
 static uint16_t EEMEM ee_ID_time;
 static time_t EEMEM ee_start_time;
 static time_t EEMEM ee_finish_time;
-//static BOOL EEMEM ee_event_enabled;
+static uint16_t EEMEM ee_battery_empty_mV;
 
 static char g_messages_text[2][MAX_PATTERN_TEXT_LENGTH+1] = {"\0", "\0"};
 static volatile uint8_t g_id_codespeed = EEPROM_ID_CODE_SPEED_DEFAULT;
@@ -118,6 +118,7 @@ static volatile time_t g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
 static volatile BOOL g_event_enabled = EEPROM_EVENT_ENABLED_DEFAULT; /* indicates that the conditions for executing the event are set */
 static volatile BOOL g_event_commenced = FALSE;
 static volatile BOOL g_check_for_next_event = FALSE;
+static volatile uint16_t g_battery_empty_mV = EEPROM_BATTERY_EMPTY_MV;
 
 static volatile int32_t g_on_the_air = 0;
 static volatile uint16_t g_time_to_send_ID_countdown = 0;
@@ -522,6 +523,7 @@ ISR( TIMER2_COMPB_vect )
 
 					if(!repeat && finished) // ID has completed, so resume pattern
 					{
+						g_last_status_code = STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING;
 						g_code_throttle = throttleValue(g_pattern_codespeed);
 						repeat = TRUE;
 						makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
@@ -1914,8 +1916,7 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 
 			case MESSAGE_BAT:
 			{
-				int32_t bat = BATTERY_PERCENTAGE(g_lastConversionResult[BATTERY_READING]);
-				bat = CLAMP(0, bat, 100);
+				uint16_t bat = (uint16_t)CLAMP(0, BATTERY_PERCENTAGE(g_lastConversionResult[BATTERY_READING], (int32_t)g_battery_empty_mV), 100);
 				lb_broadcast_num(bat, "!BAT");
 
 				/* The system clock gets re-initialized whenever a battery message is received. This is
@@ -2127,6 +2128,8 @@ void initializeEEPROMVars()
 		g_intra_cycle_delay_time = eeprom_read_word(&ee_intra_cycle_delay_time);
 		g_ID_period_seconds = eeprom_read_word(&ee_ID_time);
 
+		g_battery_empty_mV = eeprom_read_word(&ee_battery_empty_mV);
+
 		for(i=0; i<20; i++)
 		{
 			g_messages_text[STATION_ID][i] = (char)eeprom_read_byte((uint8_t*)(&ee_stationID_text[i]));
@@ -2151,6 +2154,8 @@ void initializeEEPROMVars()
 		g_intra_cycle_delay_time = EEPROM_INTRA_CYCLE_DELAY_TIME_DEFAULT;
 		g_ID_period_seconds = EEPROM_ID_TIME_INTERVAL_DEFAULT;
 
+		g_battery_empty_mV = EEPROM_BATTERY_EMPTY_MV;
+
 		strncpy(g_messages_text[STATION_ID], EEPROM_STATION_ID_DEFAULT, MAX_PATTERN_TEXT_LENGTH);
 		strncpy(g_messages_text[PATTERN_TEXT], EEPROM_PATTERN_TEXT_DEFAULT, MAX_PATTERN_TEXT_LENGTH);
 
@@ -2168,13 +2173,14 @@ void saveAllEEPROM()
 	eeprom_update_dword((uint32_t*)&ee_start_time, g_event_start_time);
 	eeprom_update_dword((uint32_t*)&ee_finish_time, g_event_finish_time);
 
-//	eeprom_update_byte(&ee_event_enabled, g_event_enabled);
 	eeprom_update_byte(&ee_id_codespeed, g_id_codespeed);
 	eeprom_update_byte(&ee_pattern_codespeed, g_pattern_codespeed);
 	eeprom_update_word(&ee_on_air_time, g_on_air_seconds);
 	eeprom_update_word(&ee_off_air_time, g_off_air_seconds);
 	eeprom_update_word(&ee_intra_cycle_delay_time, g_intra_cycle_delay_time);
 	eeprom_update_word(&ee_ID_time, g_ID_period_seconds);
+
+	eeprom_update_word(&ee_battery_empty_mV, g_battery_empty_mV);
 
 	for(i=0; i<strlen(g_messages_text[STATION_ID]); i++)
 	{

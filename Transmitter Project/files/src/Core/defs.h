@@ -32,7 +32,7 @@
 
 /******************************************************
  * Set the text that gets displayed to the user */
-#define SW_REVISION "P1.0.1"
+#define SW_REVISION "P1.1"
 
 //#define TRANQUILIZE_WATCHDOG
 
@@ -114,12 +114,10 @@ typedef enum {
 
 #define ADC_MAX_VOLTAGE_MV 4200L /* maximum voltage the ADC can read */
 #define BATTERY_VOLTAGE_MAX_MV 4200L /* voltage at which the battery is considered to be fully charged */
-#define BATTERY_VOLTAGE_MIN_MV 3200L /* voltage at which the battery is considered to be fully depleted */
-#define BATTERY_VOLTAGE_RANGE_MV (BATTERY_VOLTAGE_MAX_MV - BATTERY_VOLTAGE_MIN_MV)
 #define BATTERY_DROP 320L /* voltage drop between the battery terminals and the ADC input while powering the ESP8266 */
 #define BATTERY_DROP_OFFSET (BATTERY_DROP * 1023L)
 #define VBAT(x) (BATTERY_DROP + (x * ADC_MAX_VOLTAGE_MV) / 1023L)
-#define BATTERY_PERCENTAGE(x) ( ( 100L * ((x * ADC_MAX_VOLTAGE_MV + BATTERY_DROP_OFFSET) - (1023L * BATTERY_VOLTAGE_MIN_MV)) )  / (BATTERY_VOLTAGE_RANGE_MV * 1023L))
+#define BATTERY_PERCENTAGE(x, y) ( ( 100L * ((x * ADC_MAX_VOLTAGE_MV + BATTERY_DROP_OFFSET) - (1023L * y)) )  / ((BATTERY_VOLTAGE_MAX_MV - y) * 1023L))
 
 #define SUPPLY_VOLTAGE_MAX_MV 14100L
 #define VSUPPLY(x)((x * SUPPLY_VOLTAGE_MAX_MV) / 1023L)
@@ -151,7 +149,7 @@ typedef uint16_t BatteryLevel;  /* in milliVolts */
 
 /******************************************************
  * EEPROM definitions */
-#define EEPROM_INITIALIZED_FLAG 0xBD
+#define EEPROM_INITIALIZED_FLAG 0xBF
 #define EEPROM_UNINITIALIZED 0x00
 
 #define EEPROM_STATION_ID_DEFAULT "FOXBOX"
@@ -167,12 +165,6 @@ typedef uint16_t BatteryLevel;  /* in milliVolts */
 #define EEPROM_INTRA_CYCLE_DELAY_TIME_DEFAULT 0
 #define EEPROM_ID_TIME_INTERVAL_DEFAULT 300
 
-#define EEPROM_TONE_VOLUME_DEFAULT 5
-#define EEPROM_MAIN_VOLUME_DEFAULT 11
-#define EEPROM_AUDIO_RSSI_DEFAULT 0
-#define EEPROM_TONE_RSSI_DIRECTION_DEFAULT 0
-#define EEPROM_TONE_RSSI_FILTER_DEFAULT 4
-
 #define EEPROM_SI5351_CALIBRATION_DEFAULT 0x00
 #define EEPROM_CLK0_OUT_DEFAULT 133000000
 #define EEPROM_CLK1_OUT_DEFAULT 70000000
@@ -180,6 +172,8 @@ typedef uint16_t BatteryLevel;  /* in milliVolts */
 #define EEPROM_CLK0_ONOFF_DEFAULT OFF
 #define EEPROM_CLK1_ONOFF_DEFAULT OFF
 #define EEPROM_CLK2_ONOFF_DEFAULT OFF
+
+#define EEPROM_BATTERY_EMPTY_MV 3430
 
 /******************************************************
  * General definitions for making the code easier to understand */
