@@ -196,6 +196,9 @@
         var g_eventRadioBand = "";
         var g_timedOut = false;
 
+        var g_starttimeDateUpdateTimer = 0;
+        var g_finishtimeDateUpdateTimer = 0;
+
         var g_freq1FrequencyHz = "";
 
         var g_numberOfOpenWebSockets = 0;
@@ -281,11 +284,12 @@
                     eventTable.appendChild(eventRow(g_eventTableData[i], false));
                 }
 
-                var msgText = "FREQ," + currentRoleIndex();
-                sendToSocket(msgText);
-                msgText = "POWER," + currentRoleIndex();
-                sendToSocket(msgText);
+                //                var msgText = "FREQ," + currentRoleIndex();
+                //                sendToSocket(msgText);
+                //                msgText = "POWER," + currentRoleIndex();
+                //                sendToSocket(msgText);
             } else {
+
                 console.log("Refreshing table cells");
                 for (var i = 1, row; row = eventTable.rows[i]; i++) {
                     var rowData = g_eventTableData[i];
@@ -1273,7 +1277,13 @@
                                             r[roleIndex].setAttribute("selected", "true");
                                             g_selectedTxType = r[roleIndex].role;
                                         }
+
+                                        var msgText = "FREQ," + currentRoleIndex();
+                                        sendToSocket(msgText);
+                                        msgText = "POWER," + currentRoleIndex();
+                                        sendToSocket(msgText);
                                     }
+
                                 } else {
                                     console.log("role name: ", arr[1]);
                                 }
@@ -1339,18 +1349,6 @@
         function sendToSocket(msg) {
             var now = Date.now();
             var dif = now - g_lastPacketTime;
-
-            //            if (msg === g_lastSocketTxMessage) {
-            //                if (msg != "TEST") {
-            //                    console.log("Repeated command ignored!");
-            //                    return;
-            //                }
-            //            }
-
-            //            if (g_webSocketTxTimer != 0) {
-            //                clearTimeout(g_webSocketTxTimer);
-            //                g_webSocketTxTimer = 0;
-            //            }
 
             if ((g_websock == null) || (g_websock.readyState != g_websock.OPEN)) // wait 5 seconds and try again
             {
@@ -1495,6 +1493,8 @@
                 g_selectedTxType = document.getElementById("roleSelect").value;
                 var indices = g_typeTxNames.find(g_typeTxNames => g_typeTxNames.name == g_selectedTxType).indices;
                 return Number(indices.charAt(0));
+            } else {
+                console.log("Warning: Selected role not available!")
             }
             return (0);
         }
@@ -1580,10 +1580,10 @@
         function validateTimeStructure(str) {
             try {
                 var d = new Date(str).toISOString();
-                return true;
             } catch (err) {
                 return false;
             }
+            return true;
         }
 
         function updateDisplayedLocalTime() {
@@ -1596,23 +1596,33 @@
         }
 
         function newStartTime() {
-            var msgText = "";
-            var dtText = document.getElementById("datetimeStart");
-            var dt = dtText.value;
-            var local;
-            if (!validateTimeStructure(dt)) {
-                local = Date();
-            } else {
-                local = forceValueToLocalTime(dt);
+            if (g_starttimeDateUpdateTimer != 0) {
+                clearTimeout(g_starttimeDateUpdateTimer);
+                g_starttimeDateUpdateTimer = 0;
             }
 
-            applyNewStartTime(local);
-            var utc = localTimeToUTC(local);
-            msgText = "START_TIME," + utc;
+            var dtText = document.getElementById("datetimeStart");
 
-            console.log(msgText);
-            sendToSocket(msgText);
-            g_event_changes_saved = false;
+            if (dtText) {
+                g_starttimeDateUpdateTimer = setTimeout(function() {
+                    var msgText = "";
+                    var dt = dtText.value;
+                    var local;
+                    if (!validateTimeStructure(dt)) {
+                        local = Date();
+                    } else {
+                        local = forceValueToLocalTime(dt);
+                    }
+
+                    applyNewStartTime(local);
+                    var utc = localTimeToUTC(local);
+                    msgText = "START_TIME," + utc;
+
+                    console.log(msgText);
+                    sendToSocket(msgText);
+                    g_event_changes_saved = false;
+                }, 200);
+            }
         }
 
         function applyNewStartTime(t) {
@@ -1631,7 +1641,9 @@
             var min = ("0" + local.getMinutes()).slice(-2);
             var time = local.getFullYear() + "-" + mon + "-" + day + "T" + hour + ":" + min;
 
-            dtText.value = time;
+            if (dtText) {
+                dtText.value = time;
+            }
             g_selectedEventStart = local.getTime();
         }
 
@@ -1648,22 +1660,33 @@
         }
 
         function newFinishTime() {
-            var msgText = "";
-            var dtText = document.getElementById("datetimeFinish");
-            var dt = dtText.value;
-            var local;
-            if (!validateTimeStructure(dt)) {
-                local = Date();
-            } else {
-                local = forceValueToLocalTime(dt);
+            if (g_finishtimeDateUpdateTimer != 0) {
+                clearTimeout(g_finishtimeDateUpdateTimer);
+                g_finishtimeDateUpdateTimer = 0;
             }
-            applyNewFinishTime(local);
-            var utc = localTimeToUTC(local);
-            msgText = "FINISH_TIME," + utc;
 
-            console.log(msgText);
-            sendToSocket(msgText);
-            g_event_changes_saved = false;
+            var dtText = document.getElementById("datetimeFinish");
+
+            if (dtText) {
+                var dt = dtText.value;
+                var local;
+                var msgText = "";
+                if (!validateTimeStructure(dt)) {
+                    local = Date();
+                } else {
+                    local = forceValueToLocalTime(dt);
+                }
+
+                g_finishtimeDateUpdateTimer = setTimeout(function() {
+                    applyNewFinishTime(local);
+                    var utc = localTimeToUTC(local);
+                    msgText = "FINISH_TIME," + utc;
+
+                    console.log(msgText);
+                    sendToSocket(msgText);
+                    g_event_changes_saved = false;
+                }, 200);
+            }
         }
 
         function applyNewFinishTime(t) {
@@ -1681,7 +1704,10 @@
             var hour = ("0" + local.getHours()).slice(-2);
             var min = ("0" + local.getMinutes()).slice(-2);
             var time = local.getFullYear() + "-" + mon + "-" + day + "T" + hour + ":" + min;
-            dtText.value = time;
+
+            if (dtText) {
+                dtText.value = time;
+            }
             g_selectedEventFinish = local.getTime();
         }
 

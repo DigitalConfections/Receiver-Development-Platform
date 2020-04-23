@@ -1287,10 +1287,10 @@ void httpWebServerLoop()
 			{
 				g_webSocketServer.disconnect(); /* ensure all web socket clients are disconnected - this might not happen if WiFi connection was broken */
 			}
-			else
-			{
-				g_noActivityTimeoutSeconds = NO_ACTIVITY_TIMEOUT; // keep alive while a station is connected 
-			}
+//			else
+//			{
+//				g_noActivityTimeoutSeconds = NO_ACTIVITY_TIMEOUT; // keep alive while a station is connected 
+//			}
 		}
 
 		/*check UART for data */
@@ -1850,7 +1850,7 @@ void httpWebServerLoop()
 
 								msg = String(String(SOCK_COMMAND_EVENT_DATA) + "," + g_eventList[i].ename + "," + g_eventList[i].vers + "," +  g_eventList[i].startDateTimeEpoch + "," +  g_eventList[i].finishDateTimeEpoch + ",*," + g_eventList[i].callsign + ",*,*");
 								g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-							}
+                            }
 
 							g_http_server.handleClient();
 							g_webSocketServer.loop();
@@ -1909,10 +1909,6 @@ void httpWebServerLoop()
 
 				case TX_RECD_START_EVENT_REQUEST:
 				{
-/*					if(g_debug_prints_enabled) */
-/*					{ */
-/*						Serial.println("S=TX_RECD_START_EVENT_REQUEST"); */
-/*					} */
 					/*  
 					 *   Configure the ATMEGA appropriately for its role in the scheduled event.
 					 */

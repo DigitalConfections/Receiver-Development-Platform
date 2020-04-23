@@ -1406,25 +1406,25 @@
         function sendPower() {
             var p = document.getElementById("pwrSelect");
 
-           if(p) {
+            if (p) {
                 var power = p.value;
                 var msgText = "POWER,0," + power;
                 sendToSocket(msgText);
                 console.log(msgText);
                 g_powerLevel = power;
-			}
+            }
         }
 
 
         function sendBand() {
             var b = document.getElementById("bandSelect");
-            
-			if(b) {
-				var band = b.value;
+
+            if (b) {
+                var band = b.value;
                 var msgText = "BAND," + band;
                 sendToSocket(msgText);
                 console.log(msgText);
-			}
+            }
         }
 
         function sendClear() {
@@ -1435,30 +1435,30 @@
 
         function sendModulation() {
             var m = document.getElementById("modSelect");
-			
-			if(m) {
-				var modulation = m.value;
+
+            if (m) {
+                var modulation = m.value;
                 var msgText = "MOD," + modulation;
                 sendToSocket(msgText);
                 console.log(msgText);
-			}
+            }
         }
 
         function sendFrequencyForBand() {
             var f;
             var b = document.getElementById("bandSelect");
-			
-			if(b) {
-				band = b.value;
-				if (band == "80") {
-					f = g_typeFrequency[0].frequency;
-				} else {
-                	f = g_typeFrequency[1].frequency;
-				}
-				var msgText = "FREQ,0," + f;
-				sendToSocket(msgText);
-				console.log(msgText);
-			}
+
+            if (b) {
+                band = b.value;
+                if (band == "80") {
+                    f = g_typeFrequency[0].frequency;
+                } else {
+                    f = g_typeFrequency[1].frequency;
+                }
+                var msgText = "FREQ,0," + f;
+                sendToSocket(msgText);
+                console.log(msgText);
+            }
         }
 
 
