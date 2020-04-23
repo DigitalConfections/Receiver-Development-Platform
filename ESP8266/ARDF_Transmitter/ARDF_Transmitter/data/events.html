@@ -196,12 +196,16 @@
         var g_eventRadioBand = "";
         var g_timedOut = false;
 
+        var g_starttimeDateUpdateTimer = 0;
+        var g_finishtimeDateUpdateTimer = 0;
+
         var g_freq1FrequencyHz = "";
 
         var g_numberOfOpenWebSockets = 0;
         var g_stillConnected = 0;
         var g_stillDisconnected = 60;
         var g_lastPacketTime = 0;
+        var g_delayedPackets = 0;
         var g_lastSocketTxMessage;
         var g_transmitterTimeMs = 0;
         var g_websock = null;
@@ -279,7 +283,13 @@
                 for (var i = 1; i < eventNum; i++) {
                     eventTable.appendChild(eventRow(g_eventTableData[i], false));
                 }
+
+                //                var msgText = "FREQ," + currentRoleIndex();
+                //                sendToSocket(msgText);
+                //                msgText = "POWER," + currentRoleIndex();
+                //                sendToSocket(msgText);
             } else {
+
                 console.log("Refreshing table cells");
                 for (var i = 1, row; row = eventTable.rows[i]; i++) {
                     var rowData = g_eventTableData[i];
@@ -1252,6 +1262,28 @@
                                     var newTypeIndex = parseInt(text.substring(0, colon), 10);
                                     var newSubIndex = parseInt(text.substring(colon + 1), 10);
                                     console.log("role code: ", arr[1]);
+
+                                    var r = document.getElementById("roleSelect");
+
+                                    if (r) {
+
+                                        var roleIndex = 0;
+
+                                        while ((g_typeTxNames[roleIndex].indices != text) && (roleIndex < g_typeTxNames.length)) {
+                                            roleIndex++;
+                                        }
+
+                                        if (roleIndex < g_typeTxNames.length) {
+                                            r[roleIndex].setAttribute("selected", "true");
+                                            g_selectedTxType = r[roleIndex].role;
+                                        }
+
+                                        var msgText = "FREQ," + currentRoleIndex();
+                                        sendToSocket(msgText);
+                                        msgText = "POWER," + currentRoleIndex();
+                                        sendToSocket(msgText);
+                                    }
+
                                 } else {
                                     console.log("role name: ", arr[1]);
                                 }
@@ -1318,18 +1350,6 @@
             var now = Date.now();
             var dif = now - g_lastPacketTime;
 
-            //            if (msg === g_lastSocketTxMessage) {
-            //                if (msg != "TEST") {
-            //                    console.log("Repeated command ignored!");
-            //                    return;
-            //                }
-            //            }
-
-            //            if (g_webSocketTxTimer != 0) {
-            //                clearTimeout(g_webSocketTxTimer);
-            //                g_webSocketTxTimer = 0;
-            //            }
-
             if ((g_websock == null) || (g_websock.readyState != g_websock.OPEN)) // wait 5 seconds and try again
             {
                 if (g_websock != null) {
@@ -1344,14 +1364,17 @@
 
             } else {
                 if (dif > 200) {
+                    if (g_delayedPackets) g_delayedPackets--;
+                    console.log("Sending now:", now, g_lastPacketTime, dif, g_delayedPackets, msg);
                     g_websock.send(msg);
                     g_lastPacketTime = now;
                     g_lastSocketTxMessage = msg;
                 } else {
-                    console.log("Commands too rapid. Delaying send.");
+                    g_delayedPackets++;
+                    console.log("Commands too rapid. Delaying send.", now, g_lastPacketTime, dif, g_delayedPackets, msg);
                     setTimeout(function() {
                         sendToSocket(msg);
-                    }, 250);
+                    }, g_delayedPackets * 250);
                 }
             }
         }
@@ -1465,9 +1488,15 @@
         }
 
         function currentRoleIndex() {
-            g_selectedTxType = document.getElementById("roleSelect").value;
-            var indices = g_typeTxNames.find(g_typeTxNames => g_typeTxNames.name == g_selectedTxType).indices;
-            return Number(indices.charAt(0));
+            var r = document.getElementById("roleSelect");
+            if (r) {
+                g_selectedTxType = document.getElementById("roleSelect").value;
+                var indices = g_typeTxNames.find(g_typeTxNames => g_typeTxNames.name == g_selectedTxType).indices;
+                return Number(indices.charAt(0));
+            } else {
+                console.log("Warning: Selected role not available!")
+            }
+            return (0);
         }
 
         function foxClick() {
@@ -1551,10 +1580,10 @@
         function validateTimeStructure(str) {
             try {
                 var d = new Date(str).toISOString();
-                return true;
             } catch (err) {
                 return false;
             }
+            return true;
         }
 
         function updateDisplayedLocalTime() {
@@ -1567,23 +1596,33 @@
         }
 
         function newStartTime() {
-            var msgText = "";
-            var dtText = document.getElementById("datetimeStart");
-            var dt = dtText.value;
-            var local;
-            if (!validateTimeStructure(dt)) {
-                local = Date();
-            } else {
-                local = forceValueToLocalTime(dt);
+            if (g_starttimeDateUpdateTimer != 0) {
+                clearTimeout(g_starttimeDateUpdateTimer);
+                g_starttimeDateUpdateTimer = 0;
             }
 
-            applyNewStartTime(local);
-            var utc = localTimeToUTC(local);
-            msgText = "START_TIME," + utc;
+            var dtText = document.getElementById("datetimeStart");
 
-            console.log(msgText);
-            sendToSocket(msgText);
-            g_event_changes_saved = false;
+            if (dtText) {
+                g_starttimeDateUpdateTimer = setTimeout(function() {
+                    var msgText = "";
+                    var dt = dtText.value;
+                    var local;
+                    if (!validateTimeStructure(dt)) {
+                        local = Date();
+                    } else {
+                        local = forceValueToLocalTime(dt);
+                    }
+
+                    applyNewStartTime(local);
+                    var utc = localTimeToUTC(local);
+                    msgText = "START_TIME," + utc;
+
+                    console.log(msgText);
+                    sendToSocket(msgText);
+                    g_event_changes_saved = false;
+                }, 200);
+            }
         }
 
         function applyNewStartTime(t) {
@@ -1602,7 +1641,9 @@
             var min = ("0" + local.getMinutes()).slice(-2);
             var time = local.getFullYear() + "-" + mon + "-" + day + "T" + hour + ":" + min;
 
-            dtText.value = time;
+            if (dtText) {
+                dtText.value = time;
+            }
             g_selectedEventStart = local.getTime();
         }
 
@@ -1619,22 +1660,33 @@
         }
 
         function newFinishTime() {
-            var msgText = "";
-            var dtText = document.getElementById("datetimeFinish");
-            var dt = dtText.value;
-            var local;
-            if (!validateTimeStructure(dt)) {
-                local = Date();
-            } else {
-                local = forceValueToLocalTime(dt);
+            if (g_finishtimeDateUpdateTimer != 0) {
+                clearTimeout(g_finishtimeDateUpdateTimer);
+                g_finishtimeDateUpdateTimer = 0;
             }
-            applyNewFinishTime(local);
-            var utc = localTimeToUTC(local);
-            msgText = "FINISH_TIME," + utc;
 
-            console.log(msgText);
-            sendToSocket(msgText);
-            g_event_changes_saved = false;
+            var dtText = document.getElementById("datetimeFinish");
+
+            if (dtText) {
+                var dt = dtText.value;
+                var local;
+                var msgText = "";
+                if (!validateTimeStructure(dt)) {
+                    local = Date();
+                } else {
+                    local = forceValueToLocalTime(dt);
+                }
+
+                g_finishtimeDateUpdateTimer = setTimeout(function() {
+                    applyNewFinishTime(local);
+                    var utc = localTimeToUTC(local);
+                    msgText = "FINISH_TIME," + utc;
+
+                    console.log(msgText);
+                    sendToSocket(msgText);
+                    g_event_changes_saved = false;
+                }, 200);
+            }
         }
 
         function applyNewFinishTime(t) {
@@ -1652,7 +1704,10 @@
             var hour = ("0" + local.getHours()).slice(-2);
             var min = ("0" + local.getMinutes()).slice(-2);
             var time = local.getFullYear() + "-" + mon + "-" + day + "T" + hour + ":" + min;
-            dtText.value = time;
+
+            if (dtText) {
+                dtText.value = time;
+            }
             g_selectedEventFinish = local.getTime();
         }
 
@@ -1919,8 +1974,13 @@
         }
 
         function freqDotFormat(freqString) {
-            var val = Number(freqString);
-            var newString = String(Math.floor(val / 1000000)) + "." + pad(Math.floor(((val % 1000000) / 1000)), 3) + "." + pad((val % 1000), 3);
+            var newString;
+            if (freqString === "*") {
+                newString = "*";
+            } else {
+                var val = Number(freqString);
+                newString = String(Math.floor(val / 1000000)) + "." + pad(Math.floor(((val % 1000000) / 1000)), 3) + "." + pad((val % 1000), 3);
+            }
             return newString;
         }
 
@@ -2007,7 +2067,7 @@
     <center>
         <p style="text-align:left;"><a href=\ "73.73.73.73">[HOME]</a></p>
         <h1 id="mainHeading" style="font-family:verdana; font-size:30px; color:Black; text-align:center;">Transmitter Settings</h1>
-        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">HTML Ver 0.1.7 - 6 Mar 2019</p>
+        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">HTML Ver 0.2.0 - 23 Jan 2020</p>
 
         <div>
             <table>
