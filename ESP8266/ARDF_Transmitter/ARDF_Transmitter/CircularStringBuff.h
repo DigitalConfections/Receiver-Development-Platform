@@ -22,7 +22,6 @@
 class CircularStringBuff {
   public:
     ~CircularStringBuff() {
-      delete buf_;
     }
 
     CircularStringBuff(size_t);
