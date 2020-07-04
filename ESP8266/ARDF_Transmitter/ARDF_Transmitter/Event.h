@@ -1,29 +1,30 @@
 /**********************************************************************************************
-*   Copyright © 2019 Digital Confections LLC
-*
-*   Permission is hereby granted, free of charge, to any person obtaining a copy of
-*   this software and associated documentation files (the "Software"), to deal in the
-*   Software without restriction, including without limitation the rights to use, copy,
-*   modify, merge, publish, distribute, sublicense, and/or sell copies of the Software,
-*   and to permit persons to whom the Software is furnished to do so, subject to the
-*   following conditions:
-*
-*   The above copyright notice and this permission notice shall be included in all
-*   copies or substantial portions of the Software.
-*
-*   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
-*   INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
-*   PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
-*   FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-*   OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-*   DEALINGS IN THE SOFTWARE.
-*
+    Copyright © 2019 Digital Confections LLC
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy of
+    this software and associated documentation files (the "Software"), to deal in the
+    Software without restriction, including without limitation the rights to use, copy,
+    modify, merge, publish, distribute, sublicense, and/or sell copies of the Software,
+    and to permit persons to whom the Software is furnished to do so, subject to the
+    following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+    INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+    PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+    FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+    OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+    DEALINGS IN THE SOFTWARE.
+
 **********************************************************************************************/
 
 #ifndef _EVENT_H_
 #define _EVENT_H_
 
 #include <Arduino.h>
+
 
 #define EVENT_DEBUG_PRINTS_OVERRIDE true
 
@@ -32,6 +33,7 @@
 #define MAXIMUM_NUMBER_OF_ME_FILE_LINES 6
 #define MAXIMUM_NUMBER_OF_EVENT_TX_TYPES 4
 #define MAXIMUM_NUMBER_OF_TXs_OF_A_TYPE 10
+#define EVENT_FILE_DATA_SIZE (MAXIMUM_NUMBER_OF_EVENT_FILE_LINES)
 
 #define EVENT_FILE_START "EVENT_START"
 #define EVENT_FILE_END "EVENT_END"
@@ -65,146 +67,147 @@
 /* This structure contains all the essential information needed to summarize the contents of an Event file */
 typedef struct
 {
-	String path;
-	unsigned long startDateTimeEpoch;
-	unsigned long finishDateTimeEpoch;
-	String vers;
-	String ename;
-	String role;
-	String callsign;
-    String power;
-	String freq;
+  String path;
+  unsigned long startDateTimeEpoch;
+  unsigned long finishDateTimeEpoch;
+  String vers;
+  String ename;
+  String role;
+  String callsign;
+  String power;
+  String freq;
 } EventFileRef;
 
 /* This structure contains the elements of a single line in an event file */
 typedef struct
 {
-	String id;
-	String value;
+  String id;
+  String value;
 } EventLineData;
 
 /* This structure holds all the data that defines transmitter operation */
 typedef struct TxDataStruct
 {
-	String pattern;
-	String onTime;
-	String offTime;
-	String delayTime;
+  String pattern;
+  String onTime;
+  String offTime;
+  String delayTime;
 } TxDataType;
 
 /* This structure holds all the data that defines a transmitter Role */
 typedef struct RoleDataStruct
 {
-	String rolename;
-	int numberOfTxs;
-	long frequency;
-	int powerLevel_mW;
-	int code_speed;
-	int id_interval;
-	TxDataStruct *tx[MAXIMUM_NUMBER_OF_TXs_OF_A_TYPE];
+  String rolename;
+  int numberOfTxs;
+  long frequency;
+  int powerLevel_mW;
+  int code_speed;
+  int id_interval;
+  TxDataStruct *tx[MAXIMUM_NUMBER_OF_TXs_OF_A_TYPE];
 } RoleDataType;
 
 /* This structure holds all the data that defines an Event */
 typedef struct EventDataStruct
 {
-	String tx_assignment;           /* <- Role and time slot assigned to this tx: "r:t" */
-	String tx_role_name;            /* <- Descriptive name ofassigned Role */
-    String tx_role_pwr;             /* <- Power level of the assigned Role */
-	String tx_role_freq;            /* <- Frequency of the assigned Role */
-	bool tx_assignment_is_default;  /* <- Indicates that the transmitter has never receieved a specific role assignment */
-	String event_name;              /* "Classic 2m"      <- Human-readable event name */
-	String event_file_version;      /* <- Free-form text for tracking event revisions */
-	String event_band;              /* 2         <- Band information to be used for restricting frequency settings */
-	String event_antenna_port;      /*   <- Which antenna port to associate with this event 2_0, 80_0, 80_1, or 80_2 */
-	String event_callsign;          /* "DE NZ0I"     <- Callsign used by all transmitters (blank if none) */
-	String event_callsign_speed;    /* 20      <- Code speed at which all transmitters should send their callsign ID */
-	String event_start_date_time;   /* 2018-03-23T18:00:00Z <- Date and time of event start (transmitters on) */
-	String event_finish_date_time;  /* 2018-03-23T20:00:00Z  <- Date and time of event finish (transmitters off) */
-	String event_modulation;        /* AM        <- Modulation format to be used by all transmitters */
-	int event_number_of_tx_types;   /* 2     <- How many different transmitter roles there are (e.g., foxes and home) */
-	RoleDataStruct *role[MAXIMUM_NUMBER_OF_EVENT_TX_TYPES];
+  String tx_assignment;           /* <- Role and time slot assigned to this tx: "r:t" */
+  String tx_role_name;            /* <- Descriptive name ofassigned Role */
+  String tx_role_pwr;             /* <- Power level of the assigned Role */
+  String tx_role_freq;            /* <- Frequency of the assigned Role */
+  bool tx_assignment_is_default;  /* <- Indicates that the transmitter has never receieved a specific role assignment */
+  String event_name;              /* "Classic 2m"      <- Human-readable event name */
+  String event_file_version;      /* <- Free-form text for tracking event revisions */
+  String event_band;              /* 2         <- Band information to be used for restricting frequency settings */
+  String event_antenna_port;      /*   <- Which antenna port to associate with this event 2_0, 80_0, 80_1, or 80_2 */
+  String event_callsign;          /* "DE NZ0I"     <- Callsign used by all transmitters (blank if none) */
+  String event_callsign_speed;    /* 20      <- Code speed at which all transmitters should send their callsign ID */
+  String event_start_date_time;   /* 2018-03-23T18:00:00Z <- Date and time of event start (transmitters on) */
+  String event_finish_date_time;  /* 2018-03-23T20:00:00Z  <- Date and time of event finish (transmitters off) */
+  String event_modulation;        /* AM        <- Modulation format to be used by all transmitters */
+  int event_number_of_tx_types;   /* 2     <- How many different transmitter roles there are (e.g., foxes and home) */
+  RoleDataStruct *role[MAXIMUM_NUMBER_OF_EVENT_TX_TYPES];
 } EventType;
 
 class Event {
-public:
-bool debug_prints_enabled;
-bool values_did_change;
-String myPath;
+  public:
+    bool debug_prints_enabled;
+    bool values_did_change;
+    String myPath;
 
-private:
-EventType* eventData;
+  private:
+    EventType* eventData;
 
-public:
+  public:
 
-Event(bool);
-~Event();
+    Event(bool);
+    ~Event();
 
-String readMeFile(String path);
-void saveMeData(String newAssignment);
-bool setTxAssignment(String role_slot);
-String getTxAssignment(void);
-bool setTxFrequency(String role_slot);
-String getTxFrequency(void);
+    String readMeFile(String path);
+    void saveMeData(String newAssignment);
+    bool setTxAssignment(String role_slot);
+    String getTxAssignment(void);
+    bool setTxFrequency(String role_slot);
+    String getTxFrequency(void);
 
-void setEventName(String str);
-String getEventName(void) const;
-void setEventFileVersion(String str);
-String getEventFileVersion(void) const;
-void setEventBand(String str);
-String getEventBand(void) const;
-void setCallsign(String str);
-String getCallsign(void) const;
-void setAntennaPort(String str);
-String getAntennaPort(void) const;
-void setCallsignSpeed(String str);
-String getCallsignSpeed(void) const;
-void setEventStartDateTime(String str);
-String getEventStartDateTime(void) const;
-void setEventFinishDateTime(String str);
-String getEventFinishDateTime(void) const;
-void setEventModulation(String str);
-String getEventModulation(void) const;
-void setEventNumberOfTxTypes(int value);
-void setEventNumberOfTxTypes(String str);
-int getEventNumberOfTxTypes(void) const;
+    void setEventName(String str);
+    String getEventName(void) const;
+    void setEventFileVersion(String str);
+    String getEventFileVersion(void) const;
+    void setEventBand(String str);
+    String getEventBand(void) const;
+    void setCallsign(String str);
+    String getCallsign(void) const;
+    void setAntennaPort(String str);
+    String getAntennaPort(void) const;
+    void setCallsignSpeed(String str);
+    String getCallsignSpeed(void) const;
+    void setEventStartDateTime(String str);
+    String getEventStartDateTime(void) const;
+    void setEventFinishDateTime(String str);
+    String getEventFinishDateTime(void) const;
+    void setEventModulation(String str);
+    String getEventModulation(void) const;
+    void setEventNumberOfTxTypes(int value);
+    void setEventNumberOfTxTypes(String str);
+    int getEventNumberOfTxTypes(void) const;
 
-bool setRolename(int roleIndex, String str);
-String getRolename(int roleIndex) const;
-bool setNumberOfTxsForRole(int roleIndex, String str);
-int getNumberOfTxsForRole(int roleIndex) const;
-bool setFrequencyForRole(int roleIndex, long freq);
-long getFrequencyForRole(int roleIndex) const;
-bool setPowerlevelForRole(int roleIndex, String str);
-int getPowerlevelForRole(int roleIndex) const;
-bool setCodeSpeedForRole(int roleIndex, String str);
-int getCodeSpeedForRole(int roleIndex) const;
-bool setIDIntervalForRole(int roleIndex, String str);
-int getIDIntervalForRole(int roleIndex) const;
-    
-bool setPatternForTx(int typeIndex, int txIndex, String str);
-String getPatternForTx(int typeIndex, int txIndex) const;
+    bool setRolename(int roleIndex, String str);
+    String getRolename(int roleIndex) const;
+    bool setNumberOfTxsForRole(int roleIndex, String str);
+    int getNumberOfTxsForRole(int roleIndex) const;
+    bool setFrequencyForRole(int roleIndex, long freq);
+    long getFrequencyForRole(int roleIndex) const;
+    bool setPowerlevelForRole(int roleIndex, String str);
+    int getPowerlevelForRole(int roleIndex) const;
+    bool setCodeSpeedForRole(int roleIndex, String str);
+    int getCodeSpeedForRole(int roleIndex) const;
+    bool setIDIntervalForRole(int roleIndex, String str);
+    int getIDIntervalForRole(int roleIndex) const;
 
-bool validateEvent(void);
-bool readEventFile(String path);
-bool writeEventFile(void);
+    bool setPatternForTx(int typeIndex, int txIndex, String str);
+    String getPatternForTx(int typeIndex, int txIndex) const;
 
-String getTxDescriptiveName(String role_tx);
-int getTxRoleIndex(void);
-int getTxSlotIndex(void);
-TxDataType* getTxData(int roleIndex, int txIndex);
+    bool validateEvent(void);
+    bool readEventFile(String path);
+    bool writeEventFile(void);
+    bool validEventFile(String path);
 
-static bool extractLineData(String s, EventLineData* result);
-static bool isSoonerEvent(EventFileRef a, EventFileRef b, unsigned long currentEpoch);
-static bool extractMeFileData(String path, EventFileRef* eventRef);
+    String getTxDescriptiveName(String role_tx);
+    int getTxRoleIndex(void);
+    int getTxSlotIndex(void);
+    TxDataType* getTxData(int roleIndex, int txIndex);
 
-private:
+    static bool extractLineData(String s, EventLineData* result);
+    static bool isSoonerEvent(EventFileRef a, EventFileRef b, unsigned long currentEpoch);
+    static bool extractMeFileData(String path, EventFileRef* eventRef);
 
-bool parseStringData(String txt);
-bool writeEventFile(String fname);
-void dumpData(void);
+  private:
 
-bool setEventData(String id, String value);
-bool setEventData(String id, int value);
+    bool parseStringData(String txt);
+    bool writeEventFile(String fname);
+    void dumpData(void);
+
+    bool setEventData(String id, String value);
+    bool setEventData(String id, int value);
 
 };
 
