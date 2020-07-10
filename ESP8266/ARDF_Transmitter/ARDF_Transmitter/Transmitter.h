@@ -26,6 +26,14 @@
 #include <Arduino.h>
 
 /*
+    HUZZAH-specific Defines
+*/
+#define RED_LED (0)
+#define BLUE_LED (2)
+
+
+
+/*
        NORMAL WIFI POWER UP SEQUENCE
 
        WiFi wakes up
@@ -77,6 +85,7 @@
 */
 
 #define TRANSMITTER_DEBUG_PRINTS_OVERRIDE true
+#define TRANSMITTER_COMPILE_DEBUG_PRINTS true
 
 #define FULLY_CHARGED_BATTERY_mV 4200.
 #define FULLY_DEPLETED_BATTERY_mV 3200.
@@ -242,14 +251,16 @@ typedef enum
   WSClientWaitForUpdates,
   WSClientPrepForFileData,
   WSClientReceiveFileData,
+  WSClientValidateFile,
+  WSClientLoadEventFile,
   WSClientClose,
+  WSClientCleanup,
   WSClientError
 } WebSocketSlaveState;
 
 typedef enum
 {
   TX_WAKE_UP,
-  TX_INITIAL_TIME_RECEIVED,
   TX_HTML_PAGE_SERVED,
   TX_HTML_NEXT_EVENT,
   TX_HTML_REFRESH_EVENTS,
@@ -257,7 +268,8 @@ typedef enum
   TX_READ_ALL_EVENTS_FILES,
   TX_RECD_START_EVENT_REQUEST,
   TX_WAITING_FOR_INSTRUCTIONS,
-  MASTER_SEND_ACTIVE_FILE
+  TX_MASTER_SEND_ACTIVE_FILE,
+  TX_INVALID_STATE
 } TxCommState;
 
 class Transmitter {

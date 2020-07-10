@@ -24,7 +24,7 @@
 #define _EVENT_H_
 
 #include <Arduino.h>
-
+#include "Transmitter.h"
 
 #define EVENT_DEBUG_PRINTS_OVERRIDE true
 
@@ -35,8 +35,10 @@
 #define MAXIMUM_NUMBER_OF_TXs_OF_A_TYPE 10
 #define EVENT_FILE_DATA_SIZE (MAXIMUM_NUMBER_OF_EVENT_FILE_LINES)
 
+#define EVENT_FILE_NAME "FILENAME"
 #define EVENT_FILE_START "EVENT_START"
 #define EVENT_FILE_END "EVENT_END"
+#define EVENT_FILE_CHECKSUM "CHECK"
 
 #define EVENT_NAME "EVENT_NAME"                             /* Human readable event name. Should contain band that is used: 80M or 2M */
 #define EVENT_FILE_VERSION "EVENT_VERSION"                  /* Human readable string for tracking event file changes */
@@ -60,8 +62,8 @@
 #define TYPE_TX_DELAY_TIME "_DELAY_TIME"                    /* For what period of time (seconds) should a transmitter wait prior to beginning to send its first transmission */
 #define TX_ASSIGNMENT "TX_ASSIGNMENT"                       /* Which role and time slot is assigned to this transmitter: "r:t" */
 #define TX_DESCRIPTIVE_NAME "TX_ROLE_NAME"                  /* Descriptive name of role assignment */
-#define TX_ROLE_FREQ "TX_ROLE_FREQ"                         /* Frequency of role assignment */
-#define TX_ROLE_POWER "TX_ROLE_PWR"                         /* Power in mW of role assignment */
+//#define TX_ROLE_FREQ "TX_ROLE_FREQ"                         /* Frequency of role assignment */
+//#define TX_ROLE_POWER "TX_ROLE_PWR"                         /* Power in mW of role assignment */
 #define TX_ASSIGNMENT_IS_DEFAULT "TX_DEFAULT"               /* Identifies the assignment as the default assignment */
 
 /* This structure contains all the essential information needed to summarize the contents of an Event file */
@@ -186,10 +188,11 @@ class Event {
     bool setPatternForTx(int typeIndex, int txIndex, String str);
     String getPatternForTx(int typeIndex, int txIndex) const;
 
+    static bool validEventFile(String path);
+    static bool validEventFile(String path, String* filename);
     bool validateEvent(void);
     bool readEventFile(String path);
     bool writeEventFile(void);
-    bool validEventFile(String path);
 
     String getTxDescriptiveName(String role_tx);
     int getTxRoleIndex(void);

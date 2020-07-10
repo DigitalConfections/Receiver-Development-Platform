@@ -26,7 +26,6 @@
 #include <WebSocketsServer.h>
 
 extern ESP8266WebServer * g_http_server;
-extern WebSocketsServer g_webSocketServer;
 
 Event::Event(bool debug)
 {
@@ -86,6 +85,7 @@ bool Event::extractLineData(String s, EventLineData *result)
     else
     {
       result->id = "";
+      result->value = s;
       return ( false); /* start or end found */
     }
   }
@@ -118,13 +118,31 @@ bool Event::parseStringData(String s)
 
   if (extractLineData(s, &data))
   {
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.println("Error extracting data");
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     return ( true); /* flag error */
   }
   else if ((data.id).equals(""))
   {
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.println("No data found");
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     return ( false); /* no data but no error */
   }
 
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+  if (debug_prints_enabled)
+  {
+    Serial.println(String("Parsed: ") + s + " = " + data.id + " " + data.value);
+  }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
   return (setEventData(data.id, data.value));
 }
 
@@ -226,6 +244,7 @@ String Event::readMeFile(String path)
 
     if (file)
     {
+      yield();
       String s = file.readStringUntil('\n');
       int count = 0;
 
@@ -246,8 +265,8 @@ String Event::readMeFile(String path)
     {
       file.println(TX_ASSIGNMENT + String(",0:0"));
       file.println(String(TX_DESCRIPTIVE_NAME) + "," + getTxDescriptiveName("0:0"));
-      file.println(String(TX_ROLE_POWER) + "," + String(this->getPowerlevelForRole(0)));
-      file.println(String(TX_ROLE_FREQ) + "," + String(this->getFrequencyForRole(0)));
+//      file.println(String(TX_ROLE_POWER) + "," + String(this->getPowerlevelForRole(0)));
+//      file.println(String(TX_ROLE_FREQ) + "," + String(this->getFrequencyForRole(0)));
       file.println(TX_ASSIGNMENT_IS_DEFAULT + String(",true"));
       file.close();   /* Close the file */
     }
@@ -296,6 +315,7 @@ bool Event::extractMeFileData(String path, EventFileRef *eventRef)
 
     if (file)
     {
+      yield();
       String s = file.readStringUntil('\n');
       int count = 0;
       int items = 0;
@@ -312,20 +332,21 @@ bool Event::extractMeFileData(String path, EventFileRef *eventRef)
           fail = false;
           items++;
         }
-        else if (data.id.equalsIgnoreCase(TX_ROLE_FREQ))
-        {
-          eventRef->freq = data.value;
-          fail = false;
-          items++;
-        }
-        else if (data.id.equalsIgnoreCase(TX_ROLE_POWER))
-        {
-          eventRef->power = data.value;
-          fail = false;
-          items++;
-        }
+//        else if (data.id.equalsIgnoreCase(TX_ROLE_FREQ))
+//        {
+//          eventRef->freq = data.value;
+//          fail = false;
+//          items++;
+//        }
+//        else if (data.id.equalsIgnoreCase(TX_ROLE_POWER))
+//        {
+//          eventRef->power = data.value;
+//          fail = false;
+//          items++;
+//        }
         /* ignore TX_ASSIGNMENT "TX_ASSIGNMENT" / *Which role and time slot is assigned to this transmitter: "r:t" * / */
 
+        yield();
         s = file.readStringUntil('\n');
       }
 
@@ -340,8 +361,8 @@ bool Event::extractMeFileData(String path, EventFileRef *eventRef)
     {
       file.println(TX_ASSIGNMENT + String(",0:0"));
       file.println(String(TX_DESCRIPTIVE_NAME) + ",Finish - MO");
-      file.println(String(TX_ROLE_POWER) + ",1000");
-      file.println(String(TX_ROLE_FREQ) + ",3550000");
+//      file.println(String(TX_ROLE_POWER) + ",1000");
+//      file.println(String(TX_ROLE_FREQ) + ",3550000");
       file.println(TX_ASSIGNMENT_IS_DEFAULT + String(",true"));
       file.close();   /* Close the file */
     }
@@ -356,7 +377,19 @@ bool Event::extractMeFileData(String path, EventFileRef *eventRef)
 
 bool Event::validEventFile(String path)
 {
-  bool isValid = true;
+  bool isValid;
+  isValid = validEventFile(path, NULL);
+  return (isValid);
+}
+
+bool Event::validEventFile(String path, String* filename)
+{
+  bool failure = false;
+  bool startFound = false;
+  bool endFound = false;
+  int linesInFile = 0;
+  EventLineData lineData;
+  int checksum;
 
   if (!path.startsWith("/"))
   {
@@ -370,70 +403,84 @@ bool Event::validEventFile(String path)
 
     if (file)
     {
-      String s = file.readStringUntil('\n');
-      String hold;
+      String s = String("START");
 
-      s.trim();
-      if (!s.equalsIgnoreCase(String(EVENT_FILE_START)))
+      while (s.length() && !startFound)
       {
-        isValid = false;
-        //				if(debug_prints_enabled)
-        //				{
-        //					Serial.println(String("Err in 1st line: " + s));
-        //				}
-      }
-      int count = 0;
+        yield();
+        s = file.readStringUntil('\n');
+        s.trim();
 
-      if (isValid)
-      {
-        while (s.length() && count++ <= MAXIMUM_NUMBER_OF_EVENT_FILE_LINES)
+        if (!extractLineData(s, &lineData))
         {
-          hold = s;
-          this->parseStringData(s);
-          s = file.readStringUntil('\n');
-        }
-
-        hold.trim();
-        if (!hold.equalsIgnoreCase(String(EVENT_FILE_END)) || (count > MAXIMUM_NUMBER_OF_EVENT_FILE_LINES))
-        {
-          isValid = false;
-          if (debug_prints_enabled)
+          startFound = s.equals(EVENT_FILE_START);
+          if (lineData.id.equals(EVENT_FILE_NAME))
           {
-            Serial.println(String("Err in event file: " + hold));
+            if (filename)
+            {
+              *filename = lineData.value;
+            }
           }
         }
+      }
+
+      if (startFound)
+      {
+        linesInFile = 1;
+        checksum += s.length(); /* Add length of EVENT_START */
+
+        while (s.length() && (linesInFile++ <= MAXIMUM_NUMBER_OF_EVENT_FILE_LINES) && !endFound)
+        {
+          yield();
+          s = file.readStringUntil('\n');
+          s.trim();
+          if (!endFound)
+          {
+            checksum += s.length();
+            endFound = s.equals(EVENT_FILE_END);
+          }
+          else if (!extractLineData(s, &lineData))
+          {
+            if (lineData.id.equals(EVENT_FILE_CHECKSUM))
+            {
+              failure = (checksum != lineData.value.toInt());
+            }
+          }
+
+          linesInFile++;
+        }
+
+        if (!failure)
+        {
+          failure = (!endFound || (linesInFile > MAXIMUM_NUMBER_OF_EVENT_FILE_LINES));
+        }
+      }
+      else
+      {
+        failure = true;
       }
 
       file.close();   /* Close the file */
     }
     else
     {
-      return (false);
+      failure = true;
     }
   }
   else
   {
-    return ( false);
+    failure = true;
   }
 
-  if (debug_prints_enabled)
-  {
-    if (!isValid)
-    {
-      Serial.println(String("\tError reading event: ") + path);
-    }
-    //		else
-    //		{
-    //			Serial.println(String("\tSuccessfully read event: ") + path);
-    //		}
-  }
-
-  return ( isValid);
+  return (!failure);
 }
 
 bool Event::readEventFile(String path)
 {
   bool failure = false;
+  bool startFound = false;
+  bool endFound = false;
+  int linesInFile = 0;
 
   if (!path.startsWith("/"))
   {
@@ -460,60 +507,51 @@ bool Event::readEventFile(String path)
 
     if (file)
     {
-      String s = file.readStringUntil('\n');
-      String hold;
+      String s = String("START");
 
-      s.trim();
-      if (!s.equalsIgnoreCase(String(EVENT_FILE_START)))
+      while (s.length() && !startFound)
       {
-        failure = true;
-        //				if(debug_prints_enabled)
-        //				{
-        //					Serial.println(String("Err in 1st line: " + s));
-        //				}
-      }
-      int count = 0;
-
-      while (s.length() && count++ <= MAXIMUM_NUMBER_OF_EVENT_FILE_LINES)
-      {
-        hold = s;
-        this->parseStringData(s);
+        yield();
         s = file.readStringUntil('\n');
+        s.trim();
+        startFound = s.equals(EVENT_FILE_START);
       }
 
-      hold.trim();
-      if (!hold.equalsIgnoreCase(String(EVENT_FILE_END)) || (count > MAXIMUM_NUMBER_OF_EVENT_FILE_LINES))
+      if (startFound)
+      {
+        linesInFile = 1;
+
+        while (s.length() && (linesInFile++ <= MAXIMUM_NUMBER_OF_EVENT_FILE_LINES) && !endFound)
+        {
+          yield();
+          s = file.readStringUntil('\n');
+          s.trim();
+          this->parseStringData(s);
+          endFound = s.equals(EVENT_FILE_END);
+          linesInFile++;
+        }
+
+        failure = (!endFound || (linesInFile > MAXIMUM_NUMBER_OF_EVENT_FILE_LINES));
+      }
+      else
       {
         failure = true;
-        //				if(debug_prints_enabled)
-        //				{
-        //					Serial.println(String("Err in last line: " + hold));
-        //				}
       }
 
       file.close();   /* Close the file */
     }
+    else
+    {
+      failure = true;
+    }
 
     getTxAssignment();
-
     values_did_change = false;
   }
   else
   {
-    return ( true);
+    failure = true;
   }
-
-  //	if(debug_prints_enabled)
-  //	{
-  //		if(failure)
-  //		{
-  //			Serial.println(String("\tError reading event: ") + path);
-  //		}
-  //		else
-  //		{
-  //			Serial.println(String("\tSuccessfully read event: ") + path);
-  //		}
-  //	}
 
   return ( failure);
 }
@@ -619,19 +657,23 @@ bool Event::writeEventFile(String path)
 
   if (this->values_did_change == false)
   {
-    //		if(debug_prints_enabled)
-    //		{
-    //			Serial.print("Not written: Event did not change.");
-    //			Serial.println(path);
-    //        }
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.print("Not written: Event did not change.");
+      Serial.println(path);
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
 
     return ( false); /*nothing new to save, return no error */
   }
-  //	else if(debug_prints_enabled)
-  //	{
-  //		Serial.print("Writing Event changes to:");
-  //		Serial.println(path);
-  //	}
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+  else if (debug_prints_enabled)
+  {
+    Serial.print("Writing Event changes to:");
+    Serial.println(path);
+  }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
 
   if (path == NULL)
   {
@@ -646,15 +688,13 @@ bool Event::writeEventFile(String path)
   /*    LittleFS.remove(path); */
   /*  } */
 
-  //	if(debug_prints_enabled)
-  //	{
-  //		Serial.print("Writing file: ");
-  //	}
-
-  //    if(debug_prints_enabled)
-  //    {
-  //        Serial.println(path);
-  //    }
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+  if (debug_prints_enabled)
+  {
+    Serial.print("Writing file: ");
+    Serial.println(path);
+  }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
 
   noInterrupts();
 
@@ -706,10 +746,10 @@ bool Event::writeEventFile(String path)
     interrupts();
     return ( true);
   }
+  interrupts();
 
   saveMeData("");
 
-  interrupts();
   failure = !validEventFile(path);
 
   return ( failure);
@@ -719,20 +759,43 @@ void Event::saveMeData(String newAssignment)
 {
   if (this->eventData == NULL)
   {
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if ( debug_prints_enabled )
+    {
+      Serial.println("Me not saved: no event data");
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+
     return;
   }
+
   if ((this->eventData->tx_assignment.length() < 3) || (this->eventData->tx_assignment.indexOf(":") < 1))
   {
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if ( debug_prints_enabled )
+    {
+      Serial.println("Me not saved: assignment error");
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+
     return;
   }
+
   if (this->myPath.length() < 7)
   {
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if ( debug_prints_enabled )
+    {
+      Serial.println("Me not saved: path error");
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+
     return;
   }
 
   String holdTxAssignment;
   String holdRoleName = this->eventData->tx_role_name;
-  String holdRoleFrequency = this->eventData->tx_role_freq;
+//  String holdRoleFrequency = this->eventData->tx_role_freq;
 
   if (newAssignment.indexOf(":") < 1)
   {
@@ -743,9 +806,9 @@ void Event::saveMeData(String newAssignment)
     holdTxAssignment = newAssignment;
   }
 
-  String path = readMeFile(this->myPath); /* assigns file value to this->eventData->tx_assignment */
+  String path = readMeFile(this->myPath); /* reads file value into this->eventData->tx_assignment, and returns the path to the Me file */
 
-  if ((!holdTxAssignment.equals(this->eventData->tx_assignment)) || (!holdRoleName.equals(this->eventData->tx_role_name)) || (!holdRoleFrequency.equals(this->eventData->tx_role_freq)))
+  if ((!holdTxAssignment.equals(this->eventData->tx_assignment)) || (!holdRoleName.equals(this->eventData->tx_role_name)))
   {
     String role = holdTxAssignment.substring(0, holdTxAssignment.indexOf(":"));
     File file = LittleFS.open(path, "w"); /* Open the file for writing */
@@ -755,16 +818,18 @@ void Event::saveMeData(String newAssignment)
       file.println(EVENT_FILE_START);
       file.println(String(TX_ASSIGNMENT) + "," + holdTxAssignment);
       file.println(String(TX_DESCRIPTIVE_NAME) + "," + getTxDescriptiveName(holdTxAssignment));
-      file.println(String(TX_ROLE_POWER) + "," + String(this->getPowerlevelForRole(role.toInt())));
-      file.println(String(TX_ROLE_FREQ) + "," + String(this->getFrequencyForRole(role.toInt())));
+//      file.println(String(TX_ROLE_POWER) + "," + String(this->getPowerlevelForRole(role.toInt())));
+//      file.println(String(TX_ROLE_FREQ) + "," + String(this->getFrequencyForRole(role.toInt())));
       file.println(String(TX_ASSIGNMENT_IS_DEFAULT) + ",false");
       file.println(EVENT_FILE_END);
       file.close();   /* Close the file */
 
-      //			if(debug_prints_enabled)
-      //			{
-      //				Serial.println(String("\tWrote file: ") + path);
-      //			}
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+      if ( debug_prints_enabled )
+      {
+        Serial.println(String("Me file written: ") + path);
+      }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     }
   }
 
@@ -795,10 +860,12 @@ bool Event::setTxAssignment(String role_slot)
     this->eventData->tx_role_freq = Event::getFrequencyForRole(r.toInt());
     this->values_did_change = true;
 
-    //        if(debug_prints_enabled)
-    //        {
-    //            Serial.println("Set role: " + this->eventData->tx_assignment);
-    //        }
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.println("Set role: " + this->eventData->tx_assignment);
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
   }
 
   return ( false);
@@ -808,11 +875,6 @@ String Event::getTxAssignment(void)
 {
   if ((this->eventData->tx_assignment.length() < 1) || (this->eventData->tx_assignment.indexOf(":") < 1))
   {
-    //        if(debug_prints_enabled)
-    //        {
-    //            Serial.println("Reading ME file...");
-    //        }
-
     readMeFile(this->myPath);
   }
 
@@ -835,10 +897,12 @@ bool Event::setTxFrequency(String frequency)
     this->eventData->tx_role_freq = frequency;
     this->values_did_change = true;
 
-    //        if(debug_prints_enabled)
-    //        {
-    //            Serial.println("Set frequency: " + this->eventData->tx_role_freq);
-    //        }
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.println("Set frequency: " + this->eventData->tx_role_freq);
+    }
+#endif // #if TRANSMITTER_COMPILE_DEBUG_PRINTS
   }
 
   return ( false);
@@ -848,10 +912,12 @@ String Event::getTxFrequency(void)
 {
   if ((this->eventData->tx_assignment.length() < 1) || (this->eventData->tx_assignment.indexOf(":") < 1))
   {
-    //        if(debug_prints_enabled)
-    //        {
-    //    		Serial.println("Reading ME file...");
-    //        }
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.println("Reading ME file...");
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
 
     readMeFile(this->myPath);
   }
@@ -1072,7 +1138,6 @@ void Event::setEventStartDateTime(String str)
   {
     this->setEventData(EVENT_START_DATE_TIME, str);
     this->values_did_change = true;
-    /*    Serial.println("setEventStartDateTime: str = " + str); */
   }
 }
 
@@ -1193,7 +1258,13 @@ bool Event::setRolename(int roleIndex, String str)
     return ( true);
   }
   this->eventData->role[roleIndex]->rolename = str;
-  /*  if (debug_prints_enabled) Serial.println("Type" + String(roleIndex) + " role: " + str); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+  if (debug_prints_enabled)
+  {
+    Serial.println("Type" + String(roleIndex) + " role: " + str);
+  }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+
   this->values_did_change = true;
   return ( false);
 }
@@ -1237,7 +1308,13 @@ bool Event::setNumberOfTxsForRole(int roleIndex, String str)
   }
 
   this->eventData->role[roleIndex]->numberOfTxs = num;
-  /*  if (debug_prints_enabled) Serial.println("Type" + String(roleIndex) + " No Txs: " + str); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+  if (debug_prints_enabled)
+  {
+    Serial.println("Type" + String(roleIndex) + " No Txs: " + str);
+  }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+
   this->values_did_change = true;
   return ( false);
 }
@@ -1274,7 +1351,13 @@ bool Event::setFrequencyForRole(int roleIndex, long freq)
     return ( true);
   }
   this->eventData->role[roleIndex]->frequency = freq;
-  /*  if (debug_prints_enabled) Serial.println("Type" + String(roleIndex) + " freq: " + String(freq)); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+  if (debug_prints_enabled)
+  {
+    Serial.println("Type" + String(roleIndex) + " freq: " + String(freq));
+  }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+
   this->values_did_change = true;
 
   /*If the transmitter is currently set to this role then update its frequency too */
@@ -1317,7 +1400,13 @@ bool Event::setPowerlevelForRole(int roleIndex, String str)
     return ( true);
   }
   this->eventData->role[roleIndex]->powerLevel_mW = str.toInt();
-  /*  if (debug_prints_enabled) Serial.println("Type" + String(roleIndex) + " freq: " + str); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+  if (debug_prints_enabled)
+  {
+    Serial.println("Type" + String(roleIndex) + " freq: " + str);
+  }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+
   this->values_did_change = true;
   return ( false);
 }
@@ -1354,7 +1443,13 @@ bool Event::setCodeSpeedForRole(int roleIndex, String str)
     return ( true);
   }
   this->eventData->role[roleIndex]->code_speed = str.toInt();
-  /*  if (debug_prints_enabled) Serial.println("Type" + String(roleIndex) + " freq: " + str); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+  if (debug_prints_enabled)
+  {
+    Serial.println("Type" + String(roleIndex) + " freq: " + str);
+  }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+
   this->values_did_change = true;
   return ( false);
 }
@@ -1435,7 +1530,13 @@ bool Event::setIDIntervalForRole(int roleIndex, String str)
     return ( true);
   }
   this->eventData->role[roleIndex]->id_interval = str.toInt();
-  /*  if (debug_prints_enabled) Serial.println("Type" + String(roleIndex) + " freq: " + str); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+  if (debug_prints_enabled)
+  {
+    Serial.println("Type" + String(roleIndex) + " freq: " + str);
+  }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+
   this->values_did_change = true;
   return ( false);
 }
@@ -1444,16 +1545,37 @@ int Event::getIDIntervalForRole(int roleIndex) const
 {
   if (this->eventData == NULL)
   {
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.println("Event data null");
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     return ( -1);
   }
+
   if (roleIndex < 0)
   {
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.println(String("Roleindex invalid < :") + roleIndex);
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     return ( -1);
   }
+
   if (roleIndex >= this->eventData->event_number_of_tx_types)
   {
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.println(String("Roleindex invalid > :") + roleIndex + ">=" + this->eventData->event_number_of_tx_types);
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     return ( -1);
   }
+
   return ( this->eventData->role[roleIndex]->id_interval);
 }
 
@@ -1474,24 +1596,36 @@ bool Event::setEventData(String id, String value)
 
   if (id.equalsIgnoreCase(TX_ASSIGNMENT))
   {
-    /*    if (debug_prints_enabled) Serial.println("Tx assignment: " + value); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.println("Tx assignment: " + value);
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+
     this->eventData->tx_assignment = value;
   }
   else if (id.equalsIgnoreCase(TX_DESCRIPTIVE_NAME))
   {
     this->eventData->tx_role_name = value;
   }
-  else if (id.equalsIgnoreCase(TX_ROLE_POWER))
-  {
-    this->eventData->tx_role_pwr = value;
-  }
-  else if (id.equalsIgnoreCase(TX_ROLE_FREQ))
-  {
-    this->eventData->tx_role_freq = value;
-  }
+//  else if (id.equalsIgnoreCase(TX_ROLE_POWER))
+//  {
+//    this->eventData->tx_role_pwr = value;
+//  }
+//  else if (id.equalsIgnoreCase(TX_ROLE_FREQ))
+//  {
+//    this->eventData->tx_role_freq = value;
+//  }
   else if (id.equalsIgnoreCase(TX_ASSIGNMENT_IS_DEFAULT))
   {
-    /*    if (debug_prints_enabled) Serial.println("Tx is default: " + value); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.println("Tx is default: " + value);
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+
     if (value.equalsIgnoreCase("TRUE") || value.equals("1"))
     {
       this->eventData->tx_assignment_is_default = true;
@@ -1503,52 +1637,102 @@ bool Event::setEventData(String id, String value)
   }
   else if (id.equalsIgnoreCase(EVENT_NAME))
   {
-    /*    if (debug_prints_enabled) Serial.println("Event name: " + value); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.println("Set event_name: " + value);
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     this->eventData->event_name = value;
   }
   else if (id.equalsIgnoreCase(EVENT_FILE_VERSION))
   {
-    /*    if (debug_prints_enabled) Serial.println("File ver: " + value); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.println("File ver: " + value);
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     this->eventData->event_file_version = value;
   }
   else if (id.equalsIgnoreCase(EVENT_BAND))
   {
-    /*    if (debug_prints_enabled) Serial.println("Event band: " + value); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.println("Event band: " + value);
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     this->eventData->event_band = value;
   }
   else if (id.equalsIgnoreCase(EVENT_CALLSIGN))
   {
-    /*    if (debug_prints_enabled) Serial.println("Event callsign: " + value); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.println("Event callsign: " + value);
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     this->eventData->event_callsign = value;
   }
   else if (id.equalsIgnoreCase(EVENT_ANTENNA_PORT))
   {
-    /*    if (debug_prints_enabled) Serial.println("Event antenna: " + value); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.println("Event antenna: " + value);
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     this->eventData->event_antenna_port = value;
   }
   else if (id.equalsIgnoreCase(EVENT_CALLSIGN_SPEED))
   {
-    /*    if (debug_prints_enabled) Serial.println("Event ID speed: " + value); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.println("Event ID speed: " + value);
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     this->eventData->event_callsign_speed = value;
   }
   else if (id.equalsIgnoreCase(EVENT_START_DATE_TIME))
   {
-    /*    if (debug_prints_enabled) Serial.println("Event start: " + value); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.println("Event start: " + value);
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     this->eventData->event_start_date_time = value;
   }
   else if (id.equalsIgnoreCase(EVENT_FINISH_DATE_TIME))
   {
-    /*    if (debug_prints_enabled) Serial.println("Event finish: " + value); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.println("Event finish: " + value);
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     this->eventData->event_finish_date_time = value;
   }
   else if (id.equalsIgnoreCase(EVENT_MODULATION))
   {
-    /*    if (debug_prints_enabled) Serial.println("Event modulation: " + value); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.println("Event modulation: " + value);
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     this->eventData->event_modulation = value;
   }
   else if (id.equalsIgnoreCase(EVENT_NUMBER_OF_TX_TYPES))
   {
-    /*    if (debug_prints_enabled) Serial.println("Event tx types: " + value); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.println("Event tx types: " + value);
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     this->eventData->event_number_of_tx_types = value.toInt();
   }
   else if (id.endsWith(TYPE_TX_COUNT))
@@ -1558,7 +1742,12 @@ bool Event::setEventData(String id, String value)
     if ((typeIndex >= 0) && (typeIndex < MAXIMUM_NUMBER_OF_EVENT_TX_TYPES))
     {
       this->eventData->role[typeIndex]->numberOfTxs = value.toInt();
-      /*      if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + " count: " + value); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+      if (debug_prints_enabled)
+      {
+        Serial.println("Type" + typeIndexStr + " count: " + value);
+      }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     }
   }
   else if (id.endsWith(TYPE_NAME))
@@ -1568,7 +1757,12 @@ bool Event::setEventData(String id, String value)
     if ((typeIndex >= 0) && (typeIndex < MAXIMUM_NUMBER_OF_EVENT_TX_TYPES))
     {
       this->eventData->role[typeIndex]->rolename = value;
-      /*      if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + " role: " + value); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+      if (debug_prints_enabled)
+      {
+        Serial.println("Type" + typeIndexStr + " role: " + value);
+      }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     }
   }
   else if (id.endsWith(TYPE_FREQ))
@@ -1578,7 +1772,12 @@ bool Event::setEventData(String id, String value)
     if ((typeIndex >= 0) && (typeIndex < MAXIMUM_NUMBER_OF_EVENT_TX_TYPES))
     {
       this->eventData->role[typeIndex]->frequency = value.toInt();
-      /*      if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + " freq: " + value); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+      if (debug_prints_enabled)
+      {
+        Serial.println("Type" + typeIndexStr + " freq: " + value);
+      }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     }
   }
   else if (id.endsWith(TYPE_POWER_LEVEL))
@@ -1588,7 +1787,12 @@ bool Event::setEventData(String id, String value)
     if ((typeIndex >= 0) && (typeIndex < MAXIMUM_NUMBER_OF_EVENT_TX_TYPES))
     {
       this->eventData->role[typeIndex]->powerLevel_mW = value.toInt();
-      /*      if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + " power: " + value + " mW"); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+      if (debug_prints_enabled)
+      {
+        Serial.println("Type" + typeIndexStr + " power: " + value + " mW");
+      }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     }
   }
   else if (id.endsWith(TYPE_ID_INTERVAL))
@@ -1598,7 +1802,12 @@ bool Event::setEventData(String id, String value)
     if ((typeIndex >= 0) && (typeIndex < MAXIMUM_NUMBER_OF_EVENT_TX_TYPES))
     {
       this->eventData->role[typeIndex]->id_interval = value.toInt();
-      /*      if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + " ID interval: " + value + " sec"); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+      if (debug_prints_enabled)
+      {
+        Serial.println("Type" + typeIndexStr + " ID interval: " + value + " sec");
+      }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     }
   }
   else if (id.endsWith(TYPE_CODE_SPEED))
@@ -1608,7 +1817,12 @@ bool Event::setEventData(String id, String value)
     if ((typeIndex >= 0) && (typeIndex < MAXIMUM_NUMBER_OF_EVENT_TX_TYPES))
     {
       this->eventData->role[typeIndex]->code_speed = value.toInt();
-      /*      if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + " code speed: " + value + " WPM"); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+      if (debug_prints_enabled)
+      {
+        Serial.println("Type" + typeIndexStr + " code speed: " + value + " WPM");
+      }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     }
   }
   else if (id.endsWith(TYPE_TX_PATTERN))
@@ -1622,7 +1836,12 @@ bool Event::setEventData(String id, String value)
       if ((txIndex >= 0) && (txIndex < MAXIMUM_NUMBER_OF_TXs_OF_A_TYPE))
       {
         this->eventData->role[typeIndex]->tx[txIndex]->pattern = value;
-        /*        if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + "Tx" + txIndexStr + " pattern: " + value); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+        if (debug_prints_enabled)
+        {
+          Serial.println("Type" + typeIndexStr + "Tx" + txIndexStr + " pattern: " + value);
+        }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
       }
     }
   }
@@ -1637,7 +1856,12 @@ bool Event::setEventData(String id, String value)
       if ((txIndex >= 0) && (txIndex < MAXIMUM_NUMBER_OF_TXs_OF_A_TYPE))
       {
         this->eventData->role[typeIndex]->tx[txIndex]->onTime = value;
-        /*        if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + "Tx" + txIndexStr + " on time: " + value + "sec"); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+        if (debug_prints_enabled)
+        {
+          Serial.println("Type" + typeIndexStr + "Tx" + txIndexStr + " on time: " + value + "sec");
+        }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
       }
     }
   }
@@ -1652,7 +1876,12 @@ bool Event::setEventData(String id, String value)
       if ((txIndex >= 0) && (txIndex < MAXIMUM_NUMBER_OF_TXs_OF_A_TYPE))
       {
         this->eventData->role[typeIndex]->tx[txIndex]->offTime = value.toInt();
-        /*        if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + "Tx" + txIndexStr + " off time: " + value + "sec"); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+        if (debug_prints_enabled)
+        {
+          Serial.println("Type" + typeIndexStr + "Tx" + txIndexStr + " off time: " + value + "sec");
+        }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
       }
     }
   }
@@ -1667,16 +1896,23 @@ bool Event::setEventData(String id, String value)
       if ((txIndex >= 0) && (txIndex < MAXIMUM_NUMBER_OF_TXs_OF_A_TYPE))
       {
         this->eventData->role[typeIndex]->tx[txIndex]->delayTime = value;
-        /*        if (debug_prints_enabled) Serial.println("Type" + typeIndexStr + "Tx" + txIndexStr + " delay time: " + value + "sec"); */
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+        if (debug_prints_enabled)
+        {
+          Serial.println("Type" + typeIndexStr + "Tx" + txIndexStr + " delay time: " + value + "sec");
+        }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
       }
     }
   }
   else
   {
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
     if (debug_prints_enabled)
     {
       Serial.println("Error in file: SettingID = " + id + " Value =[" + value + "]");
     }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
 
     result = true;
   }
