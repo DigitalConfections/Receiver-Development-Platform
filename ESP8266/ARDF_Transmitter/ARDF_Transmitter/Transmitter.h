@@ -1,23 +1,23 @@
 /**********************************************************************************************
-*   Copyright © 2019 Digital Confections LLC
-*
-*   Permission is hereby granted, free of charge, to any person obtaining a copy of
-*   this software and associated documentation files (the "Software"), to deal in the
-*   Software without restriction, including without limitation the rights to use, copy,
-*   modify, merge, publish, distribute, sublicense, and/or sell copies of the Software,
-*   and to permit persons to whom the Software is furnished to do so, subject to the
-*   following conditions:
-*
-*   The above copyright notice and this permission notice shall be included in all
-*   copies or substantial portions of the Software.
-*
-*   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
-*   INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
-*   PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
-*   FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-*   OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-*   DEALINGS IN THE SOFTWARE.
-*
+    Copyright © 2019 Digital Confections LLC
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy of
+    this software and associated documentation files (the "Software"), to deal in the
+    Software without restriction, including without limitation the rights to use, copy,
+    modify, merge, publish, distribute, sublicense, and/or sell copies of the Software,
+    and to permit persons to whom the Software is furnished to do so, subject to the
+    following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+    INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+    PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+    FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+    OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+    DEALINGS IN THE SOFTWARE.
+
 **********************************************************************************************/
 
 #ifndef _TRANSMITTER_H_
@@ -26,57 +26,66 @@
 #include <Arduino.h>
 
 /*
- *     NORMAL WIFI POWER UP SEQUENCE
- *
- *     WiFi wakes up
- *     WiFi reads all data from FS and completes initialization tasks
- *     WiFi sends WiFiReady message to ATMEGA
- *
- *     ATMEGA replies with $TIM message containing the current time
- *
- *     WiFi updates time
- *     WiFi checks to see if any events are scheduled
- *
- *     If no event is scheduled
- *       WiFi sends EventConfig=NULL message to ATMEGA
- *     If event is scheduled
- *       WiFi sends EventConfig message to ATMEGA that includes start and finish times
- *
- *     WiFi waits for WiFi connections, further commands, or power down.
- *
- *
- *     NORMAL ATMEGA POWER UP SEQUENCE
- *
- *     ATMEGA wakes up
- *     ATMEGA reads all permed data and completes initialization tasks
- *     ATMEGA powers up WiFi
- *     ATMEGA receives WiFiReady message from WiFi
- *     ATMEGA replies with a message containing the current time
- *     ATMEGA receives EventConfig message from WiFi
- *
- *     If no event is scheduled
- *       ATMEGA waits for two minutes of inactivity before shutting down WiFi
- *     If event is scheduled
- *       ATMEGA configures hardware for event
- *
- *     If event is in progress
- *       ATMEGA requests WiFi to configure it for transmissions
- *       ATMEGA begins transmissions as instructed by data received from WiFi
- *     If event is scheduled for the future
- *       ATMEGA configures RTC alarm to awaken ATMEGA prior to event start time
- *       ATMEGA powers off WiFi and puts hardware into sleep state
- *
- *     End of event time is reached
- *     ATMEGA powers off the transmitter hardware and places itself to sleep
- *
- *     NORMAL ATMEGA WAKE-UP SEQUENCE
- *
- *     Interrupt awakens ATMEGA
- *     Same as NORMAL ATMEGA POWER UP SEQUENCE
- *
- */
+    HUZZAH-specific Defines
+*/
+#define RED_LED (0)
+#define BLUE_LED (2)
 
-#define TRANSMITTER_DEBUG_PRINTS_OVERRIDE false
+
+
+/*
+       NORMAL WIFI POWER UP SEQUENCE
+
+       WiFi wakes up
+       WiFi reads all data from FS and completes initialization tasks
+       WiFi sends WiFiReady message to ATMEGA
+
+       ATMEGA replies with $TIM message containing the current time
+
+       WiFi updates time
+       WiFi checks to see if any events are scheduled
+
+       If no event is scheduled
+         WiFi sends EventConfig=NULL message to ATMEGA
+       If event is scheduled
+         WiFi sends EventConfig message to ATMEGA that includes start and finish times
+
+       WiFi waits for WiFi connections, further commands, or power down.
+
+
+       NORMAL ATMEGA POWER UP SEQUENCE
+
+       ATMEGA wakes up
+       ATMEGA reads all permed data and completes initialization tasks
+       ATMEGA powers up WiFi
+       ATMEGA receives WiFiReady message from WiFi
+       ATMEGA replies with a message containing the current time
+       ATMEGA receives EventConfig message from WiFi
+
+       If no event is scheduled
+         ATMEGA waits for two minutes of inactivity before shutting down WiFi
+       If event is scheduled
+         ATMEGA configures hardware for event
+
+       If event is in progress
+         ATMEGA requests WiFi to configure it for transmissions
+         ATMEGA begins transmissions as instructed by data received from WiFi
+       If event is scheduled for the future
+         ATMEGA configures RTC alarm to awaken ATMEGA prior to event start time
+         ATMEGA powers off WiFi and puts hardware into sleep state
+
+       End of event time is reached
+       ATMEGA powers off the transmitter hardware and places itself to sleep
+
+       NORMAL ATMEGA WAKE-UP SEQUENCE
+
+       Interrupt awakens ATMEGA
+       Same as NORMAL ATMEGA POWER UP SEQUENCE
+
+*/
+
+#define TRANSMITTER_DEBUG_PRINTS_OVERRIDE true
+#define TRANSMITTER_COMPILE_DEBUG_PRINTS true
 
 #define FULLY_CHARGED_BATTERY_mV 4200.
 #define FULLY_DEPLETED_BATTERY_mV 3200.
@@ -88,53 +97,53 @@
 #define TX_MIN_ALLOWED_FREQUENCY_HZ 3500000
 
 /******************************************************
- * Error Codes
+   Error Codes
  *******************************************************/
 typedef enum
 {
-	ERROR_CODE_NO_ERROR = 0x00,
-	ERROR_CODE_REPORT_NO_ERROR = 0x01,
-	ERROR_CODE_EVENT_STATION_ID_ERROR = 0xC7,
-	ERROR_CODE_EVENT_PATTERN_CODE_SPEED_NOT_SPECIFIED = 0xC8,
-	ERROR_CODE_EVENT_PATTERN_NOT_SPECIFIED = 0xC9,
-	ERROR_CODE_EVENT_TIMING_ERROR = 0xCA,
-	ERROR_CODE_EVENT_MISSING_TRANSMIT_DURATION = 0xCB,
-	ERROR_CODE_EVENT_MISSING_START_TIME = 0xCC,
-	ERROR_CODE_EVENT_NOT_CONFIGURED = 0xCD,
-	ERROR_CODE_ILLEGAL_COMMAND_RCVD = 0xCE,
-	ERROR_CODE_SW_LOGIC_ERROR = 0xCF,
-	ERROR_CODE_POWER_LEVEL_NOT_SUPPORTED = 0xF5,
-	ERROR_CODE_NO_ANTENNA_PREVENTS_POWER_SETTING = 0xF6,
-	ERROR_CODE_NO_ANTENNA_FOR_BAND = 0xF7,
-	ERROR_CODE_WD_TIMEOUT = 0xF8,
-	ERROR_CODE_SUPPLY_VOLTAGE_ERROR = 0xF9,
-	ERROR_CODE_BUCK_REG_OUTOFSPEC = 0xFA,
-	ERROR_CODE_CLKGEN_NONRESPONSIVE = 0xFB,
-	ERROR_CODE_RTC_NONRESPONSIVE = 0xFC,
-	ERROR_CODE_DAC3_NONRESPONSIVE = 0xFD,
-	ERROR_CODE_DAC2_NONRESPONSIVE = 0xFE,
-	ERROR_CODE_DAC1_NONRESPONSIVE = 0xFF
+  ERROR_CODE_NO_ERROR = 0x00,
+  ERROR_CODE_REPORT_NO_ERROR = 0x01,
+  ERROR_CODE_EVENT_STATION_ID_ERROR = 0xC7,
+  ERROR_CODE_EVENT_PATTERN_CODE_SPEED_NOT_SPECIFIED = 0xC8,
+  ERROR_CODE_EVENT_PATTERN_NOT_SPECIFIED = 0xC9,
+  ERROR_CODE_EVENT_TIMING_ERROR = 0xCA,
+  ERROR_CODE_EVENT_MISSING_TRANSMIT_DURATION = 0xCB,
+  ERROR_CODE_EVENT_MISSING_START_TIME = 0xCC,
+  ERROR_CODE_EVENT_NOT_CONFIGURED = 0xCD,
+  ERROR_CODE_ILLEGAL_COMMAND_RCVD = 0xCE,
+  ERROR_CODE_SW_LOGIC_ERROR = 0xCF,
+  ERROR_CODE_POWER_LEVEL_NOT_SUPPORTED = 0xF5,
+  ERROR_CODE_NO_ANTENNA_PREVENTS_POWER_SETTING = 0xF6,
+  ERROR_CODE_NO_ANTENNA_FOR_BAND = 0xF7,
+  ERROR_CODE_WD_TIMEOUT = 0xF8,
+  ERROR_CODE_SUPPLY_VOLTAGE_ERROR = 0xF9,
+  ERROR_CODE_BUCK_REG_OUTOFSPEC = 0xFA,
+  ERROR_CODE_CLKGEN_NONRESPONSIVE = 0xFB,
+  ERROR_CODE_RTC_NONRESPONSIVE = 0xFC,
+  ERROR_CODE_DAC3_NONRESPONSIVE = 0xFD,
+  ERROR_CODE_DAC2_NONRESPONSIVE = 0xFE,
+  ERROR_CODE_DAC1_NONRESPONSIVE = 0xFF
 } EC;
 
 /******************************************************
- * Status Codes
+   Status Codes
  *******************************************************/
 typedef enum
 {
-	STATUS_CODE_IDLE = 0x00,
-	STATUS_CODE_REPORT_IDLE = 0x01,
-	STATUS_CODE_NO_ANT_ATTACHED = 0xE9,
-	STATUS_CODE_2M_ANT_ATTACHED = 0xEA,
-	STATUS_CODE_80M_ANT_ATTACHED = 0xEB,
-	STATUS_CODE_RECEIVING_EVENT_DATA = 0xEC,
-	STATUS_CODE_RETURNED_FROM_SLEEP = 0xED,
-	STATUS_CODE_BEGINNING_XMSN_THIS_CYCLE = 0xEE,
-	STATUS_CODE_SENDING_ID = 0xEF,
-	STATUS_CODE_EVENT_NEVER_ENDS = 0xFB,
-	STATUS_CODE_EVENT_FINISHED = 0xFC,
-	STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING = 0xFD,
-	STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT = 0xFE,
-	STATUS_CODE_WAITING_FOR_EVENT_START = 0xFF
+  STATUS_CODE_IDLE = 0x00,
+  STATUS_CODE_REPORT_IDLE = 0x01,
+  STATUS_CODE_NO_ANT_ATTACHED = 0xE9,
+  STATUS_CODE_2M_ANT_ATTACHED = 0xEA,
+  STATUS_CODE_80M_ANT_ATTACHED = 0xEB,
+  STATUS_CODE_RECEIVING_EVENT_DATA = 0xEC,
+  STATUS_CODE_RETURNED_FROM_SLEEP = 0xED,
+  STATUS_CODE_BEGINNING_XMSN_THIS_CYCLE = 0xEE,
+  STATUS_CODE_SENDING_ID = 0xEF,
+  STATUS_CODE_EVENT_NEVER_ENDS = 0xFB,
+  STATUS_CODE_EVENT_FINISHED = 0xFC,
+  STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING = 0xFD,
+  STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT = 0xFE,
+  STATUS_CODE_WAITING_FOR_EVENT_START = 0xFF
 } SC;
 
 /* Websocket Info Messages */
@@ -174,6 +183,18 @@ typedef enum
 #define SOCK_COMMAND_KEY_UP "KEY_UP"
 #define SOCK_COMMAND_WIFI_OFF "WIFI_OFF"
 #define SOCK_COMMAND_PASSTHRU "PASS"
+#define SOCK_COMMAND_MASTER "MASTER"
+#define SOCK_COMMAND_SLAVE "SLAVE"
+#define SOCK_COMMAND_SEND_UPDATES "UPDATE"
+#define SOCK_COMMAND_FILE_DATA "FDAT"
+
+#define SLAVE_FREE "0"
+#define SLAVE_CONFIRMED "1"
+#define SLAVE_CONNECT "C"
+#define SLAVE_WAITING_FOR_UPDATES "U"
+#define SLAVE_READY_FOR_FILE "RDY"
+
+
 
 /* LinkBus Messages */
 #define LB_MESSAGE_ACK "ACK"
@@ -224,26 +245,42 @@ typedef enum
 
 typedef enum
 {
-	TX_WAKE_UP,
-	TX_INITIAL_TIME_RECEIVED,
-	TX_HTML_PAGE_SERVED,
-	TX_HTML_NEXT_EVENT,
-	TX_HTML_REFRESH_EVENTS,
-	TX_HTML_SAVE_CHANGES,
-	TX_READ_ALL_EVENTS_FILES,
-	TX_RECD_START_EVENT_REQUEST,
-	TX_WAITING_FOR_INSTRUCTIONS
+  WSClientConnecting,
+  WSClientSyncClock,
+  WSClientWaitForSyncAck,
+  WSClientWaitForUpdates,
+  WSClientPrepForFileData,
+  WSClientReceiveFileData,
+  WSClientValidateFile,
+  WSClientLoadEventFile,
+  WSClientClose,
+  WSClientCleanup,
+  WSClientError
+} WebSocketSlaveState;
+
+typedef enum
+{
+  TX_WAKE_UP,
+  TX_HTML_PAGE_SERVED,
+  TX_HTML_NEXT_EVENT,
+  TX_HTML_REFRESH_EVENTS,
+  TX_HTML_SAVE_CHANGES,
+  TX_READ_ALL_EVENTS_FILES,
+  TX_RECD_START_EVENT_REQUEST,
+  TX_WAITING_FOR_INSTRUCTIONS,
+  TX_MASTER_SEND_ACTIVE_FILE,
+  TX_INVALID_STATE
 } TxCommState;
 
 class Transmitter {
-public:
-String masterCloneSetting;
-bool debug_prints_enabled;
+  public:
+    String masterCloneSetting;
+    bool debug_prints_enabled;
 
-public:
-Transmitter(bool);
-bool setXmtrData(String id, String value);
-bool parseStringData(String txt);
+  public:
+    Transmitter(bool);
+    bool setXmtrData(String id, String value);
+    bool parseStringData(String txt);
 };
 
 

@@ -20,52 +20,40 @@
 *
 **********************************************************************************************/
 
-#ifndef _HELPERS_H_
-#define _HELPERS_H_
+#ifndef _BLINKIES_H_
+#define _BLINKIES_H_
 
 #include <ESP8266WiFi.h>
+#include "Transmitter.h"
 
-#ifndef SecondsFromHours
-#define SecondsFromHours(hours) ((hours) * 3600)
-#endif
-
-#ifndef SecondsFromMinutes
-#define SecondsFromMinutes(min) ((min) * 60)
-#endif
-
-#ifndef HoursFromSeconds
-#define HoursFromSeconds(seconds) ((seconds) / 3600)
-#endif
-
-#ifndef MinutesFromSeconds
-#define MinutesFromSeconds(seconds) ((seconds) / 60)
-#endif
-
-#ifndef min
-#define min(x, y)  ((x) < (y) ? (x) : (y))
-#endif
-
-typedef struct
+typedef enum
 {
-	int tm_sec;
-	int tm_min;
-	int tm_hour;
-	int tm_mday;
-	int tm_yday;
-	int tm_mon;
-	int tm_year;
-	int tm_ym4;
-} Tyme;
+    RED_LED_ONLY,
+    BLUE_LED_ONLY,
+    RED_BLUE_TOGETHER,
+    RED_BLUE_ALTERNATING,
+    LEDS_ON,
+    LEDS_OFF
+} LEDPattern;
 
-const char * stringObjToConstCharString(String *val);
-IPAddress stringToIP(String addr);
-String formatBytes(size_t bytes);
-String getContentType(String filename);
-bool isLeapYear(int year);
-unsigned long convertTimeStringToEpoch(String s);
-bool mystrptime(String s, Tyme* tm);
-String checksum(String str);
-bool validateMessage(String str);
-String convertEpochToTimeString(time_t epoch);
 
-#endif  /*_HELPERS_H_ */
+class Blinkies {
+  public:
+    ~Blinkies() {
+    }
+
+    Blinkies();
+    bool blinkLEDs(int blinkPeriodMillis, LEDPattern pattern, bool leds_enabled);
+    void setLEDs(LEDPattern pattern, bool leds_enabled);
+    
+  private:
+    
+  unsigned long holdTime_ = 0;
+  bool toggle_ = 0;
+  bool progButtonPressed_ = false;
+  int debounceProgButton_ = 0;
+};
+
+
+
+#endif  /*_BLINKIES_H_ */
