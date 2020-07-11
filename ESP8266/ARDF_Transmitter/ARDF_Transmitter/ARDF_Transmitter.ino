@@ -188,6 +188,7 @@ void handleLBMessage(String message);
 void handleFS(void);
 bool checkUART(void);
 bool sendLBMessages(void);
+bool sendEventToATMEGA(bool init, String * errorTxt);
 
 
 void setup()
@@ -702,7 +703,7 @@ bool setupWiFiAPConnection()
   while (wifiMulti.run() != WL_CONNECTED)
   {
     delay(250);
-
+    lights->blinkLEDs(100, RED_BLUE_TOGETHER, true);
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
     if (g_debug_prints_enabled)
     {
@@ -831,6 +832,9 @@ void loop()
       File tempFile;
       String updatedFileName;
       String temp;
+      bool sentComsOFF = false;
+      int blinkPeriodMillis = 500;
+      LEDPattern ledPattern = RED_BLUE_TOGETHER;
 
       g_webSocketLocalClient.begin("73.73.73.73", 81);
       g_webSocketLocalClient.onEvent(webSocketClientEvent);
@@ -850,12 +854,24 @@ void loop()
 
       while (busy)
       {
-        lights->blinkLEDs(500, RED_BLUE_TOGETHER, g_LEDs_enabled);
-
         g_webSocketLocalClient.loop();
         checkUART();
         sendLBMessages();
         yield();
+          
+        if (lights->blinkLEDs(blinkPeriodMillis, ledPattern, true))
+        {
+          if (!sentComsOFF)
+          {
+            lights->blinkLEDs(blinkPeriodMillis, LEDS_OFF, true);
+            Serial.printf(LB_MESSAGE_WIFI_COMS_OFF);    /* send immediate */
+            sentComsOFF = true;
+            if(g_slave_released)
+            {
+                g_webSocketSlaveState = WSClientCleanup;
+            }
+          }
+        }
 
         switch (g_webSocketSlaveState)
         {
@@ -875,6 +891,7 @@ void loop()
               {
                 if (!g_slave_released)
                 {
+                  blinkPeriodMillis = 100;
                   times2try = 5;
                   g_webSocketSlaveState = WSClientSyncClock;
 
@@ -1062,7 +1079,7 @@ void loop()
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
                       if (g_debug_prints_enabled)
                       {
-                          Serial.println(temp);
+                        Serial.println(temp);
                       }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
                       tempFile.println(temp);
@@ -1224,16 +1241,16 @@ void loop()
                 }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
 
-                if(g_activeEvent->readEventFile(updatedFileName))
+                if (g_activeEvent->readEventFile(updatedFileName))
                 {
- #if TRANSMITTER_COMPILE_DEBUG_PRINTS
-                    if (g_debug_prints_enabled)
-                    {
-                      Serial.println("Error loading new file");
-                    }
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+                  if (g_debug_prints_enabled)
+                  {
+                    Serial.println("Error loading new file");
+                  }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
                 }
-                  
+
                 g_selectedEventName = g_activeEvent->getEventName();
                 g_slave_received_new_event_file = true;
 
@@ -1251,7 +1268,32 @@ void loop()
               }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
 
-              g_webSocketSlaveState = WSClientClose;
+              sendEventToATMEGA(true, NULL);
+              g_webSocketSlaveState = WSClientProgramATMEGA;
+            }
+            break;
+                
+          case WSClientProgramATMEGA:
+            {
+              if(g_slave_received_new_event_file)
+              {
+                  String err;
+                  bool sent = sendEventToATMEGA(false, &err);
+
+                  if(err.length())
+                  {
+                    Serial.println("Error sending data to ATMEGA");
+                    g_webSocketSlaveState = WSClientClose;
+                  }
+                  else if(sent)
+                  {
+                    g_webSocketSlaveState = WSClientClose;
+                  }
+              }
+              else
+              {
+                    g_webSocketSlaveState = WSClientClose;
+              }
             }
             break;
 
@@ -1327,8 +1369,6 @@ void httpWebServerLoop()
   int holdWebSocketClients = 0;
 
   int serialIndex = 0;
-  int role = 0, tx = 0;
-  TxDataType* txData = NULL;
   String msgOut;
 
   bool progButtonPressed = false;
@@ -1551,8 +1591,8 @@ void httpWebServerLoop()
           /* Inform the ATMEGA that WiFi power up is complete */
           if (g_slave_received_new_event_file) /* Force the new file to be downloaded to the ATMEGA */
           {
-            g_ESP_Comm_State = TX_RECD_START_EVENT_REQUEST;
             g_slave_received_new_event_file = false;
+            g_ESP_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
           }
           else
           {
@@ -1942,163 +1982,23 @@ void httpWebServerLoop()
           g_http_server.handleClient();
           g_webSocketServer.loop();
           yield();
-
-          /*
-               Configure the ATMEGA appropriately for its role in the scheduled event.
-          */
-          switch (serialIndex)
+            
+          String err = String("");
+          bool sent = sendEventToATMEGA(false, &err);
+            
+            Serial.println(String("blink=") + blinkPeriodMillis);
+            
+          if(err.length())
           {
-            case 0: /* Prepare ATMEGA to receive event data */
-              {
-                blinkPeriodMillis = 100;
-                g_LBOutputBuff->put(LB_MESSAGE_KEY_UP);
-              }
-              break;
-
-            case 1: /* send finish time */
-              {
-                tx = g_activeEvent->getTxSlotIndex();
-                role = g_activeEvent->getTxRoleIndex();
-                  
-                Serial.println(String("Tx: ") + tx);
-                Serial.println(String("Role index: ") + role);
-
-                if ((tx >= 0) && (role >= 0))
-                {
-                  txData = g_activeEvent->getTxData(role, tx);
-                }
-
-                /* Finish time should be sent first */
-                msgOut = String(LB_MESSAGE_STARTFINISH_SET_FINISH + String(convertTimeStringToEpoch(g_activeEvent->getEventFinishDateTime())) + ";");
-                g_LBOutputBuff->put(msgOut);
-              }
-              break;
-
-            case 2: /* Message pattern */
-              {
-                msgOut = String(LB_MESSAGE_PATTERN_SET + (*txData).pattern + ";");
-                g_LBOutputBuff->put(msgOut);
-              }
-              break;
-
-            case 3: /* Off time */
-              {
-                msgOut = String(LB_MESSAGE_TIME_INTERVAL_SET0 + String((*txData).offTime) + ";");
-                g_LBOutputBuff->put(msgOut);
-              }
-              break;
-
-            case 4: /* On time */
-              {
-                msgOut = String(LB_MESSAGE_TIME_INTERVAL_SET1 + String((*txData).onTime) + ";");
-                g_LBOutputBuff->put(msgOut);
-              }
-              break;
-
-            case 5: /* Offset time */
-              {
-                msgOut = String(LB_MESSAGE_TIME_INTERVAL_SETD + String((*txData).delayTime) + ";");
-                g_LBOutputBuff->put(msgOut);
-              }
-              break;
-
-            case 6: /* Station ID transmit interval */
-              {
-                msgOut = String(LB_MESSAGE_TIME_INTERVAL_SETID + String(g_activeEvent->getIDIntervalForRole(role)) + ";");
-                g_LBOutputBuff->put(msgOut);
-              }
-              break;
-
-            case 7: /* Event band */
-              {
-                String b;
-
-                if (g_activeEvent->getFrequencyForRole(role) <= 4000000L)
-                {
-                  b = "80";
-                }
-                else
-                {
-                  b = "2";
-                }
-
-                msgOut = String(LB_MESSAGE_TX_BAND_SET + b + ";");
-                g_LBOutputBuff->put(msgOut);
-              }
-              break;
-
-            case 8: /* Transmit power for role */
-              {
-                msgOut = String(LB_MESSAGE_TX_POWER_SET + String(g_activeEvent->getPowerlevelForRole(role)) + ";");
-                g_LBOutputBuff->put(msgOut);
-              }
-              break;
-
-            case 9: /* Modulation format */
-              {
-                msgOut = String(LB_MESSAGE_TX_MOD_SET + String(g_activeEvent->getEventModulation()) + ";");
-                g_LBOutputBuff->put(msgOut);
-              }
-              break;
-
-            case 10:    /* Frequency for role */
-              {
-                msgOut = String(LB_MESSAGE_TX_FREQ_SET + String(g_activeEvent->getFrequencyForRole(role)) + ";");
-                g_LBOutputBuff->put(msgOut);
-              }
-              break;
-
-            case 11:    /* Station ID */
-              {
-                msgOut = String(LB_MESSAGE_CALLSIGN_SET + g_activeEvent->getCallsign() + ";");
-                g_LBOutputBuff->put(msgOut);
-              }
-              break;
-
-            case 12:    /* Message code speed */
-              {
-                msgOut = String(LB_MESSAGE_CODE_SPEED_SETPAT + String(g_activeEvent->getCodeSpeedForRole(role)) + ";");
-                g_LBOutputBuff->put(msgOut);
-              }
-              break;
-
-            case 13:    /* ID code speed */
-              {
-                msgOut = String(LB_MESSAGE_CODE_SPEED_SETID + g_activeEvent->getCallsignSpeed() + ";");
-                g_LBOutputBuff->put(msgOut);
-              }
-              break;
-
-            case 14:    /* Start time */
-              {
-                /* Start time is sent last */
-                msgOut = String(LB_MESSAGE_STARTFINISH_SET_START + String(convertTimeStringToEpoch(g_activeEvent->getEventStartDateTime())) + ";");
-                g_LBOutputBuff->put(msgOut);
-              }
-              break;
-
-            case 15:    /* Perm - Have ATMega save everything in EEPROM */
-              {
-                g_LBOutputBuff->put(LB_MESSAGE_PERM);
-              }
-              break;
-
-            default:    /* Tell ATMEGA to begin executing the event */
-              {
-#if TRANSMITTER_COMPILE_DEBUG_PRINTS
-                if (g_debug_prints_enabled)
-                {
-                  Serial.println("Sent event to ATMEGA");
-                }
-#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
-
-                g_ESP_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
-                g_LBOutputBuff->put(LB_MESSAGE_ACTIVATE_EVENT);
-              }
-              break;
+            Serial.println("Error setting ATMEGA: " + err);
+            g_ESP_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
+          }
+          else if(sent)
+          {
+            g_ESP_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
           }
 
-          serialIndex++;
+          blinkPeriodMillis = 100;
         }
         break;
 
@@ -3174,6 +3074,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
                 tries--;
                 fail = g_activeEvent->writeEventFile();    /* save any changes made to the active event */
               }
+              sendEventToATMEGA(true, NULL);
               g_ESP_Comm_State = TX_RECD_START_EVENT_REQUEST;
             }
           }
@@ -4101,6 +4002,7 @@ void handleLBMessage(String message)
     {
       if (g_numberOfScheduledEvents && (g_activeEvent != NULL))
       {
+        sendEventToATMEGA(true, NULL);
         g_ESP_Comm_State = TX_RECD_START_EVENT_REQUEST;
         g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
       }
@@ -4253,3 +4155,189 @@ void handleLBMessage(String message)
     }
   }
 }
+
+               
+bool sendEventToATMEGA(bool init, String * errorTxt)
+{
+  static int serialIndex = 0;
+  static bool done = false;
+  static int role;
+  static int tx;
+  static TxDataType* txData;
+  String msgOut;
+
+  if (init)
+  {
+    serialIndex = 0;
+    done = false;
+    return(done);
+  }
+
+  if (errorTxt)
+  {
+    *errorTxt = String("");
+  }
+    
+  /*
+       Configure the ATMEGA appropriately for its role in the scheduled event.
+  */
+  switch (serialIndex)
+  {
+    case 0: /* Prepare ATMEGA to receive event data */
+      {
+        g_LBOutputBuff->put(LB_MESSAGE_KEY_UP);
+      }
+      break;
+
+    case 1: /* send finish time */
+      {
+        tx = g_activeEvent->getTxSlotIndex();
+        role = g_activeEvent->getTxRoleIndex();
+
+        if ((tx >= 0) && (role >= 0))
+        {
+          txData = g_activeEvent->getTxData(role, tx);
+
+          /* Finish time should be sent first */
+          msgOut = String(LB_MESSAGE_STARTFINISH_SET_FINISH + String(convertTimeStringToEpoch(g_activeEvent->getEventFinishDateTime())) + ";");
+          g_LBOutputBuff->put(msgOut);
+        }
+        else
+        {
+          if (errorTxt)
+          {
+            *errorTxt = String("Bad role settings");
+          }
+        }
+      }
+      break;
+
+    case 2: /* Message pattern */
+      {
+        msgOut = String(LB_MESSAGE_PATTERN_SET + txData->pattern + ";");
+        g_LBOutputBuff->put(msgOut);
+      }
+      break;
+
+    case 3: /* Off time */
+      {
+        msgOut = String(LB_MESSAGE_TIME_INTERVAL_SET0 + String(txData->offTime) + ";");
+        g_LBOutputBuff->put(msgOut);
+      }
+      break;
+
+    case 4: /* On time */
+      {
+        msgOut = String(LB_MESSAGE_TIME_INTERVAL_SET1 + String(txData->onTime) + ";");
+        g_LBOutputBuff->put(msgOut);
+      }
+      break;
+
+    case 5: /* Offset time */
+      {
+        msgOut = String(LB_MESSAGE_TIME_INTERVAL_SETD + String(txData->delayTime) + ";");
+        g_LBOutputBuff->put(msgOut);
+      }
+      break;
+
+    case 6: /* Station ID transmit interval */
+      {
+        msgOut = String(LB_MESSAGE_TIME_INTERVAL_SETID + String(g_activeEvent->getIDIntervalForRole(role)) + ";");
+        g_LBOutputBuff->put(msgOut);
+      }
+      break;
+
+    case 7: /* Event band */
+      {
+        String b;
+
+        if (g_activeEvent->getFrequencyForRole(role) <= 4000000L)
+        {
+          b = "80";
+        }
+        else
+        {
+          b = "2";
+        }
+
+        msgOut = String(LB_MESSAGE_TX_BAND_SET + b + ";");
+        g_LBOutputBuff->put(msgOut);
+      }
+      break;
+
+    case 8: /* Transmit power for role */
+      {
+        msgOut = String(LB_MESSAGE_TX_POWER_SET + String(g_activeEvent->getPowerlevelForRole(role)) + ";");
+        g_LBOutputBuff->put(msgOut);
+      }
+      break;
+
+    case 9: /* Modulation format */
+      {
+        msgOut = String(LB_MESSAGE_TX_MOD_SET + String(g_activeEvent->getEventModulation()) + ";");
+        g_LBOutputBuff->put(msgOut);
+      }
+      break;
+
+    case 10:    /* Frequency for role */
+      {
+        msgOut = String(LB_MESSAGE_TX_FREQ_SET + String(g_activeEvent->getFrequencyForRole(role)) + ";");
+        g_LBOutputBuff->put(msgOut);
+      }
+      break;
+
+    case 11:    /* Station ID */
+      {
+        msgOut = String(LB_MESSAGE_CALLSIGN_SET + g_activeEvent->getCallsign() + ";");
+        g_LBOutputBuff->put(msgOut);
+      }
+      break;
+
+    case 12:    /* Message code speed */
+      {
+        msgOut = String(LB_MESSAGE_CODE_SPEED_SETPAT + String(g_activeEvent->getCodeSpeedForRole(role)) + ";");
+        g_LBOutputBuff->put(msgOut);
+      }
+      break;
+
+    case 13:    /* ID code speed */
+      {
+        msgOut = String(LB_MESSAGE_CODE_SPEED_SETID + g_activeEvent->getCallsignSpeed() + ";");
+        g_LBOutputBuff->put(msgOut);
+      }
+      break;
+
+    case 14:    /* Start time */
+      {
+        /* Start time is sent last */
+        msgOut = String(LB_MESSAGE_STARTFINISH_SET_START + String(convertTimeStringToEpoch(g_activeEvent->getEventStartDateTime())) + ";");
+        g_LBOutputBuff->put(msgOut);
+      }
+      break;
+
+    case 15:    /* Perm - Have ATMega save everything in EEPROM */
+      {
+        g_LBOutputBuff->put(LB_MESSAGE_PERM);
+      }
+      break;
+
+    default:    /* Tell ATMEGA to begin executing the event */
+      {
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+        if (g_debug_prints_enabled)
+        {
+          Serial.println("Sent event to ATMEGA");
+        }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+
+        done = true;
+        g_LBOutputBuff->put(LB_MESSAGE_ACTIVATE_EVENT);
+      }
+      break;
+  }
+
+  serialIndex++;
+
+  return (done);
+}
+
