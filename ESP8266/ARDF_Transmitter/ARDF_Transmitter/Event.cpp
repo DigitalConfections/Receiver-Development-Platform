@@ -140,7 +140,7 @@ bool Event::parseStringData(String s)
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
   if (debug_prints_enabled)
   {
-    Serial.println(String("Parsed: ") + s + " = " + data.id + " " + data.value);
+    Serial.println(String("Parsed: ") + s + " = " + data.id + " + " + data.value);
   }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
   return (setEventData(data.id, data.value));
@@ -178,6 +178,16 @@ bool Event::isSoonerEvent(EventFileRef a, EventFileRef b, unsigned long currentE
   }
   return (a.startDateTimeEpoch < b.startDateTimeEpoch);   /*a will start sooner than b */
 }
+
+
+bool Event::isNotFinishedEvent(unsigned long currentEpoch)
+{
+    bool runsForever = convertTimeStringToEpoch(this->eventData->event_start_date_time) >= convertTimeStringToEpoch(this->eventData->event_finish_date_time);
+    bool finishedInThePast = (convertTimeStringToEpoch(this->eventData->event_finish_date_time) <= currentEpoch) && !runsForever;
+   
+    return(!finishedInThePast);
+}
+
 
 String Event::getTxDescriptiveName(String role_tx)          /* role_tx = "r:t" */
 {
@@ -1607,6 +1617,13 @@ bool Event::setEventData(String id, String value)
   }
   else if (id.equalsIgnoreCase(TX_DESCRIPTIVE_NAME))
   {
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.println("Tx descr name: " + value);
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+
     this->eventData->tx_role_name = value;
   }
 //  else if (id.equalsIgnoreCase(TX_ROLE_POWER))
@@ -1910,7 +1927,7 @@ bool Event::setEventData(String id, String value)
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
     if (debug_prints_enabled)
     {
-      Serial.println("Error in file: SettingID = " + id + " Value =[" + value + "]");
+      Serial.println("Error in file: EventData = " + id + " Value =[" + value + "]");
     }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
 

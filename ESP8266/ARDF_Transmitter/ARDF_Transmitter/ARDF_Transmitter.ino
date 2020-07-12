@@ -146,6 +146,7 @@ WebSocketSlaveState g_webSocketSlaveState = WSClientConnecting;
 bool g_master_has_connected_slave = false;
 bool g_slave_released = true;
 bool g_slave_received_new_event_file = false;
+int g_slave_socket_number = -1;
 
 #define NO_ACTIVITY_TIMEOUT (60 * 5)
 int g_noActivityTimeoutSeconds = NO_ACTIVITY_TIMEOUT;
@@ -622,7 +623,7 @@ void onStationDisconnect(WiFiEventSoftAPModeStationDisconnected sta_info)
   String oldMacStr = String(newMac);
   oldMacStr.toUpperCase();
 
-  g_webSocketServer.disconnect(); /* disconnect all web sockets to prevent problems if the wrong socket were to be left connected */
+  //g_webSocketServer.disconnect(); /* Crashes Master due to null pointer */
 
   for (int i = 0; i < MAX_NUMBER_OF_WEB_CLIENTS; i++)
   {
@@ -667,17 +668,11 @@ void onStationDisconnect(WiFiEventSoftAPModeStationDisconnected sta_info)
 }
 
 
-bool teardownWiFiAPConnection()
-{
-  bool err = !WiFi.softAPdisconnect(true);
-  return err;
-}
-
-
 bool setupWiFiAPConnection()
 {
   bool err = false;
   int tries = 0;
+  bool sentComsOFF = false;
 
   lights->setLEDs(RED_BLUE_TOGETHER, g_LEDs_enabled);
 
@@ -703,7 +698,21 @@ bool setupWiFiAPConnection()
   while (wifiMulti.run() != WL_CONNECTED)
   {
     delay(250);
-    lights->blinkLEDs(100, RED_BLUE_TOGETHER, true);
+    if (lights->blinkLEDs(100, RED_BLUE_TOGETHER, true))
+    {
+      if (!sentComsOFF)
+      {
+        lights->setLEDs(RED_BLUE_TOGETHER, true);
+        Serial.printf(LB_MESSAGE_WIFI_COMS_OFF);    /* send immediate */
+        sentComsOFF = true;
+        if (g_slave_released)
+        {
+          g_webSocketSlaveState = WSClientCleanup;
+        }
+        err = true;
+        break;
+      }
+    }
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
     if (g_debug_prints_enabled)
     {
@@ -748,7 +757,22 @@ bool setupWiFiAPConnection()
 
   while (WiFi.status() != WL_CONNECTED)
   {
-    delay(500);
+    delay(250);
+    if (lights->blinkLEDs(100, RED_BLUE_TOGETHER, true))
+    {
+      if (!sentComsOFF)
+      {
+        lights->setLEDs(RED_BLUE_TOGETHER, true);
+        Serial.printf(LB_MESSAGE_WIFI_COMS_OFF);    /* send immediate */
+        sentComsOFF = true;
+        if (g_slave_released)
+        {
+          g_webSocketSlaveState = WSClientCleanup;
+        }
+        err = true;
+        break;
+      }
+    }
 
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
     if (g_debug_prints_enabled)
@@ -858,7 +882,7 @@ void loop()
         checkUART();
         sendLBMessages();
         yield();
-          
+
         if (lights->blinkLEDs(blinkPeriodMillis, ledPattern, true))
         {
           if (!sentComsOFF)
@@ -866,9 +890,9 @@ void loop()
             lights->blinkLEDs(blinkPeriodMillis, LEDS_OFF, true);
             Serial.printf(LB_MESSAGE_WIFI_COMS_OFF);    /* send immediate */
             sentComsOFF = true;
-            if(g_slave_released)
+            if (g_slave_released)
             {
-                g_webSocketSlaveState = WSClientCleanup;
+              g_webSocketSlaveState = WSClientCleanup;
             }
           }
         }
@@ -909,7 +933,7 @@ void loop()
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
                   if (g_debug_prints_enabled)
                   {
-                    Serial.println("WSc: failed connection");
+                    Serial.println("WSc: failed connection (1)");
                   }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
                 }
@@ -926,7 +950,7 @@ void loop()
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
                 if (g_debug_prints_enabled)
                 {
-                  Serial.println("WSc: failed connection");
+                  Serial.println("WSc: failed connection (2)");
                 }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
               }
@@ -947,7 +971,7 @@ void loop()
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
                 if (g_debug_prints_enabled)
                 {
-                  Serial.println("WSc: failed connection");
+                  Serial.println("WSc: failed connection (3)");
                 }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
               }
@@ -992,7 +1016,7 @@ void loop()
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
                 if (g_debug_prints_enabled)
                 {
-                  Serial.println("WSc: failed connection");
+                  Serial.println("WSc: failed connection (4)");
                 }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
               }
@@ -1030,7 +1054,7 @@ void loop()
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
                 if (g_debug_prints_enabled)
                 {
-                  Serial.println("WSc: failed connection");
+                  Serial.println("WSc: failed connection (5)");
                 }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
               }
@@ -1106,7 +1130,7 @@ void loop()
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
                 if (g_debug_prints_enabled)
                 {
-                  Serial.println("WSc: failed connection");
+                  Serial.println("WSc: failed connection (6)");
                 }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
               }
@@ -1162,7 +1186,7 @@ void loop()
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
                 if (g_debug_prints_enabled)
                 {
-                  Serial.println("WSc: failed connection");
+                  Serial.println("WSc: failed connection (7)");
                 }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
               }
@@ -1268,52 +1292,133 @@ void loop()
               }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
 
-              sendEventToATMEGA(true, NULL);
-              g_webSocketSlaveState = WSClientProgramATMEGA;
-            }
-            break;
-                
-          case WSClientProgramATMEGA:
-            {
-              if(g_slave_received_new_event_file)
+              if (g_activeEvent->isNotFinishedEvent(g_timeOfDayFromTx))
               {
-                  String err;
-                  bool sent = sendEventToATMEGA(false, &err);
-
-                  if(err.length())
-                  {
-                    Serial.println("Error sending data to ATMEGA");
-                    g_webSocketSlaveState = WSClientClose;
-                  }
-                  else if(sent)
-                  {
-                    g_webSocketSlaveState = WSClientClose;
-                  }
+                sendEventToATMEGA(true, NULL);
+                g_webSocketSlaveState = WSClientProgramATMEGA;
               }
               else
               {
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+                if (g_debug_prints_enabled)
+                {
+                  Serial.println("Event finished in the past");
+                }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+                g_webSocketSlaveState = WSClientClose;
+              }
+            }
+            break;
+
+          case WSClientProgramATMEGA:
+            {
+              if (g_slave_received_new_event_file)
+              {
+                String err;
+                bool sent = sendEventToATMEGA(false, &err);
+
+                if (err.length())
+                {
+                  Serial.println("Error sending data to ATMEGA");
+                  msg = String(SOCK_COMMAND_SLAVE_UPDATE_ERROR);
+                  g_webSocketLocalClient.sendTXT(stringObjToConstCharString(&msg)); /* Send to Master */
+                  g_webSocketSlaveState = WSClientClose;
+                }
+                else if (sent)
+                {
+                  times2try = 10;
+                  g_webSocketSlaveState = WSClientProgramWaitForATMEGA;
+                }
+
+                blinkPeriodMillis = 100;
+              }
+              else
+              {
+                msg = String(SOCK_COMMAND_SLAVE_UPDATE_ERROR);
+                g_webSocketLocalClient.sendTXT(stringObjToConstCharString(&msg)); /* Send to Master */
+                g_webSocketSlaveState = WSClientClose;
+              }
+              g_webSocketServer.loop();
+            }
+            break;
+
+          case WSClientProgramWaitForATMEGA:
+            {
+              if (g_slave_released)
+              {
+                g_webSocketSlaveState = WSClientClose;
+
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+                if (g_debug_prints_enabled)
+                {
+                  Serial.println("WSc: failed connection (8)");
+                }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+              }
+              else
+              {
+                if (g_linkBusAckPending)
+                {
+                  if (times2try)
+                  {
+                    if (abs(millis() - last) > 1000)
+                    {
+                      last = millis();
+                      times2try--;
+                    }
+                  }
+                  else
+                  {
                     g_webSocketSlaveState = WSClientClose;
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+                    if (g_debug_prints_enabled)
+                    {
+                      Serial.println("WSc: Timeout waiting for ATMEGA");
+                    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+                  }
+                }
+                else
+                {
+                  msg = String(String(SOCK_COMMAND_SLAVE_UPDATE_SUCCESS) + "," + g_activeEvent->getTxDescriptiveName(g_activeEvent->getTxAssignment()) + "," + g_activeEvent->getEventName());
+                  g_webSocketLocalClient.sendTXT(stringObjToConstCharString(&msg)); /* Send to Master */
+                  g_webSocketServer.loop();
+                  times2try = 3;
+                  g_webSocketSlaveState = WSClientClose;
+                }
               }
             }
             break;
 
           case WSClientClose:
             {
-              g_webSocketLocalClient.disconnect();
-
-              if (g_fileDataBuff)
+              if (times2try)
               {
-                delete g_fileDataBuff;
+                if (abs(millis() - last) > 1000)
+                {
+                  last = millis();
+                  times2try--;
+                }
               }
-
-              if (tempFile)
+              else
               {
-                tempFile.close();
-              }
+                g_webSocketLocalClient.disconnect();
 
-              g_slave_released = true;
-              times2try = 5;
-              g_webSocketSlaveState = WSClientCleanup;
+                if (g_fileDataBuff)
+                {
+                  delete g_fileDataBuff;
+                }
+
+                if (tempFile)
+                {
+                  tempFile.close();
+                }
+
+                g_slave_released = true;
+                times2try = 0;
+                WiFi.disconnect(false);
+                g_webSocketSlaveState = WSClientCleanup;
+              }
             }
             break;
 
@@ -1360,7 +1465,7 @@ void loop()
 
 void httpWebServerLoop()
 {
-  //  bool done = false;
+  //  bool server_done = false;
   File activeFile;
   int checksum = 0;
   bool eventFileStartFound = false;
@@ -1422,7 +1527,7 @@ void httpWebServerLoop()
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
   }
 
-  //  while (!done)
+  //  while (!server_done)
   while (1)
   {
     /*check if there are any new clients */
@@ -1449,10 +1554,6 @@ void httpWebServerLoop()
       {
         g_webSocketServer.disconnect(); /* ensure all web socket clients are disconnected - this might not happen if WiFi connection was broken */
       }
-      //			else
-      //			{
-      //				g_noActivityTimeoutSeconds = NO_ACTIVITY_TIMEOUT; // keep alive while a station is connected
-      //			}
     }
 
     //    done = checkUART();
@@ -1982,18 +2083,18 @@ void httpWebServerLoop()
           g_http_server.handleClient();
           g_webSocketServer.loop();
           yield();
-            
+
           String err = String("");
           bool sent = sendEventToATMEGA(false, &err);
-            
-            Serial.println(String("blink=") + blinkPeriodMillis);
-            
-          if(err.length())
+
+          Serial.println(String("blink=") + blinkPeriodMillis);
+
+          if (err.length())
           {
             Serial.println("Error setting ATMEGA: " + err);
             g_ESP_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
           }
-          else if(sent)
+          else if (sent)
           {
             g_ESP_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
           }
@@ -2303,7 +2404,7 @@ void startWebSocketServer()
 
   g_webSocketServer.begin();                  /* start the websocket server */
   /*  g_webSocketServer.beginSSL(); // start secure wss support? */
-  g_webSocketServer.onEvent(webSocketEvent);  /* if there's an incoming websocket message, go to function 'webSocketEvent' */
+  g_webSocketServer.onEvent(webSocketServerEvent);  /* if there's an incoming websocket message, go to function 'webSocketServerEvent' */
 
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
   if (g_debug_prints_enabled)
@@ -2524,7 +2625,7 @@ void webSocketClientEvent(WStype_t type, uint8_t * payload, size_t length)
 }
 
 
-void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length)
+void webSocketServerEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length)
 {
   switch (type)
   {
@@ -2537,34 +2638,37 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
 
+        /* Invalidate the socket ID of the disconnected client */
         if (g_numberOfSocketClients)
         {
-          /* Invalidate the socket ID of the disconnected client */
-          if (g_numberOfSocketClients)
+          for (uint8_t i = 0; i < MAX_NUMBER_OF_WEB_CLIENTS; i++)
           {
-            for (uint8_t i = 0; i < MAX_NUMBER_OF_WEB_CLIENTS; i++)
+            if (g_webSocketClient[i].socketID == num)
             {
-              if (g_webSocketClient[i].socketID == num)
-              {
-                g_webSocketClient[i].socketID = WEBSOCKETS_SERVER_CLIENT_MAX;
-                break;
-              }
+              g_webSocketClient[i].socketID = WEBSOCKETS_SERVER_CLIENT_MAX;
+              break;
             }
           }
+        }
 
-          g_numberOfSocketClients = g_webSocketServer.connectedClients(false);
+        g_numberOfSocketClients = g_webSocketServer.connectedClients(false);
 
-          if (!g_numberOfSocketClients)
-          {
-            g_socket_timeout = 0;
-          }
-
+        if (num == g_slave_socket_number)
+        {
+          g_master_has_connected_slave = false;
+          g_slave_socket_number = -1;
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
           if (g_debug_prints_enabled)
           {
-            Serial.printf("[%u] Web Socket done!\r\n", num);
+            Serial.println("Slave disconnected!");
           }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+        }
+
+        if (!g_numberOfSocketClients)
+        {
+          g_socket_timeout = 0;
+          g_master_has_connected_slave = false;
         }
       }
       break;
@@ -2642,6 +2746,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
             if (p.equals(SLAVE_CONNECT))
             {
               g_master_has_connected_slave = true;
+              g_slave_socket_number = num;
               msg = String(String(SOCK_COMMAND_SLAVE) + "," + SLAVE_CONFIRMED);
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
               if (g_debug_prints_enabled)
@@ -2714,6 +2819,42 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
             }
 
             if (msg) g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+          }
+          else if (msgHeader.equalsIgnoreCase(SOCK_COMMAND_SLAVE_UPDATE_SUCCESS))
+          {
+            int firstComma = p.indexOf(',');
+            int lastComma = p.lastIndexOf(',');
+
+            if ((firstComma > 0) && (lastComma > firstComma))
+            {
+              String eventName = p.substring(lastComma + 1);
+              String roleName = p.substring(firstComma + 1, lastComma);
+
+              if ((eventName.length() > 0) && (roleName.length() > 0)) /* ROLENAME,EVENTNAME */
+              {
+                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&p), p.length());
+
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+                if (g_debug_prints_enabled)
+                {
+                  Serial.println(String("Slave success: ") + roleName + ", " + eventName);
+                }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+              }
+              else
+              {
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+                if (g_debug_prints_enabled)
+                {
+                  Serial.println("Slave success msg error (1)");
+                }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+              }
+            }
+          }
+          else if (msgHeader.equalsIgnoreCase(SOCK_COMMAND_SLAVE_UPDATE_ERROR))
+          {
+            g_webSocketServer.broadcastTXT(stringObjToConstCharString(&p), p.length());
           }
           else if (msgHeader.equalsIgnoreCase(SOCK_COMMAND_SYNC_TIME)) /* From connected browser */
           {
@@ -2832,7 +2973,6 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
               String msgOut = String(LB_MESSAGE_PATTERN_SET + pat + ";");
               g_LBOutputBuff->put(msgOut);
             }
-
           }
           else if (msgHeader.startsWith(SOCK_COMMAND_START_TIME))
           {
@@ -3066,7 +3206,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           {
             if (g_activeEvent)
             {
-              int tries = 10;
+              int tries = 3;
               bool fail = true;
 
               while (tries && fail)
@@ -3074,8 +3214,17 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
                 tries--;
                 fail = g_activeEvent->writeEventFile();    /* save any changes made to the active event */
               }
-              sendEventToATMEGA(true, NULL);
-              g_ESP_Comm_State = TX_RECD_START_EVENT_REQUEST;
+
+              if (g_activeEvent->isNotFinishedEvent(g_timeOfDayFromTx))
+              {
+                sendEventToATMEGA(true, NULL);
+                g_ESP_Comm_State = TX_RECD_START_EVENT_REQUEST;
+              }
+              else
+              {
+                String msg = String(String(SOCK_COMMAND_ERROR) + "," + ERROR_CODE_EVENT_ENDED_IN_PAST);
+                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+              }
             }
           }
           else if (msgHeader.equalsIgnoreCase(SOCK_COMMAND_MAC))
@@ -3197,6 +3346,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       break;
   }
 }
+
 
 bool handleFileRead(String path)
 {
@@ -4002,9 +4152,12 @@ void handleLBMessage(String message)
     {
       if (g_numberOfScheduledEvents && (g_activeEvent != NULL))
       {
-        sendEventToATMEGA(true, NULL);
-        g_ESP_Comm_State = TX_RECD_START_EVENT_REQUEST;
-        g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
+        if (g_activeEvent->isNotFinishedEvent(g_timeOfDayFromTx))
+        {
+          sendEventToATMEGA(true, NULL);
+          g_ESP_Comm_State = TX_RECD_START_EVENT_REQUEST;
+          g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
+        }
       }
     }
     else if (payload.equals("2"))
@@ -4156,7 +4309,7 @@ void handleLBMessage(String message)
   }
 }
 
-               
+
 bool sendEventToATMEGA(bool init, String * errorTxt)
 {
   static int serialIndex = 0;
@@ -4170,14 +4323,14 @@ bool sendEventToATMEGA(bool init, String * errorTxt)
   {
     serialIndex = 0;
     done = false;
-    return(done);
+    return (done);
   }
 
   if (errorTxt)
   {
     *errorTxt = String("");
   }
-    
+
   /*
        Configure the ATMEGA appropriately for its role in the scheduled event.
   */

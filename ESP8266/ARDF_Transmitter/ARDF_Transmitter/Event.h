@@ -112,7 +112,7 @@ typedef struct RoleDataStruct
 typedef struct EventDataStruct
 {
   String tx_assignment;           /* <- Role and time slot assigned to this tx: "r:t" */
-  String tx_role_name;            /* <- Descriptive name ofassigned Role */
+  String tx_role_name;            /* <- Descriptive name of assigned Role */
   String tx_role_pwr;             /* <- Power level of the assigned Role */
   String tx_role_freq;            /* <- Frequency of the assigned Role */
   bool tx_assignment_is_default;  /* <- Indicates that the transmitter has never receieved a specific role assignment */
@@ -202,7 +202,8 @@ class Event {
     static bool extractLineData(String s, EventLineData* result);
     static bool isSoonerEvent(EventFileRef a, EventFileRef b, unsigned long currentEpoch);
     static bool extractMeFileData(String path, EventFileRef* eventRef);
-
+    bool isNotFinishedEvent(unsigned long currentEpoch);
+    
   private:
 
     bool parseStringData(String txt);
