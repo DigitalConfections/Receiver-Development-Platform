@@ -228,7 +228,7 @@
             freq: "Frequency",
             pattern: "Pattern",
             callsign: "ID",
-            sleep: "WiFi Off",
+            sleep: "Master",
             codespeed: ""
         }]; /* Event data to display in a table header */
 
@@ -536,15 +536,15 @@
                 cell0.appendChild(t);
                 row.appendChild(cell0);
 
-                // WiFi Off Button
+                // Master Button
                 btn = document.createElement('input');
                 btn.type = "button";
                 btn.className = "button";
-                btn.id = "wifiOffButton";
-                btn.value = "WiFi Off";
+                btn.id = "masterOnOffButton";
+                btn.value = "Slave";
                 btn.onclick = (function(entry) {
                     return function() {
-                        wifiOffAction();
+                        masterOnOffAction();
                     }
                 })(entry);
 
@@ -645,7 +645,6 @@
 
             if (websocketcreated == true) {
                 document.getElementById("xmtrTime").innerHTML = "Connected";
-                //                sendToSocket("EVENT_NAME,TEST!");
 
                 g_websock.onopen = function(evt) {
                     console.log("websock open");
@@ -661,6 +660,9 @@
                     setTimeout(function() {
                         sendToSocket("MAC");
                     }, 750);
+                    setTimeout(function() {
+                        sendToSocket("MASTER");
+                    }, 1000);
                 }
 
                 g_websock.onclose = function(evt) {
@@ -1116,6 +1118,23 @@
                             }
                             break;
 
+                        case "MASTER":
+                            {
+                                var btn = document.getElementById("masterOnOffButton");
+
+                                if (btn != null) {
+                                    var t = arr[1];
+
+                                    if (t == "1") {
+                                        btn.value = "Master";
+                                        btn.setAttribute("style", "background-color: #FF0000;");
+                                    } else {
+                                        btn.value = "Slave";
+                                        btn.setAttribute("style", "background-color: #4CAF50;");
+                                    }
+                                }
+                            }
+
                         case "CALLSIGN":
                             {
                                 var c = document.getElementById("callText");
@@ -1232,7 +1251,7 @@
                 start: "Band",
                 finish: "Frequency",
                 role: "Pattern",
-                sleep: "WiFi Off"
+                sleep: "Master/Slave"
             }];
 
             var eventLine = {
@@ -1382,12 +1401,23 @@
             console.log(btext);
         }
 
-        function wifiOffAction() {
-            var btn = document.getElementById("wifiOffButton");
-            var btext = "WIFI_OFF";
-            btn.setAttribute("style", "background-color: #FF0000;");
-            console.log(btext);
-            sendToSocket(btext);
+        function masterOnOffAction() {
+            var btn = document.getElementById("masterOnOffButton");
+            var btext;
+
+            if (btn != null) {
+                if (btn.value == "Slave") {
+                    btn.value = "Master";
+                    btn.setAttribute("style", "background-color: #FF0000;");
+                    btext = "MASTER,1";
+                } else {
+                    btn.value = "Slave";
+                    btn.setAttribute("style", "background-color: #00FF00;");
+                    btext = "MASTER,0";
+                }
+                console.log(btext);
+                sendToSocket(btext);
+            }
         }
 
         function sendAction() {
@@ -1782,6 +1812,10 @@
             return /\D/.test(myString);
         }
 
+        function hasAlphaNumPunc(myString) {
+            return /^[-0-9A-Za-z:;,$]+$/.test(myString);
+        }
+
         function statusMessageText(startTimeEpoch, finishTimeEpoch) {
             var statusMsg;
             var s = startTimeEpoch;
@@ -1828,11 +1862,11 @@
                 }
             }
 
-            var commandText = document.getElementById("patternSet");
+            var commandText = document.getElementById("commandText");
 
             if (commandText != null) {
                 string = String(commandText.value);
-                if ((string[0] == '$') && hasAlpha(string) && (string.length > 2)) {
+                if ((string[0] == '$') && hasAlphaNumPunc(string) && (string.length > 2)) {
                     commandText.style.color = "blue";
                 } else {
                     commandText.style.color = "red";

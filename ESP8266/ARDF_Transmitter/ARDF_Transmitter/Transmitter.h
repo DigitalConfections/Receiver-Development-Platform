@@ -85,7 +85,7 @@
 */
 
 #define TRANSMITTER_DEBUG_PRINTS_OVERRIDE true
-#define TRANSMITTER_COMPILE_DEBUG_PRINTS true
+#define TRANSMITTER_COMPILE_DEBUG_PRINTS false
 
 #define FULLY_CHARGED_BATTERY_mV 4200.
 #define FULLY_DEPLETED_BATTERY_mV 3200.
@@ -112,6 +112,7 @@ typedef enum
   ERROR_CODE_EVENT_NOT_CONFIGURED = 0xCD,
   ERROR_CODE_ILLEGAL_COMMAND_RCVD = 0xCE,
   ERROR_CODE_SW_LOGIC_ERROR = 0xCF,
+  ERROR_CODE_EVENT_ENDED_IN_PAST = 0xD0,
   ERROR_CODE_POWER_LEVEL_NOT_SUPPORTED = 0xF5,
   ERROR_CODE_NO_ANTENNA_PREVENTS_POWER_SETTING = 0xF6,
   ERROR_CODE_NO_ANTENNA_FOR_BAND = 0xF7,
@@ -161,7 +162,7 @@ typedef enum
 #define SOCK_COMMAND_TEMPERATURE "TEMP"                 /* read only */
 #define SOCK_COMMAND_SSID "SSID"                        /* read only */
 #define SOCK_COMMAND_BATTERY "BAT"                      /* read only */
-#define SOCK_COMMAND_CLONE "CLONE"
+//#define SOCK_COMMAND_CLONE "CLONE"
 #define SOCK_COMMAND_VERSION "VERS"                     /* read only */
 #define SOCK_COMMAND_MAC "MAC"                          /* read only */
 #define SOCK_COMMAND_CALLSIGN "CALLSIGN"
@@ -187,6 +188,8 @@ typedef enum
 #define SOCK_COMMAND_SLAVE "SLAVE"
 #define SOCK_COMMAND_SEND_UPDATES "UPDATE"
 #define SOCK_COMMAND_FILE_DATA "FDAT"
+#define SOCK_COMMAND_SLAVE_UPDATE_SUCCESS "SUS"
+#define SOCK_COMMAND_SLAVE_UPDATE_ERROR "SUE"
 
 #define SLAVE_FREE "0"
 #define SLAVE_CONFIRMED "1"
@@ -253,6 +256,8 @@ typedef enum
   WSClientReceiveFileData,
   WSClientValidateFile,
   WSClientLoadEventFile,
+  WSClientProgramATMEGA,
+  WSClientProgramWaitForATMEGA,
   WSClientClose,
   WSClientCleanup,
   WSClientError

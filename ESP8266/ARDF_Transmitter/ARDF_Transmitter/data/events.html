@@ -289,10 +289,10 @@
                 //                msgText = "POWER," + currentRoleIndex();
                 //                sendToSocket(msgText);
             } else {
-
                 console.log("Refreshing table cells");
                 for (var i = 1, row; row = eventTable.rows[i]; i++) {
                     var rowData = g_eventTableData[i];
+
                     for (var j = 0, col; col = row.cells[j]; j++) {
                         col = rowData[j];
                     }
@@ -1031,6 +1031,9 @@
 
                         case "EVENT_NAME":
                             {
+                                if (arr[1].length < 1) {
+                                    console.log("Error: Null event selected!");
+                                }
                                 setOverlay(null);
                                 g_selectedEvent = arr[1];
                                 g_typeTxNames = [];
@@ -1113,6 +1116,20 @@
                                     power: arr[7],
                                     freq: arr[8]
                                 };
+
+                                var now = new Date().getTime();
+                                if (eventLine.start >= eventLine.finish) {
+                                    if (now > eventLine.start) {
+                                        eventLine.start = now;
+                                    }
+                                    eventLine.finish = eventLine.start;
+                                }
+
+                                if (eventLine.finish < now) {
+                                    eventLine.start = now;
+                                    eventLine.finish = now;
+                                }
+
                                 g_eventTableData.push(eventLine);
                             }
                             break;
@@ -1316,6 +1333,70 @@
                         case "SAVED_EVENT":
                             {
                                 g_event_changes_saved = true;
+                            }
+                            break;
+
+                        case "SUS":
+                            {
+                                var role = "";
+                                var event = "";
+                                if (arr[1].length < 1) {
+                                    console.log("Error: sync success returned no role");
+                                } else {
+                                    role = arr[1];
+                                }
+
+                                if (arr[2].length < 1) {
+                                    console.log("Error: sync success returned no event");
+                                } else {
+                                    event = arr[2];
+                                }
+
+                                if (role.length || event.length) {
+                                    var e = "Success: " + role + " synced for " + event;
+                                    var elem = document.getElementById("statusreport");
+                                    if (elem != null) {
+                                        elem.innerHTML = e;
+                                        elem.setAttribute("style", "font-family:verdana; font-size:25px; color:Green; font-weight:bold; text-align:center;");
+                                    }
+                                } else {
+                                    var x = document.getElementById("statusreport");
+                                    if (x != null) x.style.display = "none";
+                                }
+                                console.log("Sync success:" + arr[1]);
+
+                            }
+                            break;
+
+                        case "SUE":
+                            {
+                                var role = "";
+                                var event = "";
+                                if (arr[1].length < 1) {
+                                    console.log("Error: sync success returned no role");
+                                } else {
+                                    role = arr[1];
+                                }
+
+                                if (arr[2].length < 1) {
+                                    console.log("Error: sync success returned no event");
+                                } else {
+                                    event = arr[2];
+                                }
+
+                                if (role.length || event.length) {
+                                    var e = "Error: " + role + " failed sync for " + event;
+                                    var elem = document.getElementById("statusreport");
+                                    if (elem != null) {
+                                        elem.innerHTML = e;
+                                        elem.setAttribute("style", "font-family:verdana; font-size:25px; color:Green; font-weight:bold; text-align:center;");
+                                    }
+                                } else {
+                                    var x = document.getElementById("statusreport");
+                                    if (x != null) x.style.display = "none";
+                                }
+                                console.log("Sync success:" + arr[1]);
+
                             }
                             break;
 
@@ -1604,24 +1685,65 @@
             var dtText = document.getElementById("datetimeStart");
 
             if (dtText) {
+
+                g_event_changes_saved = false;
+
                 g_starttimeDateUpdateTimer = setTimeout(function() {
-                    var msgText = "";
                     var dt = dtText.value;
                     var local;
+
+                    var now = new Date().getTime();
+                    var localEpoch;
+
                     if (!validateTimeStructure(dt)) {
                         local = Date();
+                        localEpoch = Date.getTime();
                     } else {
                         local = forceValueToLocalTime(dt);
+                        localEpoch = new Date(dt);
+                        localEpoch = localEpoch.getTime();
+                    }
+
+                    var utc;
+
+                    if (localEpoch < now) {
+                        local = epochToLocalDateTimeFormat(now);
+                        utc = now;
+                        localEpoch = now;
+                    } else {
+                        utc = localTimeToUTC(local);
                     }
 
                     applyNewStartTime(local);
-                    var utc = localTimeToUTC(local);
-                    msgText = "START_TIME," + utc;
+                    var msgText = "START_TIME," + utc;
 
                     console.log(msgText);
                     sendToSocket(msgText);
-                    g_event_changes_saved = false;
-                }, 200);
+
+                    var dtfText = document.getElementById("datetimeFinish");
+                    if (dtfText) {
+                        var dtf = dtfText.value;
+                        var localf;
+                        var localfEpoch;
+
+                        if (!validateTimeStructure(dtf)) {
+                            localf = Date();
+                            localfEpoch = Date.getTime();
+                        } else {
+                            localf = forceValueToLocalTime(dtf);
+                            localfEpoch = new Date(dtf);
+                            localfEpoch = localfEpoch.getTime();
+                        }
+                    }
+
+                    if (localEpoch > localfEpoch) {
+                        applyNewFinishTime(local);
+                        msgText = "FINISH_TIME," + utc;
+                        console.log(msgText);
+                        sendToSocket(msgText);
+                    }
+
+                }, 250);
             }
         }
 
@@ -1668,24 +1790,59 @@
             var dtText = document.getElementById("datetimeFinish");
 
             if (dtText) {
+                g_event_changes_saved = false;
+
                 var dt = dtText.value;
                 var local;
                 var msgText = "";
+
                 if (!validateTimeStructure(dt)) {
                     local = Date();
                 } else {
                     local = forceValueToLocalTime(dt);
                 }
 
+                var now = new Date().getTime();
+                var localEpoch = new Date(dt);
+                localEpoch = localEpoch.getTime();
+                var utc;
+
+                if (now > localEpoch) {
+                    local = epochToLocalDateTimeFormat(now);
+                    utc = now;
+                } else {
+                    utc = localTimeToUTC(local);
+                }
+
                 g_finishtimeDateUpdateTimer = setTimeout(function() {
                     applyNewFinishTime(local);
-                    var utc = localTimeToUTC(local);
                     msgText = "FINISH_TIME," + utc;
 
                     console.log(msgText);
                     sendToSocket(msgText);
-                    g_event_changes_saved = false;
-                }, 200);
+
+                    var dtsText = document.getElementById("datetimeStart");
+                    if (dtsText) {
+                        var dts = dtsText.value;
+                        var locals;
+                        if (!validateTimeStructure(dts)) {
+                            locals = Date();
+                        } else {
+                            locals = forceValueToLocalTime(dts);
+                        }
+                    }
+
+                    var localsEpoch = new Date(dts);
+                    localsEpoch = localsEpoch.getTime();
+
+                    if (localsEpoch > localEpoch) {
+                        applyNewStartTime(local);
+                        msgText = "START_TIME," + utc;
+                        console.log(msgText);
+                        sendToSocket(msgText);
+                    }
+
+                }, 250);
             }
         }
 
@@ -1729,7 +1886,7 @@
             if (n > 946684800000) n /= 1000;
             if (f > 946684800000) f /= 1000;
 
-            if ((n > s) && (f < s)) {
+            if ((n >= s) && (f <= s)) {
                 statusMsg = "Running\nForever";
             } else if ((n > s) && (n < f)) {
                 statusMsg = "Running";
@@ -1756,8 +1913,8 @@
                     statusMsg += " in " + del + "s";
                 }
 
-                if (f < s) {
-                    statusMsg += "Runs\nForever";
+                if (f <= s) {
+                    statusMsg += "\nRuns\nForever";
                 } else {
                     del = (f - s);
                     if (del > 3600) {
@@ -2067,7 +2224,7 @@
     <center>
         <p style="text-align:left;"><a href=\ "73.73.73.73">[HOME]</a></p>
         <h1 id="mainHeading" style="font-family:verdana; font-size:30px; color:Black; text-align:center;">Transmitter Settings</h1>
-        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">HTML Ver 0.2.0 - 8 Jul 2020</p>
+        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">HTML Ver 0.5 - 8 Jul 2020</p>
 
         <div>
             <table>
