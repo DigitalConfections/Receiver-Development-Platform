@@ -104,6 +104,7 @@ static uint16_t EEMEM ee_ID_time;
 static time_t EEMEM ee_start_time;
 static time_t EEMEM ee_finish_time;
 static uint16_t EEMEM ee_battery_empty_mV;
+static uint8_t EEMEM ee_clock_OSCCAL;
 
 static char g_messages_text[2][MAX_PATTERN_TEXT_LENGTH+1] = {"\0", "\0"};
 static volatile uint8_t g_id_codespeed = EEPROM_ID_CODE_SPEED_DEFAULT;
@@ -126,6 +127,9 @@ static volatile uint16_t g_code_throttle = 50;
 static volatile uint8_t g_WiFi_shutdown_seconds = 120;
 static volatile BOOL g_report_seconds = FALSE;
 static volatile BOOL g_wifi_active = TRUE;
+
+static BOOL g_calibrate_baud = FALSE;
+static int g_baud_count = 0;
 
 /* ADC Defines */
 
@@ -506,6 +510,7 @@ ISR( TIMER2_COMPB_vect )
 
 	if(g_util_tick_countdown) g_util_tick_countdown--;
 	if(g_2m_bias_delay) g_2m_bias_delay--;
+	if(g_baud_count) g_baud_count--;
 
 	static BOOL key = FALSE;
 
@@ -751,7 +756,7 @@ ISR(USART_RX_vect)
 				{
 					if(charIndex > LINKBUS_MIN_MSG_LENGTH)
 					{
-						buff->id = msg_ID;
+						buff->id = (LBMessageID)msg_ID;
 					}
 					receiving_msg = FALSE;
 				}
@@ -832,7 +837,7 @@ ISR(USART_UDRE_vect)
 			linkbus_end_tx();
 		}
 	}
-}
+}   /* End of UART Tx ISR */
 
 
 #ifdef ENABLE_PIN_CHANGE_INTERRUPT_0
@@ -1226,7 +1231,7 @@ int main( void )
 				if(g_lastConversionResult[BATTERY_READING] > POWER_ON_VOLT_THRESH_MV)  /* Battery measurement indicates sufficient voltage */
 				{
 					g_sufficient_power_detected = TRUE;
-					init_hardware = TRUE;
+					g_calibrate_baud = TRUE;
 				}
 				else if(!g_wifi_enable_delay) // no battery detected by the time WiFi  is turned on, assume an external battery is being used
 				{
@@ -1235,6 +1240,7 @@ int main( void )
 						g_battery_type = BATTERY_EXTERNAL;
 						g_sufficient_power_detected = TRUE;
 						init_hardware = TRUE;
+						g_calibrate_baud = TRUE;
 					}
 				}
 			}
@@ -1274,7 +1280,6 @@ int main( void )
 				/*  If the  hardware fails to initialize, report the failure to
 				    the user over WiFi by sending an appropriate error code. */
 				g_last_error_code = code;
-
 			}
 		}
 
@@ -1308,6 +1313,23 @@ int main( void )
 					g_WiFi_shutdown_seconds = 120;
 					g_last_status_code = STATUS_CODE_RETURNED_FROM_SLEEP;
 					g_check_for_next_event = TRUE;
+				}
+			}
+		}
+
+		if(g_calibrate_baud)
+		{
+			if(!g_baud_count)
+			{
+				static uint8_t calVal = 150;
+				g_baud_count = 200;
+				calibrateOscillator(calVal);
+				if(++calVal > 200)
+				{
+					g_calibrate_baud = FALSE;
+					calcOSCCAL(0);
+					init_hardware = TRUE;
+					saveAllEEPROM();
 				}
 			}
 		}
@@ -1482,6 +1504,20 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 				wdt_init(WD_FORCE_RESET);
 				while(1);
 #endif // TRANQUILIZE_WATCHDOG
+			}
+			break;
+
+			case MESSAGE_OSC:
+			{
+				if(lb_buff->fields[FIELD1][0])
+				{
+					int val = (uint16_t)atoi(lb_buff->fields[FIELD1]);
+
+					if(val > 0)
+					{
+						calcOSCCAL(val);
+					}
+				}
 			}
 			break;
 
@@ -1961,7 +1997,7 @@ BOOL __attribute__((optimize("O0"))) eventEnabled(BOOL noSleep, time_t* time_bef
 	if(isDisabled) return FALSE; // completed events are never enabled
 
 	dif = timeDif(now, g_event_start_time);
-	hasStarted = (dif >= -60); // we consider it started if it is withing 60 seconds of its start time
+	hasStarted = (dif >= -60); // consider it started if it is withing 60 seconds of its start time
 
 	if(hasStarted || noSleep) // running events, or if we don't care about sleep before they start, are always enabled
 	{
@@ -2045,7 +2081,7 @@ EC activateEventUsingCurrentSettings(SC* statusCode)
 	time_t now = time(NULL);
 	if(g_event_finish_time < now) // the event has already finished
 	{
-		if(statusCode) *statusCode = STATUS_CODE_EVENT_FINISHED;
+		if(statusCode) *statusCode = STATUS_CODE_NO_EVENT_TO_RUN;
 	}
 	else
 	{
@@ -2130,6 +2166,12 @@ void initializeEEPROMVars()
 
 		g_battery_empty_mV = eeprom_read_word(&ee_battery_empty_mV);
 
+		uint8_t temp = eeprom_read_byte(&ee_clock_OSCCAL);
+		if((temp > 150) && (temp < 200))
+		{
+			OSCCAL = temp;
+		}
+
 		for(i=0; i<20; i++)
 		{
 			g_messages_text[STATION_ID][i] = (char)eeprom_read_byte((uint8_t*)(&ee_stationID_text[i]));
@@ -2181,6 +2223,7 @@ void saveAllEEPROM()
 	eeprom_update_word(&ee_ID_time, g_ID_period_seconds);
 
 	eeprom_update_word(&ee_battery_empty_mV, g_battery_empty_mV);
+	eeprom_update_byte(&ee_clock_OSCCAL, OSCCAL);
 
 	for(i=0; i<strlen(g_messages_text[STATION_ID]); i++)
 	{

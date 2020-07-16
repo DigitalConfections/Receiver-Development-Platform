@@ -333,3 +333,27 @@ void lb_broadcast_num(uint16_t data, char* str)
 	if(g_tempMsgBuff[0]) linkbus_send_text(g_tempMsgBuff);
 }
 
+
+void calibrateOscillator(uint8_t cal)
+{
+	sprintf(g_tempMsgBuff, "$OSC,%u;", cal);
+	linkbus_send_text(g_tempMsgBuff);
+	OSCCAL = cal;
+}
+
+void calcOSCCAL(uint8_t val)
+{
+	static int sum = 0;
+	static int count = 0;
+
+	if((val > 150) && (val < 200))
+	{
+		sum += val;
+		count++;
+	}
+	else if(val == 0)
+	{
+		OSCCAL = sum / count;
+	}
+}
+
