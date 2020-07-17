@@ -338,22 +338,35 @@ void calibrateOscillator(uint8_t cal)
 {
 	sprintf(g_tempMsgBuff, "$OSC,%u;", cal);
 	linkbus_send_text(g_tempMsgBuff);
-	OSCCAL = cal;
+	if(cal) OSCCAL = cal;
 }
 
-void calcOSCCAL(uint8_t val)
+BOOL calcOSCCAL(uint8_t val)
 {
+	BOOL failure = TRUE;
 	static int sum = 0;
 	static int count = 0;
 
-	if((val > 150) && (val < 200))
+	if((val >= 10) && (val <= 240))
 	{
 		sum += val;
 		count++;
+		failure = FALSE;
 	}
 	else if(val == 0)
 	{
-		OSCCAL = sum / count;
+		if(sum && count)
+		{
+			OSCCAL = sum / count;
+			failure = FALSE;
+		}
 	}
+	else if(val == 255)
+	{
+		sum = 0;
+		count = 0;
+	}
+
+	return(failure);
 }
 

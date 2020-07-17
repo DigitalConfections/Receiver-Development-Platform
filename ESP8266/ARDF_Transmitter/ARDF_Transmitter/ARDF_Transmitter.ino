@@ -74,6 +74,7 @@ bool g_debug_prints_enabled = DEBUG_PRINTS_ENABLE_DEFAULT;
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
 
 bool g_LEDs_enabled = LEDS_ENABLE_DEFAULT;
+bool g_baud_sync_success = false;
 
 /*
     TCP to UART Bridge
@@ -839,6 +840,32 @@ bool setupWiFiAPConnection()
 
   return (err);
 }
+               
+
+bool autoBaud(void)
+{  
+  unsigned long holdMillis;
+  bool done = false;
+  bool failure = true;
+
+  lights->setLEDs(RED_BLUE_TOGETHER, true);
+  
+  holdMillis = millis();
+    
+  while (!done)
+  {
+    linkbusLoop();
+    done = g_baud_sync_success;
+    failure = !done;
+
+    if(abs(millis() - holdMillis) > 60000)
+    {
+        done = true;
+    }
+  }
+    
+  return(failure);
+}
 
 
 void loop()
@@ -856,6 +883,25 @@ void loop()
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
 
   lights->setLEDs(LEDS_OFF, g_LEDs_enabled);
+    
+  if(autoBaud())
+  {
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+      if (g_debug_prints_enabled)
+      {
+        Serial.println("Baud rate calibration timeout");
+      }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+  }
+  else
+  {
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+      if (g_debug_prints_enabled)
+      {
+        Serial.println("Baud rate calibrated");
+      }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+  }
 
   if (!g_masterEnabled)
   {
@@ -867,6 +913,7 @@ void loop()
       bool sentComsOFF = false;
       int blinkPeriodMillis = 500;
       LEDPattern ledPattern = RED_BLUE_TOGETHER;
+      String errorMessage = String("");
 
       g_webSocketLocalClient.begin("73.73.73.73", 81);
       g_webSocketLocalClient.onEvent(webSocketClientEvent);
@@ -1314,6 +1361,7 @@ void loop()
                   Serial.println("Event finished in the past");
                 }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+                errorMessage = "Event finished in the past";
                 g_webSocketSlaveState = WSClientClose;
               }
             }
@@ -1328,7 +1376,7 @@ void loop()
 
                 if (err.length())
                 {
-                  Serial.println("Error: Failed to send data to ATMEGA.");
+                  errorMessage = "Failed to send data to ATMEGA";
                   g_webSocketSlaveState = WSClientClose;
                 }
                 else if (sent)
@@ -1343,6 +1391,7 @@ void loop()
               else
               {
                 g_webSocketSlaveState = WSClientClose;
+                errorMessage = "No event received";
               }
               g_webSocketServer.loop();
             }
@@ -1360,6 +1409,7 @@ void loop()
                   Serial.println("WSc: failed connection (8)");
                 }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+                errorMessage = "Master released slave xmtr (8)";
               }
               else
               {
@@ -1382,6 +1432,7 @@ void loop()
                       Serial.println("WSc: Timeout waiting for ATMEGA");
                     }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+                    errorMessage = "Timeout waiting for ATMEGA";
                   }
                 }
                 else
@@ -1403,6 +1454,10 @@ void loop()
               if (syncFailed)
               {
                 msg = String(SOCK_COMMAND_SLAVE_UPDATE_ERROR);
+                if(errorMessage.length())
+                {
+                    msg = msg + "," + errorMessage;
+                }
                 g_webSocketLocalClient.sendTXT(stringObjToConstCharString(&msg)); /* Send to Master */
                 g_webSocketServer.loop();
                 times2try = 3;
@@ -2023,8 +2078,6 @@ void httpWebServerLoop()
 
               for (int i = 0; i < g_eventsRead; i++)
               {
-                //								msg = String(String(SOCK_COMMAND_EVENT_DATA) + "," + g_eventList[i].ename + "," + g_eventList[i].vers + "," +  g_eventList[i].startDateTimeEpoch + "," +  g_eventList[i].finishDateTimeEpoch + "," + g_eventList[i].role + "," + g_eventList[i].callsign + "," + g_eventList[i].power + "," + g_eventList[i].freq);
-
                 msg = String(String(SOCK_COMMAND_EVENT_DATA) + "," + g_eventList[i].ename + "," + g_eventList[i].vers + "," +  g_eventList[i].startDateTimeEpoch + "," +  g_eventList[i].finishDateTimeEpoch + ",*," + g_eventList[i].callsign + ",*,*");
                 g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
               }
@@ -3259,17 +3312,19 @@ void webSocketServerEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t 
                 
               g_last_event_file_run = g_activeEvent->myPath;
               saveDefaultsFile();
+ 
+              /* If event finished already, set it to run forever starting now */
+              if (!g_activeEvent->isNotFinishedEvent(g_timeOfDayFromTx))
+              {
+                String now = convertEpochToTimeString(g_timeOfDayFromTx);
+                g_activeEvent->setEventStartDateTime(now);
+                g_activeEvent->setEventFinishDateTime(now);
+                g_activeEvent->writeEventFile();
+              }
 
-              if (g_activeEvent->isNotFinishedEvent(g_timeOfDayFromTx))
-              {
-                sendEventToATMEGA(true, NULL);
-                g_ESP_Comm_State = TX_RECD_START_EVENT_REQUEST;
-              }
-              else
-              {
-                String msg = String(String(SOCK_COMMAND_ERROR) + "," + ERROR_CODE_EVENT_ENDED_IN_PAST);
-                g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-              }
+              sendEventToATMEGA(true, NULL);
+              g_ESP_Comm_State = TX_RECD_START_EVENT_REQUEST;
+
             }
           }
           else if (msgHeader.equalsIgnoreCase(SOCK_COMMAND_MAC))
@@ -4387,10 +4442,19 @@ void handleLBMessage(String message)
   }
   else if (type.equals("OSC"))
   {
-      if(payload.toInt() < 255)
+      int p = payload.toInt();
+      
+      if(p < 255)
       {
-          message.trim();
-          Serial.println(message); /* send immediately with no ACK required */
+          if(!p)
+          {
+              g_baud_sync_success = true;
+          }
+          else
+          {
+              message.trim();
+              Serial.println(message); /* send immediately with no ACK required */
+          }
       }
   }
 }

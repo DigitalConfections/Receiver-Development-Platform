@@ -28,9 +28,9 @@
 #include <asf.h>
 #include <time.h>
 #include "defs.h"
-#include "si5351.h"		/* Programmable clock generator */
+#include "si5351.h"     /* Programmable clock generator */
 #include "ds3231.h"
-#include "mcp23017.h"	/* Port expander on Rev X2 Digital Interface board */
+#include "mcp23017.h"   /* Port expander on Rev X2 Digital Interface board */
 #include "i2c.h"
 #include "linkbus.h"
 #include "transmitter.h"
@@ -48,7 +48,7 @@
 
 /***********************************************************************
  * Local Typedefs
-************************************************************************/
+ ************************************************************************/
 
 typedef enum
 {
@@ -66,7 +66,7 @@ typedef enum
  * Whenever possible limit globals' scope to this file using "static"
  * Use "volatile" for globals shared between ISRs and foreground
  ************************************************************************/
-static char g_tempStr[21] = {'\0'};
+static char g_tempStr[21] = { '\0' };
 static volatile EC g_last_error_code = ERROR_CODE_NO_ERROR;
 static volatile SC g_last_status_code = STATUS_CODE_IDLE;
 
@@ -83,7 +83,7 @@ static volatile BOOL g_antenna_connection_changed = TRUE;
 volatile AntConnType g_antenna_connect_state = ANT_CONNECTION_UNDETERMINED;
 static volatile uint16_t g_2m_bias_delay = 0;
 
-//EC (*g_txTask)(BiasStateMachineCommand* smCommand) = NULL; /* allows the transmitter to specify functions to run in the foreground */
+/*EC (*g_txTask)(BiasStateMachineCommand* smCommand) = NULL; / * allows the transmitter to specify functions to run in the foreground * / */
 extern EC (*g_txTask)(BiasStateMachineCommand* smCommand);  /* allow the transmitter to specify functions to run in the foreground */
 volatile uint8_t g_mod_up = MAX_2M_CW_DRIVE_LEVEL;
 volatile uint8_t g_mod_down = MAX_2M_CW_DRIVE_LEVEL;
@@ -93,8 +93,8 @@ volatile uint8_t g_mod_down = MAX_2M_CW_DRIVE_LEVEL;
 
 static BOOL EEMEM ee_interface_eeprom_initialization_flag = EEPROM_UNINITIALIZED;
 
-static char EEMEM ee_stationID_text[MAX_PATTERN_TEXT_LENGTH+1];
-static char EEMEM ee_pattern_text[MAX_PATTERN_TEXT_LENGTH+1];
+static char EEMEM ee_stationID_text[MAX_PATTERN_TEXT_LENGTH + 1];
+static char EEMEM ee_pattern_text[MAX_PATTERN_TEXT_LENGTH + 1];
 static uint8_t EEMEM ee_pattern_codespeed;
 static uint8_t EEMEM ee_id_codespeed;
 static uint16_t EEMEM ee_on_air_time;
@@ -106,17 +106,17 @@ static time_t EEMEM ee_finish_time;
 static uint16_t EEMEM ee_battery_empty_mV;
 static uint8_t EEMEM ee_clock_OSCCAL;
 
-static char g_messages_text[2][MAX_PATTERN_TEXT_LENGTH+1] = {"\0", "\0"};
+static char g_messages_text[2][MAX_PATTERN_TEXT_LENGTH + 1] = { "\0", "\0" };
 static volatile uint8_t g_id_codespeed = EEPROM_ID_CODE_SPEED_DEFAULT;
 static volatile uint8_t g_pattern_codespeed = EEPROM_PATTERN_CODE_SPEED_DEFAULT;
 static volatile uint16_t g_time_needed_for_ID = 0;
-static volatile int16_t g_on_air_seconds = EEPROM_ON_AIR_TIME_DEFAULT; /* amount of time to spend on the air */
-static volatile int16_t g_off_air_seconds = EEPROM_OFF_AIR_TIME_DEFAULT; /* amount of time to wait before returning to the air */
-static volatile int16_t g_intra_cycle_delay_time = EEPROM_INTRA_CYCLE_DELAY_TIME_DEFAULT; /* offset time into a repeating transmit cycle */
-static volatile int16_t g_ID_period_seconds = EEPROM_ID_TIME_INTERVAL_DEFAULT; /* amount of time between ID/callsign transmissions */
+static volatile int16_t g_on_air_seconds = EEPROM_ON_AIR_TIME_DEFAULT;                      /* amount of time to spend on the air */
+static volatile int16_t g_off_air_seconds = EEPROM_OFF_AIR_TIME_DEFAULT;                    /* amount of time to wait before returning to the air */
+static volatile int16_t g_intra_cycle_delay_time = EEPROM_INTRA_CYCLE_DELAY_TIME_DEFAULT;   /* offset time into a repeating transmit cycle */
+static volatile int16_t g_ID_period_seconds = EEPROM_ID_TIME_INTERVAL_DEFAULT;              /* amount of time between ID/callsign transmissions */
 static volatile time_t g_event_start_time = EEPROM_START_TIME_DEFAULT;
 static volatile time_t g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
-static volatile BOOL g_event_enabled = EEPROM_EVENT_ENABLED_DEFAULT; /* indicates that the conditions for executing the event are set */
+static volatile BOOL g_event_enabled = EEPROM_EVENT_ENABLED_DEFAULT;                        /* indicates that the conditions for executing the event are set */
 static volatile BOOL g_event_commenced = FALSE;
 static volatile BOOL g_check_for_next_event = FALSE;
 static volatile uint16_t g_battery_empty_mV = EEPROM_BATTERY_EMPTY_MV;
@@ -153,7 +153,7 @@ static uint16_t g_filterADCValue[NUMBER_OF_POLLED_ADC_CHANNELS] = { 500, 500, 50
 static volatile BOOL g_adcUpdated[NUMBER_OF_POLLED_ADC_CHANNELS] = { FALSE, FALSE, FALSE, FALSE, FALSE };
 static volatile uint16_t g_lastConversionResult[NUMBER_OF_POLLED_ADC_CHANNELS];
 
-//static volatile uint32_t g_PA_voltage = 0;
+/*static volatile uint32_t g_PA_voltage = 0; */
 
 extern volatile BOOL g_i2c_not_timed_out;
 static volatile BOOL g_sufficient_power_detected = FALSE;
@@ -204,11 +204,11 @@ void __attribute__((optimize("O1"))) wdt_init(WDReset resetType)
 	if(resetType == WD_DISABLE)
 	{
 		/* Clear WDRF in MCUSR */
-		MCUSR &= ~(1<<WDRF);
+		MCUSR &= ~(1 << WDRF);
 		/* Write logical one to WDCE and WDE */
 		/* Keep old prescaler setting to prevent unintentional
-		time-out */
-		WDTCSR |= (1<<WDCE) | (1<<WDE);
+		 *  time-out */
+		WDTCSR |= (1 << WDCE) | (1 << WDE);
 		/* Turn off WDT */
 		WDTCSR = 0x00;
 		g_enableHardwareWDResets = FALSE;
@@ -231,7 +231,7 @@ void __attribute__((optimize("O1"))) wdt_init(WDReset resetType)
 		else
 		{
 			WDTCSR |= (1 << WDCE) | (1 << WDE);
-			WDTCSR = (1 << WDIE) | (1 << WDE);    /* Enable WD interrupt in 16ms, and hardware reset */
+			WDTCSR = (1 << WDIE) | (1 << WDE);  /* Enable WD interrupt in 16ms, and hardware reset */
 		}
 
 		g_enableHardwareWDResets = (resetType != WD_SW_RESETS);
@@ -243,20 +243,20 @@ void __attribute__((optimize("O1"))) wdt_init(WDReset resetType)
  * Handle antenna connection interrupts
  **********************************************************************/
 #ifdef SELECTIVELY_DISABLE_OPTIMIZATION
-__attribute__((optimize("O0"))) ISR( INT1_vect )
+	__attribute__((optimize("O0"))) ISR( INT1_vect )
 #else
-ISR( INT1_vect )
+	ISR( INT1_vect )
 #endif
 {
-//	if(g_sleeping)
-//	{
-//		g_seconds_left_to_sleep = 0;
-//		g_go_to_sleep = FALSE;
-//		g_sleeping = FALSE;
-//	}
+/*	if(g_sleeping) */
+/*	{ */
+/*		g_seconds_left_to_sleep = 0; */
+/*		g_go_to_sleep = FALSE; */
+/*		g_sleeping = FALSE; */
+/*	} */
 	BOOL ant = antennaIsConnected();
 
-	if(!ant) // immediately detect disconnection
+	if(!ant)    /* immediately detect disconnection */
 	{
 		if(g_antenna_connect_state != ANT_ALL_DISCONNECTED)
 		{
@@ -271,16 +271,16 @@ ISR( INT1_vect )
  * Handle RTC interrupts
  **********************************************************************/
 #ifdef SELECTIVELY_DISABLE_OPTIMIZATION
-__attribute__((optimize("O0"))) ISR( INT0_vect )
+	__attribute__((optimize("O0"))) ISR( INT0_vect )
 #else
-ISR( INT0_vect )
+	ISR( INT0_vect )
 #endif
 {
 	static BOOL lastAntennaConnectionState = FALSE;
 	static uint8_t antennaReadCount = 3;
 	BOOL ant = antennaIsConnected();
 
-	if(!ant) // immediately detect disconnection
+	if(!ant)    /* immediately detect disconnection */
 	{
 		if(g_antenna_connect_state != ANT_ALL_DISCONNECTED)
 		{
@@ -316,7 +316,10 @@ ISR( INT0_vect )
 
 	if(g_sleeping)
 	{
-		if(g_seconds_left_to_sleep) g_seconds_left_to_sleep--;
+		if(g_seconds_left_to_sleep)
+		{
+			g_seconds_left_to_sleep--;
+		}
 
 		if(!g_seconds_left_to_sleep || g_antenna_connection_changed)
 		{
@@ -334,7 +337,10 @@ ISR( INT0_vect )
 			{
 				BOOL repeat;
 
-				if(g_time_to_send_ID_countdown) g_time_to_send_ID_countdown--;
+				if(g_time_to_send_ID_countdown)
+				{
+					g_time_to_send_ID_countdown--;
+				}
 
 				if(g_on_the_air)
 				{
@@ -344,7 +350,10 @@ ISR( INT0_vect )
 
 						if(temp_time >= g_event_finish_time)
 						{
-							if(g_event_enabled) g_last_status_code = STATUS_CODE_EVENT_FINISHED;
+							if(g_event_enabled)
+							{
+								g_last_status_code = STATUS_CODE_EVENT_FINISHED;
+							}
 							g_on_the_air = 0;
 							g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
 							keyTransmitter(OFF);
@@ -354,19 +363,19 @@ ISR( INT0_vect )
 						}
 					}
 
-					if(g_on_the_air > 0) /* on the air */
+					if(g_on_the_air > 0)    /* on the air */
 					{
 						g_on_the_air--;
 
 						if(!g_time_to_send_ID_countdown && g_time_needed_for_ID)
 						{
-							if(g_on_the_air == g_time_needed_for_ID) // wait until the end of a transmission
+							if(g_on_the_air == g_time_needed_for_ID)    /* wait until the end of a transmission */
 							{
 								g_last_status_code = STATUS_CODE_SENDING_ID;
 								g_time_to_send_ID_countdown = g_ID_period_seconds;
 								g_code_throttle = throttleValue(g_id_codespeed);
 								repeat = FALSE;
-								makeMorse(g_messages_text[STATION_ID], &repeat, NULL); /* Send only once */
+								makeMorse(g_messages_text[STATION_ID], &repeat, NULL);  /* Send only once */
 							}
 						}
 
@@ -378,11 +387,11 @@ ISR( INT0_vect )
 								keyTransmitter(OFF);
 								g_on_the_air -= g_off_air_seconds;
 								repeat = TRUE;
-								makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL); /* Reset pattern to start */
+								makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);    /* Reset pattern to start */
 								g_last_status_code = STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT;
 
 								/* Enable sleep during off-air periods */
-								if((g_off_air_seconds > 15) && !g_WiFi_shutdown_seconds) // sleep if there is time for it
+								if((g_off_air_seconds > 15) && !g_WiFi_shutdown_seconds)    /* sleep if there is time for it */
 								{
 									g_seconds_to_sleep = (time_t)(g_off_air_seconds - 10);
 									g_go_to_sleep = TRUE;
@@ -395,11 +404,11 @@ ISR( INT0_vect )
 							}
 						}
 					}
-					else if(g_on_the_air < 0) /* off the air - g_on_the_air = 0 means all transmissions are disabled */
+					else if(g_on_the_air < 0)   /* off the air - g_on_the_air = 0 means all transmissions are disabled */
 					{
 						g_on_the_air++;
 
-						if(!g_on_the_air) // off-the-air time has expired
+						if(!g_on_the_air)       /* off-the-air time has expired */
 						{
 							g_last_status_code = STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING;
 							g_on_the_air = g_on_air_seconds;
@@ -444,12 +453,12 @@ ISR( INT0_vect )
 		{
 			g_wifi_enable_delay--;
 
-			if(g_wifi_enable_delay == (LINKBUS_POWERUP_DELAY_SECONDS-1))
+			if(g_wifi_enable_delay == (LINKBUS_POWERUP_DELAY_SECONDS - 1))
 			{
-				wifi_power(ON); // power on WiFi
-				wifi_reset(OFF); // bring WiFi out of reset
+				wifi_power(ON);     /* power on WiFi */
+				wifi_reset(OFF);    /* bring WiFi out of reset */
 			}
-			else if (!g_wifi_enable_delay)
+			else if(!g_wifi_enable_delay)
 			{
 				linkbus_init(BAUD);
 			}
@@ -462,8 +471,8 @@ ISR( INT0_vect )
 
 				if(!g_WiFi_shutdown_seconds)
 				{
-					wifi_reset(ON); // put WiFi into reset
-					wifi_power(OFF); // power off WiFi
+					wifi_reset(ON);     /* put WiFi into reset */
+					wifi_power(OFF);    /* power off WiFi */
 					g_wifi_active = FALSE;
 
 					if(g_event_enabled)
@@ -490,7 +499,10 @@ ISR( INT0_vect )
 				}
 			}
 
-			if(g_wifi_active) g_report_seconds = TRUE;
+			if(g_wifi_active)
+			{
+				g_report_seconds = TRUE;
+			}
 		}
 	}
 }
@@ -508,9 +520,18 @@ ISR( TIMER2_COMPB_vect )
 	static uint8_t amModulation = 0;
 	BOOL repeat, finished;
 
-	if(g_util_tick_countdown) g_util_tick_countdown--;
-	if(g_2m_bias_delay) g_2m_bias_delay--;
-	if(g_baud_count) g_baud_count--;
+	if(g_util_tick_countdown)
+	{
+		g_util_tick_countdown--;
+	}
+	if(g_2m_bias_delay)
+	{
+		g_2m_bias_delay--;
+	}
+	if(g_baud_count)
+	{
+		g_baud_count--;
+	}
 
 	static BOOL key = FALSE;
 
@@ -526,7 +547,7 @@ ISR( TIMER2_COMPB_vect )
 				{
 					key = makeMorse(NULL, &repeat, &finished);
 
-					if(!repeat && finished) // ID has completed, so resume pattern
+					if(!repeat && finished) /* ID has completed, so resume pattern */
 					{
 						g_last_status_code = STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING;
 						g_code_throttle = throttleValue(g_pattern_codespeed);
@@ -535,7 +556,10 @@ ISR( TIMER2_COMPB_vect )
 						key = makeMorse(NULL, &repeat, &finished);
 					}
 
-					if(key) powerToTransmitter(ON);
+					if(key)
+					{
+						powerToTransmitter(ON);
+					}
 				}
 			}
 			else
@@ -642,11 +666,11 @@ ISR( TIMER2_COMPB_vect )
 				}
 			}
 		}
-//		else if(indexConversionInProcess == PA_VOLTAGE_READING)
-//		{
-//			lastResult = holdConversionResult;
-//			g_PA_voltage = holdConversionResult;
-//		}
+/*		else if(indexConversionInProcess == PA_VOLTAGE_READING) */
+/*		{ */
+/*			lastResult = holdConversionResult; */
+/*			g_PA_voltage = holdConversionResult; */
+/*		} */
 		else
 		{
 			lastResult = holdConversionResult;
@@ -721,7 +745,7 @@ ISR(USART_RX_vect)
 	if(buff)
 	{
 		rx_char = toupper(rx_char);
-		SMCR = 0x00; // exit power-down mode
+		SMCR = 0x00;                                /* exit power-down mode */
 
 		if((rx_char == '$') || (rx_char == '!'))    /* start of new message = $ */
 		{
@@ -863,10 +887,10 @@ ISR(USART_UDRE_vect)
  * Note: For quadrature reading the interrupt is set for "Any logical
  * change on INT0 generates an interrupt request."
  ************************************************************************/
-ISR( PCINT0_vect )
-{
-}
-#endif // ENABLE_PIN_CHANGE_INTERRUPT_0
+	ISR( PCINT0_vect )
+	{
+	}
+#endif  /* ENABLE_PIN_CHANGE_INTERRUPT_0 */
 
 #ifdef ENABLE_PIN_CHANGE_INTERRUPT_1
 /***********************************************************************
@@ -909,7 +933,7 @@ ISR( PCINT0_vect )
 			}
 		}
 	}
-#endif // ENABLE_PIN_CHANGE_INTERRUPT_1
+#endif  /* ENABLE_PIN_CHANGE_INTERRUPT_1 */
 
 #ifdef ENABLE_PIN_CHANGE_INTERRUPT_2
 /***********************************************************************
@@ -922,29 +946,29 @@ ISR( PCINT0_vect )
  * interrupts can be used for waking the part from sleep modes other
  * than Idle mode.
  ************************************************************************/
-ISR( PCINT2_vect )
-{
-	static uint8_t portHistory = 0xFF; /* default is high because the pull-up */
-	uint8_t changedbits;
-
-	if(!g_sufficient_power_detected)
+	ISR( PCINT2_vect )
 	{
-		return; /* ignore changes before power stabilizes */
+		static uint8_t portHistory = 0xFF;  /* default is high because the pull-up */
+		uint8_t changedbits;
 
+		if(!g_sufficient_power_detected)
+		{
+			return; /* ignore changes before power stabilizes */
+
+		}
+
+		changedbits = PIND ^ portHistory;
+		portHistory = PIND;
+
+		if(!(changedbits & ((1 << PORTD4) || (1 << PORTD5))))   /* noise? */
+		{
+			return;
+		}
+
+		g_antenna_connect_state = ANT_CONNECTION_UNDETERMINED;
+		g_antenna_connection_changed = TRUE;
 	}
-
-	changedbits = PIND ^ portHistory;
-	portHistory = PIND;
-
-	if(!(changedbits & ((1 << PORTD4) || (1 << PORTD5))))    /* noise? */
-	{
-		return;
-	}
-
-	g_antenna_connect_state = ANT_CONNECTION_UNDETERMINED;
-	g_antenna_connection_changed = TRUE;
-}
-#endif // ENABLE_PIN_CHANGE_INTERRUPT_2
+#endif  /* ENABLE_PIN_CHANGE_INTERRUPT_2 */
 
 
 EC rtc_init(void)
@@ -963,7 +987,7 @@ EC rtc_init(void)
 		}
 	}
 
-	return code;
+	return( code);
 }
 
 
@@ -973,55 +997,55 @@ EC hw_init(void)
 	 * Initialize the transmitter */
 	EC code = init_transmitter();
 
-	return code;
+	return( code);
 }
 
 void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 {
 	if(initType == POWER_UP)
 	{
-		SMCR = 0x00; // clear sleep bit
-		PRR = 0x00; // enable all clocks
+		SMCR = 0x00;    /* clear sleep bit */
+		PRR = 0x00;     /* enable all clocks */
 
 		/** Hardware rev P1.10
 		 * Set up PortB  */
-		// PB0 = VHF_ENABLE
-		// PB1 = HF_ENABLE
-		// PB2 = 3V3_PWR_ENABLE
-		// PB3 = MOSI
-		// PB4 = MISO
-		// PB5 = SCK
-		// PB6 = Tx Final Voltage Enable
-		// PB7 = Main Power Enable
+		/* PB0 = VHF_ENABLE */
+		/* PB1 = HF_ENABLE */
+		/* PB2 = 3V3_PWR_ENABLE */
+		/* PB3 = MOSI */
+		/* PB4 = MISO */
+		/* PB5 = SCK */
+		/* PB6 = Tx Final Voltage Enable */
+		/* PB7 = Main Power Enable */
 
 		DDRB |= (1 << PORTB0) | (1 << PORTB1) | (1 << PORTB2) | (1 << PORTB6) | (1 << PORTB7);
 		PORTB |= (1 << PORTB2) | (1 << PORTB7); /* Turn on main power */
 
 		/** Hardware rev P1.10
 		 * Set up PortD */
-		// PD0 = RXD
-		// PD1 = TXD
-		// PD2 = RTC interrupt
-		// PD3 = Antenna Connect Interrupt
-		// PD4 = 80M_ANTENNA_DETECT
-		// PD5 = 2M_ANTENNA_DETECT
-		// PD6 = WIFI_RESET
-		// PD7 = WIFI_ENABLE
+		/* PD0 = RXD */
+		/* PD1 = TXD */
+		/* PD2 = RTC interrupt */
+		/* PD3 = Antenna Connect Interrupt */
+		/* PD4 = 80M_ANTENNA_DETECT */
+		/* PD5 = 2M_ANTENNA_DETECT */
+		/* PD6 = WIFI_RESET */
+		/* PD7 = WIFI_ENABLE */
 
-	//	DDRD  = 0b00000010;     /* Set PORTD pin data directions */
-		DDRD  |= (1 << PORTD6) | (1 << PORTD7);     /* Set PORTD pin data directions */
-		PORTD = (1 << PORTD2) | (1 << PORTD3) | (1 << PORTD4) | (1 << PORTD5);     /* Enable pull-ups on input pins, and set output levels on all outputs */
+		/*	DDRD  = 0b00000010;     / * Set PORTD pin data directions * / */
+		DDRD  |= (1 << PORTD6) | (1 << PORTD7);                                 /* Set PORTD pin data directions */
+		PORTD = (1 << PORTD2) | (1 << PORTD3) | (1 << PORTD4) | (1 << PORTD5);  /* Enable pull-ups on input pins, and set output levels on all outputs */
 
 		/** Hardware rev P1.10
 		 * Set up PortC */
-		// PC0 = ADC - 80M_ANTENNA_DETECT
-		// PC1 = ADC - 2M_ANTENNA_DETECT
-		// PC2 = n/c
-		// PC3 = n/c
-		// PC4 = SDA
-		// PC5 = SCL
-		// PC6 = Reset
-		// PC7 = N/A
+		/* PC0 = ADC - 80M_ANTENNA_DETECT */
+		/* PC1 = ADC - 2M_ANTENNA_DETECT */
+		/* PC2 = n/c */
+		/* PC3 = n/c */
+		/* PC4 = SDA */
+		/* PC5 = SCL */
+		/* PC6 = Reset */
+		/* PC7 = N/A */
 
 		DDRC = 0x00;
 		PORTC = I2C_PINS | (1 << PORTC2) | (1 << PORTC3);
@@ -1035,108 +1059,108 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 
 		/**
 		 * Set up ADC */
-		ADMUX |= (1 << REFS0) | (1 << REFS1); // Use internal 1.1V reference
+		ADMUX |= (1 << REFS0) | (1 << REFS1);               /* Use internal 1.1V reference */
 		ADCSRA |= (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0) | (1 << ADEN);
 
 		/**
 		 * Set up pin interrupts */
 		/* Enable pin change interrupts PCINT8 - 80m, PCINT9 - 2m, */
-		// TODO
+		/* TODO */
 
-	//	PCICR |= (1 << PCIE2) | (1 << PCIE1) | (1 << PCIE0);  /* Enable pin change interrupts PCI2, PCI1 and PCI0 */
-	//	PCMSK2 |= 0b10001000;                                   /* Enable port D pin change interrupts */
-	//	PCMSK1 |= (1 << PCINT10);                               /* Enable port C pin change interrupts on pin PC2 */
-	//	PCMSK0 |= (1 << PORTB2);                                /* Do not enable interrupts until HW is ready */
+		/*	PCICR |= (1 << PCIE2) | (1 << PCIE1) | (1 << PCIE0);  / * Enable pin change interrupts PCI2, PCI1 and PCI0 * / */
+		/*	PCMSK2 |= 0b10001000;                                   / * Enable port D pin change interrupts * / */
+		/*	PCMSK1 |= (1 << PCINT10);                               / * Enable port C pin change interrupts on pin PC2 * / */
+		/*	PCMSK0 |= (1 << PORTB2);                                / * Do not enable interrupts until HW is ready * / */
 
-//		EICRA  |= ((1 << ISC01) | (1 << ISC00));	/* Configure INT0 rising edge for RTC 1-second interrupts */
-		EICRA  |= ((1 << ISC01) | (1 << ISC10));	/* Configure INT0 falling edge for RTC 1-second interrupts, and INT1 any logic change */
+/*		EICRA  |= ((1 << ISC01) | (1 << ISC00));	/ * Configure INT0 rising edge for RTC 1-second interrupts * / */
+		EICRA  |= ((1 << ISC01) | (1 << ISC10));    /* Configure INT0 falling edge for RTC 1-second interrupts, and INT1 any logic change */
 		EIMSK |= ((1 << INT0) | (1 << INT1));
 
-		i2c_init(); // initialize i2c bus
+		i2c_init();                                 /* initialize i2c bus */
 	}
 	else
 	{
 		/** Hardware rev P1.10
 		 * Set up PortB  */
-		// PB0 = VHF_ENABLE
-		// PB1 = HF_ENABLE
-		// PB2 = Testpoint W306
-		// PB3 = MOSI
-		// PB4 = MISO
-		// PB5 = SCK
-		// PB6 = Tx Final Voltage Enable
-		// PB7 = Main Power Enable
+		/* PB0 = VHF_ENABLE */
+		/* PB1 = HF_ENABLE */
+		/* PB2 = Testpoint W306 */
+		/* PB3 = MOSI */
+		/* PB4 = MISO */
+		/* PB5 = SCK */
+		/* PB6 = Tx Final Voltage Enable */
+		/* PB7 = Main Power Enable */
 
-		DDRB = 0x00;     /* Set PORTD pin data directions */
+		DDRB = 0x00;    /* Set PORTD pin data directions */
 		PORTB = 0x00;
 
 		/** Hardware rev P1.10
-		* Set up PortD */
-		// PD0 = RXD
-		// PD1 = TXD
-		// PD2 = RTC interrupt
-		// PD3 = Antenna Connect Interrupt
-		// PD4 = 80M_ANTENNA_DETECT
-		// PD5 = 2M_ANTENNA_DETECT
-		// PD6 = WIFI_RESET
-		// PD7 = WIFI_ENABLE
+		 * Set up PortD */
+		/* PD0 = RXD */
+		/* PD1 = TXD */
+		/* PD2 = RTC interrupt */
+		/* PD3 = Antenna Connect Interrupt */
+		/* PD4 = 80M_ANTENNA_DETECT */
+		/* PD5 = 2M_ANTENNA_DETECT */
+		/* PD6 = WIFI_RESET */
+		/* PD7 = WIFI_ENABLE */
 
 		DDRD = 0x00;
-		PORTD = ((1 << PORTD2) | (1 << PORTD3) | (1 << PORTD4) | (1 << PORTD5)); /* Allow RTC and antenna-connect interrupts to continue */
+		PORTD = ((1 << PORTD2) | (1 << PORTD3) | (1 << PORTD4) | (1 << PORTD5));    /* Allow RTC and antenna-connect interrupts to continue */
 
 		/** Hardware rev P1.10
 		 * Set up PortC */
-		// PC0 = ADC - 80M_ANTENNA_DETECT
-		// PC1 = ADC - 2M_ANTENNA_DETECT
-		// PC2 = n/c
-		// PC3 = n/c
-		// PC4 = SDA
-		// PC5 = SCL
-		// PC6 = Reset
-		// PC7 = N/A
+		/* PC0 = ADC - 80M_ANTENNA_DETECT */
+		/* PC1 = ADC - 2M_ANTENNA_DETECT */
+		/* PC2 = n/c */
+		/* PC3 = n/c */
+		/* PC4 = SDA */
+		/* PC5 = SCL */
+		/* PC6 = Reset */
+		/* PC7 = N/A */
 
 		DDRC = 0x00;
 		PORTC = (1 << PORTC0) | (1 << PORTC1) | (1 << PORTC2) | (1 << PORTC3);
 
 		/**
 		 * TIMER2 is for periodic interrupts */
-		TIMSK2 &= ~(1 << OCIE0B);                            /* disable compare interrupt */
-		OCR2A = 0x00;                                       /* set frequency to ~300 Hz (0x0c) */
-		TCCR2A &= ~(1 << WGM01);                             /* set CTC with OCRA */
-		TCCR2B &= ~((1 << CS22) | (1 << CS21) | (1 << CS20));  /* Prescalar */
+		TIMSK2 &= ~(1 << OCIE0B);                               /* disable compare interrupt */
+		OCR2A = 0x00;                                           /* set frequency to ~300 Hz (0x0c) */
+		TCCR2A &= ~(1 << WGM01);                                /* set CTC with OCRA */
+		TCCR2B &= ~((1 << CS22) | (1 << CS21) | (1 << CS20));   /* Prescalar */
 
 		/**
 		 * Set up ADC */
 		ADMUX &= ~((1 << REFS0) | (1 << REFS1));
 		ADCSRA = 0;
 
-		DIDR0 = 0x3f; // disable ADC pins
-		DIDR1 = 0x03; // disable analog inputs
+		DIDR0 = 0x3f;   /* disable ADC pins */
+		DIDR1 = 0x03;   /* disable analog inputs */
 
 		/**
-		* Set up pin interrupts */
+		 * Set up pin interrupts */
 		/* Enable pin change interrupts PCINT8, PCINT9, */
-		// TODO
+		/* TODO */
 
 		PCICR = 0;
 		PCMSK0 = 0;
 		PCMSK1 = 0;
 		PCMSK2 = 0;
 
-		EICRA  |= ((1 << ISC01) | (1 << ISC11));	/* Configure INT0 and INT1 falling edge for RTC 1-second interrupts */
+		EICRA  |= ((1 << ISC01) | (1 << ISC11));    /* Configure INT0 and INT1 falling edge for RTC 1-second interrupts */
 		EIMSK |= ((1 << INT0) | (1 << INT1));
 
 		/* Configure INT1 for antenna connect interrupts */
-		// TODO
+		/* TODO */
 
 		/**
-		Turn off UART
-		*/
-//		linkbus_disable();
+		 *  Turn off UART
+		 */
+/*		linkbus_disable(); */
 
 		/**
-		Disable Watchdog timer
-		*/
+		 *  Disable Watchdog timer
+		 */
 		wdt_init(WD_DISABLE);
 
 		g_sleeping = TRUE;
@@ -1145,11 +1169,11 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 		**/
 		PRR = 0xff;
 		cli();
-		SMCR = 0x05; // set power-down mode
-		MCUCR = (1 << BODS) | (1 << BODSE);  // turn on brown-out enable select
-		MCUCR = (1 << BODS);        // this must be done within 4 clock cycles of above
+		SMCR = 0x05;                        /* set power-down mode */
+		MCUCR = (1 << BODS) | (1 << BODSE); /* turn on brown-out enable select */
+		MCUCR = (1 << BODS);                /* this must be done within 4 clock cycles of above */
 		sei();
-		asm("sleep"); /* enter power-down mode */
+		asm ("sleep");                      /* enter power-down mode */
 	}
 }
 
@@ -1169,50 +1193,55 @@ int main( void )
 	static EC code = ERROR_CODE_SW_LOGIC_ERROR;
 	uint8_t tries = 10;
 	BOOL init_hardware = FALSE;
-	static uint8_t hw_tries = 10; // give up after too many failures
+	uint8_t holdOSCCAL;
+	static uint8_t hw_tries = 10;   /* give up after too many failures */
 
 	/**
 	 * Initialize vars stored in EEPROM */
-	initializeEEPROMVars();
-	g_event_enabled = FALSE; // ensure the event is disabled until hardware is initialized
 
+	initializeEEPROMVars();
+	g_event_enabled = FALSE;    /* ensure the event is disabled until hardware is initialized */
+	holdOSCCAL = OSCCAL;
 	/**
 	 * Initialize port pins and timers */
 	set_ports(POWER_UP);
 
-	cpu_irq_enable();                                           /* same as sei(); */
+	cpu_irq_enable();   /* same as sei(); */
 
 	/**
 	 * Enable watchdog interrupts before performing I2C calls that might cause a lockup */
 #ifndef TRANQUILIZE_WATCHDOG
-	wdt_init(WD_SW_RESETS);
-	wdt_reset();                                    /* HW watchdog */
-#endif // TRANQUILIZE_WATCHDOG
+		wdt_init(WD_SW_RESETS);
+		wdt_reset();    /* HW watchdog */
+#endif /* TRANQUILIZE_WATCHDOG */
 
 	g_antenna_connect_state = antennaIsConnected() ? ANT_CONNECTION_UNDETERMINED : ANT_ALL_DISCONNECTED;
 
 	while(code && tries)
 	{
-		if(tries) tries--;
+		if(tries)
+		{
+			tries--;
+		}
 		code = rtc_init();
 	}
 
 	g_last_error_code = code;
 
-//	linkbus_init(BAUD);
+/*	linkbus_init(BAUD); */
 	g_wifi_enable_delay = LINKBUS_POWERUP_DELAY_SECONDS;
 
-	wdt_reset();                                    /* HW watchdog */
+	wdt_reset();    /* HW watchdog */
 
 	g_util_tick_countdown = 20;
 	while(linkbusTxInProgress() && g_util_tick_countdown)
 	{
-		;                                           /* wait until transmit finishes */
+		;                       /* wait until transmit finishes */
 	}
 
 #ifndef TRANQUILIZE_WATCHDOG
-	wdt_init(WD_HW_RESETS); /* enable hardware interrupts */
-#endif // TRANQUILIZE_WATCHDOG
+		wdt_init(WD_HW_RESETS); /* enable hardware interrupts */
+#endif /* TRANQUILIZE_WATCHDOG */
 
 	while(1)
 	{
@@ -1224,16 +1253,16 @@ int main( void )
 		/***************************************
 		* Check for Power
 		***************************************/
-		if(!g_sufficient_power_detected)                                                                           /* if ADC battery measurements have stabilized */
+		if(!g_sufficient_power_detected)                                                /* if ADC battery measurements have stabilized */
 		{
 			if(g_battery_measurements_active)
 			{
-				if(g_lastConversionResult[BATTERY_READING] > POWER_ON_VOLT_THRESH_MV)  /* Battery measurement indicates sufficient voltage */
+				if(g_lastConversionResult[BATTERY_READING] > POWER_ON_VOLT_THRESH_MV)   /* Battery measurement indicates sufficient voltage */
 				{
 					g_sufficient_power_detected = TRUE;
 					g_calibrate_baud = TRUE;
 				}
-				else if(!g_wifi_enable_delay) // no battery detected by the time WiFi  is turned on, assume an external battery is being used
+				else if(!g_wifi_enable_delay)   /* no battery detected by the time WiFi  is turned on, assume an external battery is being used */
 				{
 					if(g_battery_type == BATTERY_UNKNOWN)
 					{
@@ -1253,10 +1282,10 @@ int main( void )
 			if(hw_tries)
 			{
 				hw_tries--;
-				code = hw_init(); // initialize transmitter and related I2C devices
+				code = hw_init();   /* initialize transmitter and related I2C devices */
 				init_hardware = (code != ERROR_CODE_NO_ERROR);
 
-				if(!init_hardware) // hardware was successfully initialized
+				if(!init_hardware)  /* hardware was successfully initialized */
 				{
 					SC status = STATUS_CODE_IDLE;
 					EC ec = ERROR_CODE_SW_LOGIC_ERROR;
@@ -1264,7 +1293,10 @@ int main( void )
 
 					while(ec && tries)
 					{
-						if(tries) tries--;
+						if(tries)
+						{
+							tries--;
+						}
 						ec = rtc_init();
 					}
 
@@ -1275,36 +1307,38 @@ int main( void )
 				}
 			}
 
-			if(code) // avoid unnecessarily clearing any pre-existing error code
+			if(code)    /* avoid unnecessarily clearing any pre-existing error code */
 			{
 				/*  If the  hardware fails to initialize, report the failure to
-				    the user over WiFi by sending an appropriate error code. */
+				 *   the user over WiFi by sending an appropriate error code. */
 				g_last_error_code = code;
 			}
 		}
 
 		/********************************
-		* Handle sleep
-		******************************/
+		 * Handle sleep
+		 ******************************/
 		if(g_go_to_sleep)
 		{
 			if(txSleeping(TRUE))
 			{
-				init_hardware = FALSE; // ensure failing attempts are canceled
-				g_sufficient_power_detected = FALSE; // init hardware on return from sleep
+				init_hardware = FALSE;                  /* ensure failing attempts are canceled */
+				g_sufficient_power_detected = FALSE;    /* init hardware on return from sleep */
 				g_seconds_left_to_sleep = g_seconds_to_sleep;
 				linkbus_disable();
 
-				while(g_go_to_sleep) set_ports(POWER_SLEEP); // Sleep occurs here
-
+				while(g_go_to_sleep)
+				{
+					set_ports(POWER_SLEEP); /* Sleep occurs here */
+				}
 				set_ports(POWER_UP);
 				linkbus_enable();
-				wdt_init(WD_HW_RESETS); /* enable hardware interrupts */
+				wdt_init(WD_HW_RESETS);         /* enable hardware interrupts */
 				wdt_reset();                    /* HW watchdog */
 				g_i2c_not_timed_out = FALSE;    /* unstick I2C */
 				if(g_event_enabled)
 				{
-					hw_tries = 10; // give up after too many failures
+					hw_tries = 10;              /* give up after too many failures */
 					init_hardware = TRUE;
 				}
 				else
@@ -1321,15 +1355,39 @@ int main( void )
 		{
 			if(!g_baud_count)
 			{
-				static uint8_t calVal = 150;
-				g_baud_count = 200;
-				calibrateOscillator(calVal);
-				if(++calVal > 200)
+				static uint8_t calVal = 10;
+				g_baud_count = 300;
+				g_WiFi_shutdown_seconds = 240;
+
+				if(calVal > 240)
 				{
-					g_calibrate_baud = FALSE;
-					calcOSCCAL(0);
+					if(!calcOSCCAL(0))
+					{
+						calVal = 0;
+						saveAllEEPROM();
+						g_baud_count = 500;
+					}
+					else
+					{
+						OSCCAL = holdOSCCAL;
+					}
+
 					init_hardware = TRUE;
-					saveAllEEPROM();
+				}
+				else
+				{
+					if(calVal)
+					{
+						calibrateOscillator(calVal);
+						calVal += 3;
+					}
+					else
+					{
+						calibrateOscillator(0);
+						calVal = 10;
+						g_calibrate_baud = FALSE;
+						g_WiFi_shutdown_seconds = 120;
+					}
 				}
 			}
 		}
@@ -1397,14 +1455,14 @@ int main( void )
 
 							if(connection == ANT_80M_CONNECTED)
 							{
-								//txSetBand(BAND_80M, OFF);
+								/*txSetBand(BAND_80M, OFF); */
 								g_last_status_code = STATUS_CODE_80M_ANT_ATTACHED;
 
 								/* TODO: re-enable transmitter power and state if it is currently operating */
 							}
 							else if(connection == ANT_2M_CONNECTED)
 							{
-								//txSetBand(BAND_2M, OFF);
+								/*txSetBand(BAND_2M, OFF); */
 								g_last_status_code = STATUS_CODE_2M_ANT_ATTACHED;
 
 								/* TODO: re-enable transmitter power and state if it is currently operating */
@@ -1426,7 +1484,7 @@ int main( void )
 				lastAntennaConnectState = ANT_ALL_DISCONNECTED;
 				g_last_status_code = STATUS_CODE_NO_ANT_ATTACHED;
 			}
-			else /* logic error - this should not occur */
+			else    /* logic error - this should not occur */
 			{
 				powerToTransmitter(OFF);
 				g_antenna_connection_changed = FALSE;
@@ -1439,15 +1497,18 @@ int main( void )
 			if(!g_2m_bias_delay)
 			{
 				EC ec;
-				g_2m_bias_delay = 16; /* Adjust so that the state machine takes about 100 ms to step through all states */
+				g_2m_bias_delay = 16;   /* Adjust so that the state machine takes about 100 ms to step through all states */
 				ec = (*g_txTask)(NULL);
-				if(ec) g_last_error_code = ec;
+				if(ec)
+				{
+					g_last_error_code = ec;
+				}
 			}
 		}
 
 		if(g_check_for_next_event)
 		{
-			if(!g_WiFi_shutdown_seconds) // For now just go to sleep forever
+			if(!g_WiFi_shutdown_seconds)    /* For now just go to sleep forever */
 			{
 				g_go_to_sleep = TRUE;
 				g_seconds_to_sleep = MAX_TIME;
@@ -1462,11 +1523,11 @@ int main( void )
 		 *  Handle arriving Linkbus messages
 		 ************************************************************************/
 		handleLinkBusMsgs();
-	}       /* while(1) */
+	}   /* while(1) */
 }/* main */
 
-// The compiler does not seem to optimize large switch statements correctly
-void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
+/* The compiler does not seem to optimize large switch statements correctly */
+void __attribute__((optimize("O0"))) handleLinkBusMsgs()
 {
 	LinkbusRxBuffer* lb_buff;
 	static uint8_t event_parameter_count = 0;
@@ -1488,9 +1549,9 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 
 					suspendEvent();
 					linkbus_disable();
-					g_WiFi_shutdown_seconds = 0; // disable sleep
+					g_WiFi_shutdown_seconds = 0;    /* disable sleep */
 
-					if(result == 0) // shut off power to WiFi
+					if(result == 0)                 /* shut off power to WiFi */
 					{
 						PORTD &= ~((1 << PORTD6) | (1 << PORTD7));
 					}
@@ -1501,9 +1562,12 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 			case MESSAGE_RESET:
 			{
 #ifndef TRANQUILIZE_WATCHDOG
-				wdt_init(WD_FORCE_RESET);
-				while(1);
-#endif // TRANQUILIZE_WATCHDOG
+					wdt_init(WD_FORCE_RESET);
+					while(1)
+					{
+						;
+					}
+#endif  /* TRANQUILIZE_WATCHDOG */
 			}
 			break;
 
@@ -1511,12 +1575,36 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 			{
 				if(lb_buff->fields[FIELD1][0])
 				{
+					static uint8_t lastVal = 0;
+					static uint8_t valCount = 0;
 					int val = (uint16_t)atoi(lb_buff->fields[FIELD1]);
 
 					if(val > 0)
 					{
-						calcOSCCAL(val);
+						BOOL skip = FALSE;
+
+						if(abs(lastVal - val) > 10)
+						{
+							if(valCount < 7)
+							{
+								calcOSCCAL(255);
+								valCount = 0;
+							}
+							else
+							{
+								skip = TRUE;
+							}
+						}
+
+						if(!skip)
+						{
+							lastVal = val;
+							valCount++;
+							calcOSCCAL(val);
+						}
 					}
+
+					send_ack = FALSE;
 				}
 			}
 			break;
@@ -1527,14 +1615,14 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 
 				g_wifi_active = TRUE;
 
-				if(f1 == 'Z') /* WiFi connected to browser - keep alive */
+				if(f1 == 'Z')                       /* WiFi connected to browser - keep alive */
 				{
 					/* shut down WiFi after 2 minutes of inactivity */
-					g_WiFi_shutdown_seconds = 120; // wait 2 more minutes before shutting down WiFi
+					g_WiFi_shutdown_seconds = 120;  /* wait 2 more minutes before shutting down WiFi */
 				}
 				else
 				{
-					if(f1 == '0') /* I'm awake message */
+					if(f1 == '0')                   /* I'm awake message */
 					{
 						/* WiFi is awake. Send it the current time */
 						sprintf(g_tempStr, "%lu", time(NULL));
@@ -1545,23 +1633,23 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 						if(f1 == '1')
 						{
 							/* ESP8266 is ready with event data */
-							// Prepare to receive new event configuration settings
+							/* Prepare to receive new event configuration settings */
 							suspendEvent();
 							initializeAllEventSettings(TRUE);
 						}
 						else
 						{
-							if(f1 == '2') /* ESP module needs continuous power to save data */
+							if(f1 == '2')                                               /* ESP module needs continuous power to save data */
 							{
-								//suspendEvent();
-								g_WiFi_shutdown_seconds = 0; // disable sleep
+								/*suspendEvent(); */
+								g_WiFi_shutdown_seconds = 0;                            /* disable sleep */
 								lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ESP_LABEL, "2"); /* Save data now */
 							}
 							else
 							{
 								if(f1 == '3')
 								{
-									g_WiFi_shutdown_seconds = 3; /* Shut down WiFi in 3 seconds */
+									g_WiFi_shutdown_seconds = 3;    /* Shut down WiFi in 3 seconds */
 								}
 							}
 						}
@@ -1572,13 +1660,13 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 
 			case MESSAGE_TX_MOD:
 			{
-				if(lb_buff->fields[FIELD1][0] == 'A') // AM
+				if(lb_buff->fields[FIELD1][0] == 'A')   /* AM */
 				{
 					BOOL setAMmodulation = TRUE;
 					txSetParameters(NULL, NULL, &setAMmodulation, NULL);
 					event_parameter_count++;
 				}
-				else if(lb_buff->fields[FIELD1][0] == 'C') // CW
+				else if(lb_buff->fields[FIELD1][0] == 'C')  /* CW */
 				{
 					BOOL setAMmodulation = FALSE;
 					txSetParameters(NULL, NULL, &setAMmodulation, NULL);
@@ -1606,7 +1694,10 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					}
 
 					ec = txSetParameters(&pwr_mW, NULL, NULL, NULL);
-					if(ec) g_last_error_code = ec;
+					if(ec)
+					{
+						g_last_error_code = ec;
+					}
 
 					sprintf(g_tempStr, "M,%u", pwr_mW);
 					lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_TX_POWER_LABEL, g_tempStr);
@@ -1633,7 +1724,7 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					}
 					else
 					{
-						if(f1 == '1') // Xmit immediately using current settings
+						if(f1 == '1')   /* Xmit immediately using current settings */
 						{
 							if(txIsAntennaForBand() || g_tx_power_is_zero)
 							{
@@ -1643,14 +1734,14 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 								makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
 								g_code_throttle = throttleValue(g_pattern_codespeed);
 								sei();
-								g_event_start_time = 1; // have it start a long time ago
-								g_event_finish_time = MAX_TIME; // run for a long long time
-								g_on_air_seconds = 9999; // on period is very long
-								g_off_air_seconds = 0; // off period is very short
-								g_on_the_air = 9999; //  start out transmitting
-								g_time_to_send_ID_countdown = MAX_UINT16; // wait a long time to send the ID
-								g_event_commenced = TRUE; // get things running immediately
-								g_event_enabled = TRUE; // get things running immediately
+								g_event_start_time = 1;                     /* have it start a long time ago */
+								g_event_finish_time = MAX_TIME;             /* run for a long long time */
+								g_on_air_seconds = 9999;                    /* on period is very long */
+								g_off_air_seconds = 0;                      /* off period is very short */
+								g_on_the_air = 9999;                        /*  start out transmitting */
+								g_time_to_send_ID_countdown = MAX_UINT16;   /* wait a long time to send the ID */
+								g_event_commenced = TRUE;                   /* get things running immediately */
+								g_event_enabled = TRUE;                     /* get things running immediately */
 								g_last_status_code = STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING;
 							}
 							else
@@ -1658,7 +1749,7 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 								g_last_error_code = ERROR_CODE_NO_ANTENNA_FOR_BAND;
 							}
 						}
-						else if (f1 == '2') // enables a downloaded event stored in EEPROM
+						else if(f1 == '2')  /* enables a downloaded event stored in EEPROM */
 						{
 							/* This command configures the transmitter to launch an event at its scheduled start time */
 							if(event_parameter_count < NUMBER_OF_ESSENTIAL_EVENT_PARAMETERS)
@@ -1673,17 +1764,17 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 
 								if(!ec)
 								{
-									saveAllEEPROM();            /* Make sure all  event values get saved */
+									saveAllEEPROM();    /* Make sure all  event values get saved */
 									storeTransmitterValues();
 								}
 							}
 						}
 					}
 				}
-				else if(f1 == '0') // Stop continuous transmit (if enabled) and prepare to receive new event data
+				else if(f1 == '0')  /* Stop continuous transmit (if enabled) and prepare to receive new event data */
 				{
 					suspendEvent();
-					// Restore saved event settings
+					/* Restore saved event settings */
 					event_parameter_count = 0;
 					g_last_status_code = STATUS_CODE_RECEIVING_EVENT_DATA;
 				}
@@ -1705,7 +1796,7 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					{
 						g_event_start_time = mtime;
 						cli();
-						set_system_time(ds3231_get_epoch(NULL)); // update system clock
+						set_system_time(ds3231_get_epoch(NULL));    /* update system clock */
 						sei();
 						event_parameter_count++;
 					}
@@ -1731,13 +1822,13 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 
 			case MESSAGE_CLOCK:
 			{
-				if(lb_buff->type == LINKBUS_MSG_COMMAND) // ignore replies since, as the time source, we should never be sending queries anyway
+				if(lb_buff->type == LINKBUS_MSG_COMMAND)    /* ignore replies since, as the time source, we should never be sending queries anyway */
 				{
 					if(lb_buff->fields[FIELD1][0])
 					{
 						strncpy(g_tempStr, lb_buff->fields[FIELD1], 20);
 						ds3231_set_date_time(g_tempStr, RTC_CLOCK);
-						set_system_time(ds3231_get_epoch(NULL)); // update system clock
+						set_system_time(ds3231_get_epoch(NULL));    /* update system clock */
 					}
 					else
 					{
@@ -1936,7 +2027,10 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 						event_parameter_count++;
 					}
 
-					if(ec) g_last_error_code = ec;
+					if(ec)
+					{
+						g_last_error_code = ec;
+					}
 				}
 
 				band = txGetBand();
@@ -1956,15 +2050,18 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 				lb_broadcast_num(bat, "!BAT");
 
 				/* The system clock gets re-initialized whenever a battery message is received. This is
-					    just to ensure the two stay closely in sync while the user interface is active */
-				set_system_time(ds3231_get_epoch(NULL)); // update system clock
+				 *           just to ensure the two stay closely in sync while the user interface is active */
+				set_system_time(ds3231_get_epoch(NULL));    /* update system clock */
 			}
 			break;
 
 			case MESSAGE_TEMP:
 			{
 				int16_t v;
-				if(!ds3231_get_temp(&v)) lb_broadcast_num(v, "!TEM");
+				if(!ds3231_get_temp(&v))
+				{
+					lb_broadcast_num(v, "!TEM");
+				}
 			}
 			break;
 
@@ -1977,7 +2074,10 @@ void  __attribute__((optimize("O0"))) handleLinkBusMsgs()
 		}
 
 		lb_buff->id = MESSAGE_EMPTY;
-		if(send_ack) linkbus_send_text(MESSAGE_ACK);
+		if(send_ack)
+		{
+			linkbus_send_text(MESSAGE_ACK);
+		}
 	}
 }
 
@@ -1994,33 +2094,39 @@ BOOL __attribute__((optimize("O0"))) eventEnabled(BOOL noSleep, time_t* time_bef
 	dif = timeDif(now, g_event_finish_time);
 	isDisabled = ((dif >= 0) && runsFinite);
 
-	if(isDisabled) return FALSE; // completed events are never enabled
-
-	dif = timeDif(now, g_event_start_time);
-	hasStarted = (dif >= -60); // consider it started if it is withing 60 seconds of its start time
-
-	if(hasStarted || noSleep) // running events, or if we don't care about sleep before they start, are always enabled
+	if(isDisabled)
 	{
-		if(time_before_start) *time_before_start = 0;
-		return TRUE;
+		return( FALSE);         /* completed events are never enabled */
+
+	}
+	dif = timeDif(now, g_event_start_time);
+	hasStarted = (dif >= -60);  /* consider it started if it is withing 60 seconds of its start time */
+
+	if(hasStarted || noSleep)   /* running events, or if we don't care about sleep before they start, are always enabled */
+	{
+		if(time_before_start)
+		{
+			*time_before_start = 0;
+		}
+		return( TRUE);
 	}
 
-	// If we reach here, we have an event that has not yet started, and a sleep time needs to be calculated
-	// consider if there is time for sleep prior to the event start
+	/* If we reach here, we have an event that has not yet started, and a sleep time needs to be calculated */
+	/* consider if there is time for sleep prior to the event start */
 	if(time_before_start)
 	{
-		*time_before_start = (-dif)-60; // sleep until 60 seconds before its start time
+		*time_before_start = (-dif) - 60;   /* sleep until 60 seconds before its start time */
 	}
 
-	return TRUE;
+	return( TRUE);
 }
 
 void suspendEvent()
 {
 	cli();
-	g_on_the_air = 0; //  stop transmitting
-	g_event_commenced = FALSE; // get things stopped immediately
-	g_event_enabled = FALSE; // get things stopped immediately
+	g_on_the_air = 0;           /*  stop transmitting */
+	g_event_commenced = FALSE;  /* get things stopped immediately */
+	g_event_enabled = FALSE;    /* get things stopped immediately */
 	sei();
 	keyTransmitter(OFF);
 	powerToTransmitter(OFF);
@@ -2051,72 +2157,102 @@ EC __attribute__((optimize("O0"))) launchEvent(bool noSleep, SC* statusCode)
 		}
 	}
 
-	return ec;
+	return( ec);
 }
 
 EC activateEventUsingCurrentSettings(SC* statusCode)
 {
-	// Make sure everything has been sanely initialized
-	if(!g_event_start_time) return ERROR_CODE_EVENT_MISSING_START_TIME;
-	if(!g_on_air_seconds) return ERROR_CODE_EVENT_MISSING_TRANSMIT_DURATION;
-	if(g_intra_cycle_delay_time > (g_off_air_seconds + g_on_air_seconds)) return ERROR_CODE_EVENT_TIMING_ERROR;
-	if(g_messages_text[PATTERN_TEXT][0] == '\0') return ERROR_CODE_EVENT_PATTERN_NOT_SPECIFIED;
-	if(!g_pattern_codespeed) return ERROR_CODE_EVENT_PATTERN_CODE_SPEED_NOT_SPECIFIED;
+	/* Make sure everything has been sanely initialized */
+	if(!g_event_start_time)
+	{
+		return( ERROR_CODE_EVENT_MISSING_START_TIME);
+	}
+	if(!g_on_air_seconds)
+	{
+		return( ERROR_CODE_EVENT_MISSING_TRANSMIT_DURATION);
+	}
+	if(g_intra_cycle_delay_time > (g_off_air_seconds + g_on_air_seconds))
+	{
+		return( ERROR_CODE_EVENT_TIMING_ERROR);
+	}
+	if(g_messages_text[PATTERN_TEXT][0] == '\0')
+	{
+		return( ERROR_CODE_EVENT_PATTERN_NOT_SPECIFIED);
+	}
+	if(!g_pattern_codespeed)
+	{
+		return( ERROR_CODE_EVENT_PATTERN_CODE_SPEED_NOT_SPECIFIED);
+	}
 	if(g_messages_text[STATION_ID][0] != '\0')
 	{
-		if((!g_id_codespeed || !g_ID_period_seconds)) return ERROR_CODE_EVENT_STATION_ID_ERROR;
+		if((!g_id_codespeed || !g_ID_period_seconds))
+		{
+			return( ERROR_CODE_EVENT_STATION_ID_ERROR);
+		}
 
 		g_time_needed_for_ID = (500 + timeRequiredToSendStrAtWPM(g_messages_text[STATION_ID], g_id_codespeed)) / 1000;
 	}
 	else
 	{
-		g_time_needed_for_ID = 0; // ID will never be sent
+		g_time_needed_for_ID = 0;                   /* ID will never be sent */
 	}
 
-	if(g_event_start_time > g_event_finish_time) // the event never ends
+	if(g_event_start_time >= g_event_finish_time)    /* the event never ends */
 	{
 		g_event_finish_time = MAX_TIME;
 	}
 
 	time_t now = time(NULL);
-	if(g_event_finish_time < now) // the event has already finished
+	if(g_event_finish_time < now)   /* the event has already finished */
 	{
-		if(statusCode) *statusCode = STATUS_CODE_NO_EVENT_TO_RUN;
+		if(statusCode)
+		{
+			*statusCode = STATUS_CODE_NO_EVENT_TO_RUN;
+		}
 	}
 	else
 	{
-		int32_t dif = timeDif(now, g_event_start_time); // returns arg1 - arg2
+		int32_t dif = timeDif(now, g_event_start_time); /* returns arg1 - arg2 */
 
-		if(dif >= 0) // start time is in the past
+		if(dif >= 0)                                    /* start time is in the past */
 		{
 			BOOL turnOnTransmitter = FALSE;
 			int cyclePeriod = g_on_air_seconds + g_off_air_seconds;
 			int secondsIntoCycle = dif % cyclePeriod;
 			int timeTillTransmit = g_intra_cycle_delay_time - secondsIntoCycle;
 
-			if(timeTillTransmit <= 0) // we should have started transmitting already
+			if(timeTillTransmit <= 0)                       /* we should have started transmitting already */
 			{
-				if(g_on_air_seconds <= -timeTillTransmit) // we should have finished transmitting in this cycle
+				if(g_on_air_seconds <= -timeTillTransmit)   /* we should have finished transmitting in this cycle */
 				{
 					g_on_the_air = -(cyclePeriod + timeTillTransmit);
-					if(statusCode) *statusCode = STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT;
+					if(statusCode)
+					{
+						*statusCode = STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT;
+					}
 					g_time_to_send_ID_countdown = (g_on_air_seconds - g_on_the_air) - g_time_needed_for_ID;
 				}
-				else // we should be transmitting right now
+				else    /* we should be transmitting right now */
 				{
 					g_on_the_air = g_on_air_seconds + timeTillTransmit;
 					turnOnTransmitter = TRUE;
-					if(statusCode) *statusCode = STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING;
+					if(statusCode)
+					{
+						*statusCode = STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING;
+					}
 					if(g_time_needed_for_ID < g_on_the_air)
 					{
 						g_time_to_send_ID_countdown = g_on_the_air - g_time_needed_for_ID;
 					}
 				}
 			}
-			else // it is not yet time to transmit in this cycle
+			else    /* it is not yet time to transmit in this cycle */
 			{
 				g_on_the_air = -timeTillTransmit;
-				if(statusCode) *statusCode = STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT;
+				if(statusCode)
+				{
+					*statusCode = STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT;
+				}
 				g_time_to_send_ID_countdown = timeTillTransmit + g_on_air_seconds - g_time_needed_for_ID;
 			}
 
@@ -2135,14 +2271,17 @@ EC activateEventUsingCurrentSettings(SC* statusCode)
 
 			g_event_commenced = TRUE;
 		}
-		else // start time is in the future
+		else    /* start time is in the future */
 		{
-			if(statusCode) *statusCode = STATUS_CODE_WAITING_FOR_EVENT_START;
+			if(statusCode)
+			{
+				*statusCode = STATUS_CODE_WAITING_FOR_EVENT_START;
+			}
 			keyTransmitter(OFF);
 		}
 	}
 
-	return ERROR_CODE_NO_ERROR;
+	return( ERROR_CODE_NO_ERROR);
 }
 
 /**********************
@@ -2172,16 +2311,22 @@ void initializeEEPROMVars()
 			OSCCAL = temp;
 		}
 
-		for(i=0; i<20; i++)
+		for(i = 0; i < 20; i++)
 		{
 			g_messages_text[STATION_ID][i] = (char)eeprom_read_byte((uint8_t*)(&ee_stationID_text[i]));
-			if(!g_messages_text[STATION_ID][i]) break;
+			if(!g_messages_text[STATION_ID][i])
+			{
+				break;
+			}
 		}
 
-		for(i=0; i<20; i++)
+		for(i = 0; i < 20; i++)
 		{
 			g_messages_text[PATTERN_TEXT][i] = (char)eeprom_read_byte((uint8_t*)(&ee_pattern_text[i]));
-			if(!g_messages_text[PATTERN_TEXT][i]) break;
+			if(!g_messages_text[PATTERN_TEXT][i])
+			{
+				break;
+			}
 		}
 	}
 	else
@@ -2203,14 +2348,15 @@ void initializeEEPROMVars()
 
 		saveAllEEPROM();
 		eeprom_write_byte(&ee_interface_eeprom_initialization_flag, EEPROM_INITIALIZED_FLAG);
-		wdt_reset();                                    /* HW watchdog */
+		wdt_reset();    /* HW watchdog */
 	}
 }
 
 void saveAllEEPROM()
 {
 	uint8_t i;
-	wdt_reset();                                    /* HW watchdog */
+
+	wdt_reset();    /* HW watchdog */
 
 	eeprom_update_dword((uint32_t*)&ee_start_time, g_event_start_time);
 	eeprom_update_dword((uint32_t*)&ee_finish_time, g_event_finish_time);
@@ -2225,14 +2371,14 @@ void saveAllEEPROM()
 	eeprom_update_word(&ee_battery_empty_mV, g_battery_empty_mV);
 	eeprom_update_byte(&ee_clock_OSCCAL, OSCCAL);
 
-	for(i=0; i<strlen(g_messages_text[STATION_ID]); i++)
+	for(i = 0; i < strlen(g_messages_text[STATION_ID]); i++)
 	{
 		eeprom_update_byte((uint8_t*)&ee_stationID_text[i], (uint8_t)g_messages_text[STATION_ID][i]);
 	}
 
 	eeprom_update_byte((uint8_t*)&ee_stationID_text[i], 0);
 
-	for(i=0; i<strlen(g_messages_text[PATTERN_TEXT]); i++)
+	for(i = 0; i < strlen(g_messages_text[PATTERN_TEXT]); i++)
 	{
 		eeprom_update_byte((uint8_t*)&ee_pattern_text[i], (uint8_t)g_messages_text[PATTERN_TEXT][i]);
 	}
@@ -2243,15 +2389,16 @@ void saveAllEEPROM()
 uint16_t throttleValue(uint8_t speed)
 {
 	uint16_t temp;
+
 	speed = CLAMP(5, (int8_t)speed, 20);
 	temp = (7042L / (uint16_t)speed) / 10L;
-	return temp;
+	return( temp);
 }
 
 BOOL antennaIsConnected(void)
 {
-	return !(PIND & (1 << PORTD3));
-//	return !(PIND & (1 << PORTD4) || (1 << PORTD5));
+	return( !(PIND & (1 << PORTD3)));
+/*	return !(PIND & (1 << PORTD4) || (1 << PORTD5)); */
 }
 
 void initializeAllEventSettings(BOOL disableEvent)
@@ -2259,11 +2406,11 @@ void initializeAllEventSettings(BOOL disableEvent)
 	if(disableEvent)
 	{
 		cli();
-		g_event_enabled = FALSE;  // enabled by event time settings - not stored
-		g_event_commenced = FALSE; // commences when starttime is reached - not stored
-		g_on_the_air = 0; // turn off any ongoing transmission - not stored
+		g_event_enabled = FALSE;    /* enabled by event time settings - not stored */
+		g_event_commenced = FALSE;  /* commences when starttime is reached - not stored */
+		g_on_the_air = 0;           /* turn off any ongoing transmission - not stored */
 		sei();
-		keyTransmitter(OFF); // turn off the transmit signal
+		keyTransmitter(OFF);        /* turn off the transmit signal */
 	}
 
 	initializeEEPROMVars();
