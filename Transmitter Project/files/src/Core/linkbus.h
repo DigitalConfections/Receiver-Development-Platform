@@ -248,6 +248,6 @@ void calibrateOscillator(uint8_t cal);
 
 /**
  */
-BOOL calcOSCCAL(uint8_t val);
+uint8_t calcOSCCAL(uint8_t val);
 
 #endif  /* LINKBUS_H_ */

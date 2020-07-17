@@ -130,6 +130,8 @@ static volatile BOOL g_wifi_active = TRUE;
 
 static BOOL g_calibrate_baud = FALSE;
 static int g_baud_count = 0;
+static uint8_t g_best_OSCCAL = 0;
+static BOOL g_OSCCAL_inhibit = FALSE;
 
 /* ADC Defines */
 
@@ -461,6 +463,7 @@ void __attribute__((optimize("O1"))) wdt_init(WDReset resetType)
 			else if(!g_wifi_enable_delay)
 			{
 				linkbus_init(BAUD);
+				g_calibrate_baud = TRUE;
 			}
 		}
 		else
@@ -1260,7 +1263,7 @@ int main( void )
 				if(g_lastConversionResult[BATTERY_READING] > POWER_ON_VOLT_THRESH_MV)   /* Battery measurement indicates sufficient voltage */
 				{
 					g_sufficient_power_detected = TRUE;
-					g_calibrate_baud = TRUE;
+					init_hardware = TRUE;
 				}
 				else if(!g_wifi_enable_delay)   /* no battery detected by the time WiFi  is turned on, assume an external battery is being used */
 				{
@@ -1269,7 +1272,6 @@ int main( void )
 						g_battery_type = BATTERY_EXTERNAL;
 						g_sufficient_power_detected = TRUE;
 						init_hardware = TRUE;
-						g_calibrate_baud = TRUE;
 					}
 				}
 			}
@@ -1359,19 +1361,32 @@ int main( void )
 				g_baud_count = 300;
 				g_WiFi_shutdown_seconds = 240;
 
-				if(calVal > 240)
+				if(g_OSCCAL_inhibit)
 				{
-					if(!calcOSCCAL(0))
+					if(calVal == 10)
 					{
-						calVal = 0;
-						saveAllEEPROM();
-						g_baud_count = 500;
+						calibrateOscillator(OSCCAL);
+						calVal++;
+					}
+					else
+					{
+						calibrateOscillator(0); /* Tell WiFi that calibration finished */
+					}
+				}
+				else if(calVal > 240)
+				{
+					if(g_best_OSCCAL)
+					{
+						OSCCAL = g_best_OSCCAL;
+						eeprom_update_byte(&ee_clock_OSCCAL, g_best_OSCCAL);
 					}
 					else
 					{
 						OSCCAL = holdOSCCAL;
 					}
 
+					calVal = 0;
+					g_baud_count = 500;
 					init_hardware = TRUE;
 				}
 				else
@@ -1383,7 +1398,7 @@ int main( void )
 					}
 					else
 					{
-						calibrateOscillator(0);
+						calibrateOscillator(0); /* Tell WiFi that calibration finished */
 						calVal = 10;
 						g_calibrate_baud = FALSE;
 						g_WiFi_shutdown_seconds = 120;
@@ -1575,32 +1590,36 @@ void __attribute__((optimize("O0"))) handleLinkBusMsgs()
 			{
 				if(lb_buff->fields[FIELD1][0])
 				{
+					uint8_t result = 0;
 					static uint8_t lastVal = 0;
 					static uint8_t valCount = 0;
+					static uint8_t bestResultCount = 0;
 					int val = (uint16_t)atoi(lb_buff->fields[FIELD1]);
 
-					if(val > 0)
+					if(!val)
 					{
-						BOOL skip = FALSE;
-
-						if(abs(lastVal - val) > 10)
+						g_calibrate_baud = FALSE;
+					}
+					else if (val == 255)
+					{
+						eeprom_update_byte(&ee_clock_OSCCAL, 0xFF); /* erase any existing value */
+					}
+					else
+					{
+						if(abs(val - lastVal) > 10) /* Gap identified */
 						{
-							if(valCount < 7)
-							{
-								calcOSCCAL(255);
-								valCount = 0;
-							}
-							else
-							{
-								skip = TRUE;
-							}
+							calcOSCCAL(255);
+							valCount = 0;
 						}
 
-						if(!skip)
+						lastVal = val;
+						valCount++;
+						result = calcOSCCAL(val);
+
+						if(valCount > bestResultCount)
 						{
-							lastVal = val;
-							valCount++;
-							calcOSCCAL(val);
+							g_best_OSCCAL = result;
+							bestResultCount = valCount;
 						}
 					}
 
@@ -2306,9 +2325,10 @@ void initializeEEPROMVars()
 		g_battery_empty_mV = eeprom_read_word(&ee_battery_empty_mV);
 
 		uint8_t temp = eeprom_read_byte(&ee_clock_OSCCAL);
-		if((temp > 150) && (temp < 200))
+		if((temp > 10) && (temp < 240))
 		{
 			OSCCAL = temp;
+			g_OSCCAL_inhibit = TRUE; /* flag to prevent recalibration */
 		}
 
 		for(i = 0; i < 20; i++)
@@ -2342,6 +2362,7 @@ void initializeEEPROMVars()
 		g_ID_period_seconds = EEPROM_ID_TIME_INTERVAL_DEFAULT;
 
 		g_battery_empty_mV = EEPROM_BATTERY_EMPTY_MV;
+		eeprom_update_byte(&ee_clock_OSCCAL, 0xFF); /* erase any existing value */
 
 		strncpy(g_messages_text[STATION_ID], EEPROM_STATION_ID_DEFAULT, MAX_PATTERN_TEXT_LENGTH);
 		strncpy(g_messages_text[PATTERN_TEXT], EEPROM_PATTERN_TEXT_DEFAULT, MAX_PATTERN_TEXT_LENGTH);
@@ -2369,7 +2390,6 @@ void saveAllEEPROM()
 	eeprom_update_word(&ee_ID_time, g_ID_period_seconds);
 
 	eeprom_update_word(&ee_battery_empty_mV, g_battery_empty_mV);
-	eeprom_update_byte(&ee_clock_OSCCAL, OSCCAL);
 
 	for(i = 0; i < strlen(g_messages_text[STATION_ID]); i++)
 	{

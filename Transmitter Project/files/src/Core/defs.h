@@ -32,7 +32,7 @@
 
 /******************************************************
  * Set the text that gets displayed to the user */
-#define SW_REVISION "P1.1"
+#define SW_REVISION "P1.2"
 
 //#define TRANQUILIZE_WATCHDOG
 
@@ -73,6 +73,7 @@ typedef enum {
 	ERROR_CODE_EVENT_NOT_CONFIGURED = 0xCD,
     ERROR_CODE_ILLEGAL_COMMAND_RCVD = 0xCE,
     ERROR_CODE_SW_LOGIC_ERROR = 0xCF,
+	ERROR_CODE_EVENT_ENDED_IN_PAST = 0xD0,
 	ERROR_CODE_POWER_LEVEL_NOT_SUPPORTED = 0xF5,
 	ERROR_CODE_NO_ANTENNA_PREVENTS_POWER_SETTING = 0xF6,
 	ERROR_CODE_NO_ANTENNA_FOR_BAND = 0xF7,
@@ -150,7 +151,7 @@ typedef uint16_t BatteryLevel;  /* in milliVolts */
 
 /******************************************************
  * EEPROM definitions */
-#define EEPROM_INITIALIZED_FLAG 0xBF
+#define EEPROM_INITIALIZED_FLAG 0xC2
 #define EEPROM_UNINITIALIZED 0x00
 
 #define EEPROM_STATION_ID_DEFAULT "FOXBOX"

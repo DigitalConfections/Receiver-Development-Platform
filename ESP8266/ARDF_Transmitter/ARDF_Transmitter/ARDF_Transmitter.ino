@@ -1636,7 +1636,12 @@ void httpWebServerLoop()
       {
         if (!(holdSeconds % 25))   /* Ask ATMEGA to wait longer before shutting down WiFi */
         {
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+      if (g_debug_prints_enabled)
+      {
             Serial.println("Sending keep alive");
+      }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
           g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
         }
       }
@@ -4444,17 +4449,15 @@ void handleLBMessage(String message)
   {
       int p = payload.toInt();
       
-      if(p < 255)
+      if(p <= 255)
       {
           if(!p)
           {
               g_baud_sync_success = true;
           }
-          else
-          {
-              message.trim();
-              Serial.println(message); /* send immediately with no ACK required */
-          }
+
+          message.trim();
+          Serial.println(message); /* send immediately with no ACK required */
       }
   }
 }

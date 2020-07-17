@@ -341,32 +341,31 @@ void calibrateOscillator(uint8_t cal)
 	if(cal) OSCCAL = cal;
 }
 
-BOOL calcOSCCAL(uint8_t val)
+uint8_t calcOSCCAL(uint8_t val)
 {
-	BOOL failure = TRUE;
 	static int sum = 0;
 	static int count = 0;
+	uint8_t result = 0;
 
 	if((val >= 10) && (val <= 240))
 	{
 		sum += val;
 		count++;
-		failure = FALSE;
-	}
-	else if(val == 0)
-	{
-		if(sum && count)
-		{
-			OSCCAL = sum / count;
-			failure = FALSE;
-		}
+		result = sum / count;
 	}
 	else if(val == 255)
 	{
 		sum = 0;
 		count = 0;
 	}
+	else if(val == 0)
+	{
+		if(count)
+		{
+			result = sum / count;
+		}
+	}
 
-	return(failure);
+	return(result);
 }
 
