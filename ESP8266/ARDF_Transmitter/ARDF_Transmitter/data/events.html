@@ -939,6 +939,12 @@
                                         }
                                         break;
 
+                                    case 0xD0: // ERROR_CODE_EVENT_ENDED_IN_PAST
+                                        {
+                                            text = "Event ended in the past";
+                                        }
+                                        break;
+
                                     case 0xF5: // ERROR_CODE_POWER_LEVEL_NOT_SUPPORTED = 0xF5
                                         {
                                             text = "Transmit power level not supported";
@@ -1340,6 +1346,10 @@
                             {
                                 var role = "";
                                 var event = "";
+
+                                if (typeof arr[1] == 'undefined') arr[1] = '?';
+                                if (typeof arr[2] == 'undefined') arr[2] = '?';
+
                                 if (arr[1].length < 1) {
                                     console.log("Error: sync success returned no role");
                                 } else {
@@ -1370,33 +1380,30 @@
 
                         case "SUE":
                             {
-                                var role = "";
-                                var event = "";
+                                var msg = "";
+
+                                if (typeof arr[1] == 'undefined') arr[1] = '?';
+
                                 if (arr[1].length < 1) {
-                                    console.log("Error: sync success returned no role");
+                                    console.log("Sync error returned no message");
                                 } else {
-                                    role = arr[1];
+                                    msg = arr[1];
                                 }
 
-                                if (arr[2].length < 1) {
-                                    console.log("Error: sync success returned no event");
+                                var e;
+                                if (msg.length) {
+                                    e = "Sync Error: " + msg;
                                 } else {
-                                    event = arr[2];
+                                    e = "Sync Error: transmitter sync failed."
                                 }
 
-                                if (role.length || event.length) {
-                                    var e = "Error: " + role + " failed sync for " + event;
-                                    var elem = document.getElementById("statusreport");
-                                    if (elem != null) {
-                                        elem.innerHTML = e;
-                                        elem.setAttribute("style", "font-family:verdana; font-size:25px; color:Green; font-weight:bold; text-align:center;");
-                                    }
-                                } else {
-                                    var x = document.getElementById("statusreport");
-                                    if (x != null) x.style.display = "none";
+                                var elem = document.getElementById("statusreport");
+                                if (elem != null) {
+                                    elem.innerHTML = e;
+                                    elem.setAttribute("style", "font-family:verdana; font-size:25px; color:Red; font-weight:bold; text-align:center;");
                                 }
-                                console.log("Sync success:" + arr[1]);
 
+                                console.log("Sync error:" + arr[1]);
                             }
                             break;
 
