@@ -210,6 +210,7 @@ typedef enum
 #define LB_MESSAGE_ESP_RETAINPOWER "$ESP,2;"        /* Save settings changes to file (keeps power up) */
 #define LB_MESSAGE_ESP_SHUTDOWN "$ESP,3;"           /* Shut down in 3 seconds */
 #define LB_MESSAGE_ESP_KEEPALIVE "$ESP,Z;"          /* Keep alive for 2 minutes */
+#define LB_MESSAGE_OSC_CAL "$OSC,"                  /* Acknowledge receipt of OSC message */
 #define LB_MESSAGE_TIME "TIM"
 #define LB_MESSAGE_TIME_SET "$TIM,"                 /* Prefix for sending RTC time setting to ATMEGA */
 #define LB_MESSAGE_TIME_REQUEST "$TIM?"             /* Request the current time */
