@@ -1371,6 +1371,7 @@ int main( void )
 					else
 					{
 						calibrateOscillator(0); /* Tell WiFi that calibration finished */
+						g_baud_count = 3000;
 					}
 				}
 				else if(calVal > 240)
@@ -1896,10 +1897,11 @@ void __attribute__((optimize("O0"))) handleLinkBusMsgs()
 
 			case MESSAGE_SET_STATION_ID:
 			{
+				event_parameter_count++; /* Any ID or no ID is acceptable */
+
 				if(lb_buff->fields[FIELD1][0])
 				{
 					strncpy(g_messages_text[STATION_ID], lb_buff->fields[FIELD1], MAX_PATTERN_TEXT_LENGTH);
-					event_parameter_count++;
 
 					if(g_messages_text[STATION_ID][0])
 					{
@@ -2186,22 +2188,27 @@ EC activateEventUsingCurrentSettings(SC* statusCode)
 	{
 		return( ERROR_CODE_EVENT_MISSING_START_TIME);
 	}
+	
 	if(!g_on_air_seconds)
 	{
 		return( ERROR_CODE_EVENT_MISSING_TRANSMIT_DURATION);
 	}
+	
 	if(g_intra_cycle_delay_time > (g_off_air_seconds + g_on_air_seconds))
 	{
 		return( ERROR_CODE_EVENT_TIMING_ERROR);
 	}
+	
 	if(g_messages_text[PATTERN_TEXT][0] == '\0')
 	{
 		return( ERROR_CODE_EVENT_PATTERN_NOT_SPECIFIED);
 	}
+	
 	if(!g_pattern_codespeed)
 	{
 		return( ERROR_CODE_EVENT_PATTERN_CODE_SPEED_NOT_SPECIFIED);
 	}
+	
 	if(g_messages_text[STATION_ID][0] != '\0')
 	{
 		if((!g_id_codespeed || !g_ID_period_seconds))

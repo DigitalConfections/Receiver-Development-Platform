@@ -212,10 +212,9 @@
         var g_timesync_rcvd = 0;
         var g_webSocketAliveTimer = 0;
 
-        var g_eventIsRunning = false;
-
         var g_loading_data = true;
         var g_event_changes_saved = true;
+        var g_event_has_unsaved_time_changes = false;
 
         ///////////////////////////////
         // Settings
@@ -283,11 +282,6 @@
                 for (var i = 1; i < eventNum; i++) {
                     eventTable.appendChild(eventRow(g_eventTableData[i], false));
                 }
-
-                //                var msgText = "FREQ," + currentRoleIndex();
-                //                sendToSocket(msgText);
-                //                msgText = "POWER," + currentRoleIndex();
-                //                sendToSocket(msgText);
             } else {
                 console.log("Refreshing table cells");
                 for (var i = 1, row; row = eventTable.rows[i]; i++) {
@@ -325,14 +319,13 @@
             x = document.getElementById("statusreport");
             if (x != null) x.style.display = "none";
 
-            if (g_selectedEvent != selection) {
-                var btext = "EVENT_NAME," + selection;
-                console.log(btext);
-                sendToSocket(btext);
-                g_selectedEvent = selection;
+            if (g_event_has_unsaved_time_changes) {
+                newStartTime();
+                newFinishTime();
+                g_event_has_unsaved_time_changes = false;
+            } else {
+                executeEvent();
             }
-
-            executeEvent();
         }
 
         function eventStopSelect(selection) {
@@ -423,27 +416,25 @@
                 btn.className = "button";
                 if (g_selectedEvent == rowData.name) {
                     btn.id = "activeRunButton";
-                    //          btn.style = "font-family:verdana; font-size:17px; color:blue; font-weight:bold; text-align:center;");
-                    if (g_eventIsRunning) {
-                        btn.value = "Stop";
-                        btn.onclick = (function(entry) {
-                            return function() {
-                                eventStopSelect(entry);
-                            }
-                        })(entry);
-                    } else {
-                        btn.value = "Run";
-                        btn.onclick = (function(entry) {
-                            return function() {
-                                eventRunSelect(entry);
-                            }
-                        })(entry);
 
+                    if (rowData.saved) {
+                        btn.value = "Run";
+                        g_event_has_unsaved_time_changes = false;
+                    } else {
+                        btn.value = "Save";
+                        g_event_has_unsaved_time_changes = true;
                     }
+
+                    btn.onclick = (function(entry) {
+                        return function() {
+                            eventRunSelect(entry);
+                        }
+                    })(entry);
                     row.setAttribute("style", "font-family:verdana; font-size:17px; color:blue; font-weight:bold; text-align:center;");
                 } else {
                     btn.id = "runButton";
                     btn.value = "Select";
+                    btn.style.backgroundColor = "blue";
                     btn.onclick = (function(entry) {
                         return function() {
                             eventSelect(entry);
@@ -945,6 +936,12 @@
                                         }
                                         break;
 
+                                    case 0xD1: // ERROR_CODE_ATMEGA_NOT_RESPONDING
+                                        {
+                                            text = "ATMEGA not responding";
+                                        }
+                                        break;
+
                                     case 0xF5: // ERROR_CODE_POWER_LEVEL_NOT_SUPPORTED = 0xF5
                                         {
                                             text = "Transmit power level not supported";
@@ -1090,7 +1087,8 @@
                                         role: arr[5],
                                         callsign: arr[6],
                                         power: arr[7],
-                                        freq: arr[8]
+                                        freq: arr[8],
+                                        saved: true
                                     };
 
                                     var theEvent = g_eventTableData.find(g_eventTableData => g_eventTableData.name == g_selectedEvent);
@@ -1120,20 +1118,23 @@
                                     role: arr[5],
                                     callsign: arr[6],
                                     power: arr[7],
-                                    freq: arr[8]
+                                    freq: arr[8],
+                                    saved: true
                                 };
 
-                                var now = new Date().getTime();
-                                if (eventLine.start >= eventLine.finish) {
-                                    if (now > eventLine.start) {
+                                if (eventLine.start != eventLine.finish) {
+                                    var now = new Date().getTime();
+                                    if (eventLine.start > eventLine.finish) {
+                                        if (now > eventLine.start) {
+                                            eventLine.start = now;
+                                        }
+                                        eventLine.finish = eventLine.start;
+                                        eventLine.saved = false;
+                                    } else if (eventLine.finish < now) {
                                         eventLine.start = now;
+                                        eventLine.finish = now;
+                                        eventLine.saved = false;
                                     }
-                                    eventLine.finish = eventLine.start;
-                                }
-
-                                if (eventLine.finish < now) {
-                                    eventLine.start = now;
-                                    eventLine.finish = now;
                                 }
 
                                 g_eventTableData.push(eventLine);
@@ -1651,14 +1652,24 @@
 
         // Converts the date value argument to UTC, removes seconds, and then returns as a UTC string without seconds
         // An error will result in the current time being returned as a UTC string without seconds
-        function localTimeToUTC(val) {
+        function localTimeToUTC(val, removeSecs) {
             try {
                 var d = new Date(val).toISOString();
-                var sub = d.slice(0, 16); // remove seconds
+                var sub;
+                if (removeSecs) {
+                    sub = d.slice(0, 16); // remove seconds 
+                } else {
+                    sub = d.slice(0, 19);
+                }
                 sub = sub + "Z"; // for UTC      
             } catch (err) {
                 var d = new Date().toISOString();
-                var sub = d.slice(0, 16); // remove seconds
+                var sub;
+                if (removeSecs) {
+                    sub = d.slice(0, 16); // remove seconds 
+                } else {
+                    sub = d.slice(0, 19);
+                }
                 sub = sub + "Z"; // for UTC      
             }
 
@@ -1715,10 +1726,10 @@
 
                     if (localEpoch < now) {
                         local = epochToLocalDateTimeFormat(now);
-                        utc = now;
+                        utc = localTimeToUTC(local, false);
                         localEpoch = now;
                     } else {
-                        utc = localTimeToUTC(local);
+                        utc = localTimeToUTC(local, false);
                     }
 
                     applyNewStartTime(local);
@@ -1726,12 +1737,12 @@
 
                     console.log(msgText);
                     sendToSocket(msgText);
+                    var localfEpoch;
 
                     var dtfText = document.getElementById("datetimeFinish");
                     if (dtfText) {
                         var dtf = dtfText.value;
                         var localf;
-                        var localfEpoch;
 
                         if (!validateTimeStructure(dtf)) {
                             localf = Date();
@@ -1750,7 +1761,7 @@
                         sendToSocket(msgText);
                     }
 
-                }, 250);
+                }, 750);
             }
         }
 
@@ -1816,9 +1827,9 @@
 
                 if (now > localEpoch) {
                     local = epochToLocalDateTimeFormat(now);
-                    utc = now;
+                    utc = localTimeToUTC(local, false);
                 } else {
-                    utc = localTimeToUTC(local);
+                    utc = localTimeToUTC(local, false);
                 }
 
                 g_finishtimeDateUpdateTimer = setTimeout(function() {
@@ -1849,7 +1860,7 @@
                         sendToSocket(msgText);
                     }
 
-                }, 250);
+                }, 750);
             }
         }
 
@@ -1970,12 +1981,22 @@
                 var runButton = document.getElementById("activeRunButton");
 
                 if (runButton) {
-                    if ((!g_event_changes_saved || (stat == "Finished")) && (runButton.value == "Run")) {
-                        runButton.disabled = true;
-                        runButton.style.backgroundColor = "gray";
-                    } else {
+                    if (g_event_has_unsaved_time_changes && (stat != "Finished")) {
+                        runButton.value = "Save";
                         runButton.disabled = false;
-                        runButton.style.backgroundColor = "#4CAF50";
+                        runButton.style.backgroundColor = "orange";
+                    } else if (!g_event_has_unsaved_time_changes) {
+                        runButton.value = "Run";
+                    }
+
+                    if (runButton.value == "Run") {
+                        if (!g_event_changes_saved || (stat == "Finished")) {
+                            runButton.disabled = true;
+                            runButton.style.backgroundColor = "gray";
+                        } else {
+                            runButton.disabled = false;
+                            runButton.style.backgroundColor = "#4CAF50";
+                        }
                     }
                 }
             }
@@ -2231,7 +2252,7 @@
     <center>
         <p style="text-align:left;"><a href=\ "73.73.73.73">[HOME]</a></p>
         <h1 id="mainHeading" style="font-family:verdana; font-size:30px; color:Black; text-align:center;">Transmitter Settings</h1>
-        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">HTML Ver 0.5 - 8 Jul 2020</p>
+        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">HTML Ver 0.7 - 21 Jul 2020</p>
 
         <div>
             <table>
