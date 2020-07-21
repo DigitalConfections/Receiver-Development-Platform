@@ -330,16 +330,24 @@ unsigned long convertTimeStringToEpoch(String s)
   return ( result);
 }
 
+/**
+    Converts an epoch (seconds since 1900) and converts it into a string of format "yyyy-mm-ddThh:mm:ssZ containing UTC"
+*/
 String convertEpochToTimeString(time_t epoch)
 {
-  String timeStr;
+  String timeStr = String("");
   struct tm  ts;
   char buf[80];
+
+  if ((epoch < JAN_1_2020) || (epoch >= MAX_TIME))
+  {
+    return timeStr;
+  }
 
   // Format time, "ddd yyyy-mm-ddThh:mm:ss"
   ts = *localtime(&epoch);
   strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &ts);
-  timeStr = String(buf);
+  timeStr = buf;
 
   return timeStr;
 }

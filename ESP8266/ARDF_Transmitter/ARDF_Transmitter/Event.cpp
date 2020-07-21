@@ -182,10 +182,10 @@ bool Event::isSoonerEvent(EventFileRef a, EventFileRef b, unsigned long currentE
 
 bool Event::isNotFinishedEvent(unsigned long currentEpoch)
 {
-    bool runsForever = convertTimeStringToEpoch(this->eventData->event_start_date_time) >= convertTimeStringToEpoch(this->eventData->event_finish_date_time);
-    bool finishedInThePast = (convertTimeStringToEpoch(this->eventData->event_finish_date_time) <= currentEpoch) && !runsForever;
-   
-    return(!finishedInThePast);
+  bool runsForever = convertTimeStringToEpoch(this->eventData->event_start_date_time) >= convertTimeStringToEpoch(this->eventData->event_finish_date_time);
+  bool finishedInThePast = (convertTimeStringToEpoch(this->eventData->event_finish_date_time) <= currentEpoch) && !runsForever;
+
+  return (!finishedInThePast);
 }
 
 
@@ -275,8 +275,6 @@ String Event::readMeFile(String path)
     {
       file.println(TX_ASSIGNMENT + String(",0:0"));
       file.println(String(TX_DESCRIPTIVE_NAME) + "," + getTxDescriptiveName("0:0"));
-//      file.println(String(TX_ROLE_POWER) + "," + String(this->getPowerlevelForRole(0)));
-//      file.println(String(TX_ROLE_FREQ) + "," + String(this->getFrequencyForRole(0)));
       file.println(TX_ASSIGNMENT_IS_DEFAULT + String(",true"));
       file.close();   /* Close the file */
     }
@@ -342,18 +340,6 @@ bool Event::extractMeFileData(String path, EventFileRef *eventRef)
           fail = false;
           items++;
         }
-//        else if (data.id.equalsIgnoreCase(TX_ROLE_FREQ))
-//        {
-//          eventRef->freq = data.value;
-//          fail = false;
-//          items++;
-//        }
-//        else if (data.id.equalsIgnoreCase(TX_ROLE_POWER))
-//        {
-//          eventRef->power = data.value;
-//          fail = false;
-//          items++;
-//        }
         /* ignore TX_ASSIGNMENT "TX_ASSIGNMENT" / *Which role and time slot is assigned to this transmitter: "r:t" * / */
 
         yield();
@@ -371,8 +357,8 @@ bool Event::extractMeFileData(String path, EventFileRef *eventRef)
     {
       file.println(TX_ASSIGNMENT + String(",0:0"));
       file.println(String(TX_DESCRIPTIVE_NAME) + ",Finish - MO");
-//      file.println(String(TX_ROLE_POWER) + ",1000");
-//      file.println(String(TX_ROLE_FREQ) + ",3550000");
+      //      file.println(String(TX_ROLE_POWER) + ",1000");
+      //      file.println(String(TX_ROLE_FREQ) + ",3550000");
       file.println(TX_ASSIGNMENT_IS_DEFAULT + String(",true"));
       file.close();   /* Close the file */
     }
@@ -578,6 +564,7 @@ void Event::dumpData(void)
   Serial.println("File ver: " + eventData->event_file_version);
   Serial.println("Band: " + eventData->event_band);
   Serial.println("Call: " + eventData->event_callsign);
+  Serial.println("Call WPM: " + eventData->event_callsign_speed);
   Serial.println("Start: " + eventData->event_start_date_time);
   Serial.println("Finish: " + eventData->event_finish_date_time);
   Serial.println("Mod: " + eventData->event_modulation);
@@ -616,8 +603,7 @@ bool Event::validateEvent(void)
     success &= (this->eventData->event_name).length() > 0;
     success &= (this->eventData->event_file_version).length() > 0;
     success &= (this->eventData->event_band).length() > 0;
-    /*success &= (this->eventData->event_antenna_port); */
-    success &= (this->eventData->event_callsign).length() > 2;
+    /*success &= (this->eventData->event_callsign).length() > 2;*/
     success &= (this->eventData->event_callsign_speed).length() > 0;
     success &= (this->eventData->event_start_date_time).length() > 19;
     success &= (this->eventData->event_finish_date_time).length() > 19;
@@ -641,6 +627,14 @@ bool Event::validateEvent(void)
         success &= (this->eventData->role[i]->tx[j]->delayTime).length() > 0;
       }
     }
+
+    if (success)
+    {
+      String start = this->eventData->event_start_date_time;
+      String finish = this->eventData->event_finish_date_time;
+      success &= (start.indexOf(':') > 0);
+      success &= (finish.indexOf(':') > 0);
+    }
   }
 
   return ( success);
@@ -654,14 +648,29 @@ bool Event::writeEventFile(void)
 bool Event::writeEventFile(String path)
 {
   bool failure = true;
+  yield();
 
   if (this->eventData == NULL)
   {
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.print("Not written: eventData is NULL: ");
+      Serial.println(path);
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     return ( true);
   }
 
   if (!validateEvent())
   {
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (debug_prints_enabled)
+    {
+      Serial.print("Not written: Event not valid: ");
+      Event::dumpData();
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     return ( true);
   }
 
@@ -670,7 +679,7 @@ bool Event::writeEventFile(String path)
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
     if (debug_prints_enabled)
     {
-      Serial.print("Not written: Event did not change.");
+      Serial.print("Not written: Event did not change: ");
       Serial.println(path);
     }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
@@ -756,11 +765,12 @@ bool Event::writeEventFile(String path)
     interrupts();
     return ( true);
   }
-  interrupts();
 
+  interrupts();
   saveMeData("");
 
   failure = !validEventFile(path);
+  this->values_did_change = failure;
 
   return ( failure);
 }
@@ -805,7 +815,7 @@ void Event::saveMeData(String newAssignment)
 
   String holdTxAssignment;
   String holdRoleName = this->eventData->tx_role_name;
-//  String holdRoleFrequency = this->eventData->tx_role_freq;
+  //  String holdRoleFrequency = this->eventData->tx_role_freq;
 
   if (newAssignment.indexOf(":") < 1)
   {
@@ -828,8 +838,8 @@ void Event::saveMeData(String newAssignment)
       file.println(EVENT_FILE_START);
       file.println(String(TX_ASSIGNMENT) + "," + holdTxAssignment);
       file.println(String(TX_DESCRIPTIVE_NAME) + "," + getTxDescriptiveName(holdTxAssignment));
-//      file.println(String(TX_ROLE_POWER) + "," + String(this->getPowerlevelForRole(role.toInt())));
-//      file.println(String(TX_ROLE_FREQ) + "," + String(this->getFrequencyForRole(role.toInt())));
+      //      file.println(String(TX_ROLE_POWER) + "," + String(this->getPowerlevelForRole(role.toInt())));
+      //      file.println(String(TX_ROLE_FREQ) + "," + String(this->getFrequencyForRole(role.toInt())));
       file.println(String(TX_ASSIGNMENT_IS_DEFAULT) + ",false");
       file.println(EVENT_FILE_END);
       file.close();   /* Close the file */
@@ -1120,6 +1130,9 @@ String Event::getCallsignSpeed(void) const
   return ( this->eventData->event_callsign_speed);
 }
 
+/**
+  Takes a string of format "yyyy-mm-ddThh:mm:ssZ" or containing an epoch and saves it to the event
+*/
 void Event::setEventStartDateTime(String str)
 {
   if (this->eventData == NULL)
@@ -1127,6 +1140,25 @@ void Event::setEventStartDateTime(String str)
     return;
   }
   str.trim();
+
+  if (str.indexOf(':') < 0) // received epoch
+  {
+    int len = str.length();
+
+    if (len < 10) // invalid epoch
+    {
+      return;
+    }
+    else if (len > 10) // milliseconds epoch
+    {
+      String epoch = str.substring(0, 10);
+      str = convertEpochToTimeString(epoch.toInt());
+    }
+    else
+    {
+      str = convertEpochToTimeString(str.toInt());
+    }
+  }
 
   /* Lop off milliseconds if they exist */
   if ((str.length() > 20) && (str.lastIndexOf('.') > 0))
@@ -1143,6 +1175,13 @@ void Event::setEventStartDateTime(String str)
     str = str.substring(0, index);
     str = str + ":00Z";
   }
+
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+  if (g_debug_prints_enabled)
+  {
+    Serial.println(String("Setting start = \"" + str + "\""));
+  }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
 
   if (!(this->eventData->event_start_date_time.equals(str)))
   {
@@ -1160,6 +1199,9 @@ String Event::getEventStartDateTime(void) const
   return ( this->eventData->event_start_date_time);
 }
 
+/**
+  Takes a string of format "yyyy-mm-ddThh:mm:ssZ" or containing an epoch and saves it to the event
+*/
 void Event::setEventFinishDateTime(String str)
 {
   if (this->eventData == NULL)
@@ -1167,6 +1209,25 @@ void Event::setEventFinishDateTime(String str)
     return;
   }
   str.trim();
+
+  if (str.indexOf(':') < 0) // received epoch
+  {
+    int len = str.length();
+
+    if (len < 10) // invalid epoch
+    {
+      return;
+    }
+    else if (len > 10) // milliseconds
+    {
+      String epoch = str.substring(0, 10);
+      str = convertEpochToTimeString(epoch.toInt());
+    }
+    else
+    {
+      str = convertEpochToTimeString(str.toInt());
+    }
+  }
 
   /* Lop off milliseconds if they exist */
   if ((str.length() > 20) && (str.lastIndexOf('.') > 0))
@@ -1183,6 +1244,13 @@ void Event::setEventFinishDateTime(String str)
     str = str.substring(0, index);
     str = str + ":00Z";
   }
+
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+  if (g_debug_prints_enabled)
+  {
+    Serial.println(String("Setting finish = \"" + str + "\""));
+  }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
 
   if (!(this->eventData->event_finish_date_time.equals(str)))
   {
@@ -1626,14 +1694,6 @@ bool Event::setEventData(String id, String value)
 
     this->eventData->tx_role_name = value;
   }
-//  else if (id.equalsIgnoreCase(TX_ROLE_POWER))
-//  {
-//    this->eventData->tx_role_pwr = value;
-//  }
-//  else if (id.equalsIgnoreCase(TX_ROLE_FREQ))
-//  {
-//    this->eventData->tx_role_freq = value;
-//  }
   else if (id.equalsIgnoreCase(TX_ASSIGNMENT_IS_DEFAULT))
   {
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
