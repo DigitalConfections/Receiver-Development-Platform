@@ -158,7 +158,8 @@ static WiFiEventHandler e1, e2;
 
 Transmitter *g_xmtr = NULL;
 Event* g_activeEvent = NULL;
-String g_selectedEventName = "";
+String g_selectedEventName = String("");
+String g_atmega_sw_version = String("");
 int g_activeEventIndex = 0;
 EventFileRef g_eventList[20];
 int g_eventsRead = 0;
@@ -1398,7 +1399,6 @@ void loop()
                   g_linkBusAckTimoutOccurred = false;
                   times2try = 10;
                   g_webSocketSlaveState = WSClientProgramWaitForATMEGA;
-                  blinkPeriodMillis = 100;
                 }
               }
               else
@@ -1450,7 +1450,7 @@ void loop()
                 }
                 else
                 {
-                  blinkPeriodMillis = 500;
+                  blinkPeriodMillis = 100;
                   syncFailed = false;
                   msg = String(String(SOCK_COMMAND_SLAVE_UPDATE_SUCCESS) + "," + g_activeEvent->getTxDescriptiveName(g_activeEvent->getTxAssignment()) + "," + g_activeEvent->getEventName());
                   g_webSocketLocalClient.sendTXT(stringObjToConstCharString(&msg)); /* Send to Master */
@@ -1773,6 +1773,7 @@ void httpWebServerLoop()
 
           /* Inform the ATMEGA that WiFi power up is complete */
           g_LBOutputBuff->put(LB_MESSAGE_ESP_WAKEUP);
+          g_LBOutputBuff->put(LB_MESSAGE_VER_REQUEST);
           g_linkBusAckTimeoutCountdown = 10;
         }
         break;
@@ -3374,6 +3375,29 @@ void webSocketServerEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t 
               }
             }
           }
+          else if (msgHeader.equalsIgnoreCase(SOCK_COMMAND_SW_VERSIONS))
+          {
+            /* Send the version of the ATMEGA software */
+            String atmegaVersion;
+            if (g_atmega_sw_version.length() > 0)
+            {
+              atmegaVersion = g_atmega_sw_version;
+            }
+            else
+            {
+              atmegaVersion = "?";
+            }
+
+            /* Send the version of this software */
+            String msg = String( String(SOCK_COMMAND_SW_VERSIONS) + "," + WIFI_SW_VERSION + "," + atmegaVersion);
+            g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+            if (g_debug_prints_enabled)
+            {
+              Serial.println(msg);
+            }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+          }
           else if (msgHeader.equalsIgnoreCase(SOCK_COMMAND_SSID))
           {
             String msg = String( String(SOCK_COMMAND_SSID) + "," + g_AP_NameString );
@@ -4447,29 +4471,35 @@ void handleLBMessage(String message)
   }
   else if (type.equals(LB_MESSAGE_BATTERY))
   {
-    float temp = payload.toInt();
-
-    /*    if (g_debug_prints_enabled)
-          {
-            Serial.println("B=" + String(temp));
-          } */
-
-    char dataStr[4];
-    dtostrf(temp, 3, 0, dataStr);
-    dataStr[3] = '\0';
+    int temp = payload.toInt();
 
     if (g_numberOfSocketClients)
     {
-      String msg = String(String(SOCK_COMMAND_BATTERY) + "," + dataStr + "%");
+      String msg;
+
+      if (temp <= 100)
+      {
+        msg = String(String(SOCK_COMMAND_BATTERY) + "," + temp + "%");
+      }
+      else
+      {
+        temp = temp % 10000;
+        int v = temp / 10;
+        int f = temp % 10;
+        msg = String(String(SOCK_COMMAND_BATTERY) + "," + v + "." + f + "V");
+      }
 
       g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
-      /*      if (g_debug_prints_enabled)
-              {
-                Serial.println(msg);
-              } */
     }
   }
-  else if (type.equals("OSC"))
+  else if (type.equals(LB_MESSAGE_VER))
+  {
+    if (payload.length() > 1)
+    {
+      g_atmega_sw_version = payload;
+    }
+  }
+  else if (type.equals(LB_MESSAGE_OSC_CAL))
   {
     int p = payload.toInt();
 

@@ -661,8 +661,11 @@
                         sendToSocket("MAC");
                     }, 750);
                     setTimeout(function() {
-                        sendToSocket("MASTER");
+                        sendToSocket("SW_VERSIONS");
                     }, 1000);
+                    setTimeout(function() {
+                        sendToSocket("MASTER");
+                    }, 1250);
                 }
 
                 g_websock.onclose = function(evt) {
@@ -802,10 +805,10 @@
                                     if (x != null) x.style.display = "none";
 
                                 }
+
                                 console.log("Status Code:" + arr[1]);
                             }
                             break;
-
 
                         case "ERR_CODE":
                             {
@@ -870,6 +873,18 @@
                                     case 0xCF: // ERROR_CODE_SW_LOGIC_ERROR = 0xCF
                                         {
                                             text = "Software logic error";
+                                        }
+                                        break;
+
+                                    case 0xD0: // ERROR_CODE_EVENT_ENDED_IN_PAST
+                                        {
+                                            text = "Event ended in the past";
+                                        }
+                                        break;
+
+                                    case 0xD1: // ERROR_CODE_ATMEGA_NOT_RESPONDING
+                                        {
+                                            text = "ATMEGA not responding";
                                         }
                                         break;
 
@@ -1061,6 +1076,25 @@
                             {
                                 //                    document.getElementById("eventFileVers").innerHTML = arr[1];
                                 console.log("Event Version: ", arr[1]);
+                            }
+                            break;
+
+                        case "SW_VERSIONS":
+                            {
+                                if (typeof arr[1] == 'undefined') arr[1] = '?';
+                                if (typeof arr[2] == 'undefined') arr[2] = '?';
+
+                                var v1 = document.getElementById("wifiVersion");
+                                var v2 = document.getElementById("ATMEGAVersion");
+                                console.log("Tx SW Versions: ", arr[1], arr[2]);
+
+                                if (v1 != null) {
+                                    v1.innerHTML = "WiFi Module SW Version: " + arr[1];
+                                }
+
+                                if (v2 != null) {
+                                    v2.innerHTML = "ATMEGA SW Version: " + arr[2];
+                                }
                             }
                             break;
 
@@ -2195,7 +2229,9 @@
     <center>
         <p style="text-align:left;"><a href=\ "73.73.73.73">[HOME]</a></p>
         <h1 id="mainHeading" style="font-family:verdana; font-size:30px; color:Black; text-align:center;">Transmitter Test</h1>
-        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">HTML Ver 0.5 - 8 Jul 2020</p>
+        <p id="wifiVersion" style="font-family:verdana; font-size:12px; color:Black; text-align:center;"></p>
+        <p id="ATMEGAVersion" style="font-family:verdana; font-size:12px; color:Black; text-align:center;"></p>
+        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">test.html Version: 0.8 - 29 Jul 2020</p>
 
         <div>
             <table>

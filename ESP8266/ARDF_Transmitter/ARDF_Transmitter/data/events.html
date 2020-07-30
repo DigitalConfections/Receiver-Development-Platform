@@ -421,7 +421,7 @@
                         btn.value = "Run";
                         g_event_has_unsaved_time_changes = false;
                     } else {
-                        btn.value = "Save";
+                        btn.value = "Enable";
                         g_event_has_unsaved_time_changes = true;
                     }
 
@@ -716,8 +716,12 @@
                         sendToSocket("MAC");
                     }, 750);
                     setTimeout(function() {
-                        sendToSocket("EVENT_NAME,NEW!");
+                        sendToSocket("SW_VERSIONS");
                     }, 1000);
+                    setTimeout(function() {
+                        sendToSocket("EVENT_NAME,NEW!");
+                    }, 1250);
+
                     g_loading_data = true;
                 };
 
@@ -862,7 +866,6 @@
                                 console.log("Status Code:" + arr[1]);
                             }
                             break;
-
 
                         case "ERR_CODE":
                             {
@@ -1034,7 +1037,7 @@
 
                         case "EVENT_NAME":
                             {
-                                if (arr[1].length < 1) {
+                                if (typeof arr[1] == 'undefined') {
                                     console.log("Error: Null event selected!");
                                 }
                                 setOverlay(null);
@@ -1157,69 +1160,100 @@
                             }
                             break;
 
-                        case "FILE_VERSION":
+                        case "SW_VERSIONS":
                             {
-                                //                    document.getElementById("eventFileVers").innerHTML = arr[1];
-                                console.log("Event Version: ", arr[1]);
+                                if (typeof arr[1] == 'undefined') arr[1] = '?';
+                                if (typeof arr[2] == 'undefined') arr[2] = '?';
+
+                                var v1 = document.getElementById("wifiVersion");
+                                var v2 = document.getElementById("ATMEGAVersion");
+                                console.log("Tx SW Versions: ", arr[1], arr[2]);
+
+                                if (v1 != null) {
+                                    v1.innerHTML = "WiFi Module SW Version: " + arr[1];
+                                }
+
+                                if (v2 != null) {
+                                    v2.innerHTML = "ATMEGA SW Version: " + arr[2];
+                                }
                             }
                             break;
 
                         case "SYNC":
                             {
-                                g_transmitterTimeMs = 1000 * arr[1];
-                                //                                console.log("Tx time rcvd:", g_transmitterTimeMs);
-                                var txd = new Date(g_transmitterTimeMs);
-                                document.getElementById("xmtrTime").innerHTML = "TX: " + txd;
-                                updateDisplayedLocalTime()
+                                if (typeof arr[1] != 'undefined') {
+                                    g_transmitterTimeMs = 1000 * arr[1];
+                                    var txd = new Date(g_transmitterTimeMs);
+                                    var d = document.getElementById("xmtrTime");
+                                    if (d != null) d.innerHTML = "TX: " + txd;
+                                    updateDisplayedLocalTime()
+                                }
                             }
                             break;
 
                         case "CLONE":
                             {
-                                document.getElementById("cloneText").value = arr[1];
+                                if (typeof arr[1] != 'undefined') {
+                                    var x = document.getElementById("cloneText");
+                                    if (x != null) x.value = arr[1];
+                                }
                             }
                             break;
 
                         case "VERS":
                             {
-                                document.getElementById("version").innerHTML = arr[1];
+                                if (typeof arr[1] != 'undefined') {
+                                    document.getElementById("version").innerHTML = arr[1];
+                                }
                             }
                             break;
 
                         case "MAC":
                             {
-                                var t = "MAC: " + arr[1];
-                                document.getElementById("macAddress").innerHTML = t;
-                                console.log(t);
+                                if (typeof arr[1] != 'undefined') {
+                                    var t = "MAC: " + arr[1];
+                                    var m = document.getElementById("macAddress");
+                                    if (m != null) m.innerHTML = t;
+                                    console.log(t);
+                                }
                             }
                             break;
 
                         case "BAT":
                             {
-                                var t = "Battery: " + arr[1];
-                                document.getElementById("batteryLevel").innerHTML = t;
-                                //              console.log(t);
+                                if (typeof arr[1] != 'undefined') {
+                                    var t = "Battery: " + arr[1];
+                                    var b = document.getElementById("batteryLevel");
+                                    if (b != null) b.innerHTML = t;
+                                }
                             }
                             break;
 
                         case "TEMP":
                             {
-                                var t = "Temp: " + arr[1];
-                                document.getElementById("temperature").innerHTML = t;
-                                //              console.log(t);
+                                if (typeof arr[1] != 'undefined') {
+                                    var t = "Temp: " + arr[1];
+                                    var x = document.getElementById("temperature");
+                                    if (x != null) x.innerHTML = t;
+                                }
                             }
                             break;
 
                         case "SSID":
                             {
-                                var t = arr[1] + ": Events Settings";
-                                document.getElementById("mainHeading").innerHTML = t;
-                                console.log(t);
+                                if (typeof arr[1] != 'undefined') {
+                                    var t = arr[1] + ": Events Settings";
+                                    var h = document.getElementById("mainHeading");
+                                    if (h != null) h.innerHTML = t;
+                                    console.log(t);
+                                }
                             }
                             break;
 
                         case "CALLSIGN":
                             {
+                                if (typeof arr[1] == 'undefined') arr[1] = '?';
+
                                 var c = document.getElementById("callText");
                                 if (c != null) {
                                     c.value = arr[1];
@@ -1229,24 +1263,30 @@
 
                         case "BAND":
                             {
-                                var eventBand = arr[1];
-                                if (eventBand.indexOf("80") > 0) {
-                                    g_eventRadioBand = "80m";
-                                } else {
-                                    g_eventRadioBand = "2m";
+                                if (typeof arr[1] != 'undefined') {
+                                    var eventBand = arr[1];
+                                    if (eventBand.indexOf("80") > 0) {
+                                        g_eventRadioBand = "80m";
+                                    } else {
+                                        g_eventRadioBand = "2m";
+                                    }
                                 }
                             }
                             break;
 
                         case "START_TIME":
                             {
-                                applyNewStartTime(arr[1]);
+                                if (typeof arr[1] != 'undefined') {
+                                    applyNewStartTime(arr[1]);
+                                }
                             }
                             break;
 
                         case "FINISH_TIME":
                             {
-                                applyNewFinishTime(arr[1]);
+                                if (typeof arr[1] != 'undefined') {
+                                    applyNewFinishTime(arr[1]);
+                                }
                             }
                             break;
 
@@ -1267,7 +1307,7 @@
                                     } else if ((freq < Number("148000000")) && (freq > Number("144000000"))) {
                                         g_eventRadioBand = "2m";
                                     }
-                                } else if (arr[1].length > 0) {
+                                } else if (arr[1].length > 1) {
                                     var freq = Number(arr[1]);
                                     var b = document.getElementById("frequencyButton");
                                     if (b != null) {
@@ -1348,9 +1388,6 @@
                                 var role = "";
                                 var event = "";
 
-                                if (typeof arr[1] == 'undefined') arr[1] = '?';
-                                if (typeof arr[2] == 'undefined') arr[2] = '?';
-
                                 if (arr[1].length < 1) {
                                     console.log("Error: sync success returned no role");
                                 } else {
@@ -1382,8 +1419,6 @@
                         case "SUE":
                             {
                                 var msg = "";
-
-                                if (typeof arr[1] == 'undefined') arr[1] = '?';
 
                                 if (arr[1].length < 1) {
                                     console.log("Sync error returned no message");
@@ -1982,7 +2017,7 @@
 
                 if (runButton) {
                     if (g_event_has_unsaved_time_changes && (stat != "Finished")) {
-                        runButton.value = "Save";
+                        runButton.value = "Enable";
                         runButton.disabled = false;
                         runButton.style.backgroundColor = "orange";
                     } else if (!g_event_has_unsaved_time_changes) {
@@ -2252,7 +2287,9 @@
     <center>
         <p style="text-align:left;"><a href=\ "73.73.73.73">[HOME]</a></p>
         <h1 id="mainHeading" style="font-family:verdana; font-size:30px; color:Black; text-align:center;">Transmitter Settings</h1>
-        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">HTML Ver 0.7 - 21 Jul 2020</p>
+        <p id="wifiVersion" style="font-family:verdana; font-size:12px; color:Black; text-align:center;"></p>
+        <p id="ATMEGAVersion" style="font-family:verdana; font-size:12px; color:Black; text-align:center;"></p>
+        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">events.html Version: 0.8 - 29 Jul 2020</p>
 
         <div>
             <table>
