@@ -91,8 +91,8 @@ typedef enum
 
 	/* TEST EQUIPMENT MESSAGE FAMILY (TEST DEVICE MESSAGING) */
 	MESSAGE_BAND = 'B' * 100 + 'N' * 10 + 'D',      /* $BND,; / $BND? / !BND,; // Set band; field1 = RadioBand */
-	MESSAGE_TTY = 'T' * 100 + 'T' * 10 + 'Y',       /* Adjust for PC communications interface (add crlf, etc.) */
 	MESSAGE_OSC = 'O' * 100 + 'S' * 10 + 'C',		/* Calibrate oscillator for best baud rate */
+	MESSAGE_VER = 'V' * 100 + 'E' * 10 + 'R',		/* Request current software version number */
 
 	/*	DUAL-BAND TX MESSAGE FAMILY (FUNCTIONAL MESSAGING) */
 	MESSAGE_SET_FREQ = 'F' * 100 + 'R' * 10 + 'E',  /* $FRE,Fhz; / $FRE,FHz? / !FRE,; // Set/request current frequency */
@@ -125,6 +125,7 @@ typedef enum
 #define MESSAGE_ERRORCODE_LABEL "EC"
 #define MESSAGE_STATUSCODE_LABEL "SC"
 #define MESSAGE_BAND_LABEL "BND"
+#define MESSAGE_VER_LABEL "VER"
 #define MESSAGE_SET_FREQ_LABEL "FRE"
 #define MESSAGE_TX_POWER_LABEL "POW"
 #define MESSAGE_ACK "!ACK;"

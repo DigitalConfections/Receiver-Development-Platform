@@ -157,14 +157,13 @@ typedef enum
 #define SOCK_COMMAND_STATUS "STATUS"
 #define SOCK_COMMAND_CLEAR_ACTIVE_EVENT "CLEAR"
 #define SOCK_COMMAND_EVENT_NAME "EVENT_NAME"            /* read only */
-#define SOCK_COMMAND_EVENT_FILE_VERSION "FILE_VERSION"  /* read only */
 #define SOCK_COMMAND_EVENT_DATA "EVENT_DATA"            /* read only */
 #define SOCK_COMMAND_SYNC_TIME "SYNC"
 #define SOCK_COMMAND_TEMPERATURE "TEMP"                 /* read only */
 #define SOCK_COMMAND_SSID "SSID"                        /* read only */
 #define SOCK_COMMAND_BATTERY "BAT"                      /* read only */
 //#define SOCK_COMMAND_CLONE "CLONE"
-#define SOCK_COMMAND_VERSION "VERS"                     /* read only */
+#define SOCK_COMMAND_SW_VERSIONS "SW_VERSIONS"          /* read only */
 #define SOCK_COMMAND_MAC "MAC"                          /* read only */
 #define SOCK_COMMAND_CALLSIGN "CALLSIGN"
 #define SOCK_COMMAND_PATTERN "PATTERN"
@@ -206,12 +205,14 @@ typedef enum
 #define LB_MESSAGE_STATUS_CODE "SC"
 #define LB_MESSAGE_PERM "$PRM;"
 #define LB_MESSAGE_ESP "ESP"
+#define LB_MESSAGE_VER "VER"                        /* ATMEGA SW version */
+#define LB_MESSAGE_VER_REQUEST "$VER?"              /* Request ATMEGA SW version */
+#define LB_MESSAGE_OSC_CAL "OSC"                    /* ATMEGA oscillator calibration message */
 #define LB_MESSAGE_ESP_WAKEUP "$ESP,0;"             /* Wake up from reset */
 #define LB_MESSAGE_ESP_ACTIVE "$ESP,1;"             /* Ready with active event data */
 #define LB_MESSAGE_ESP_RETAINPOWER "$ESP,2;"        /* Save settings changes to file (keeps power up) */
 #define LB_MESSAGE_ESP_SHUTDOWN "$ESP,3;"           /* Shut down in 3 seconds */
 #define LB_MESSAGE_ESP_KEEPALIVE "$ESP,Z;"          /* Keep alive for 2 minutes */
-#define LB_MESSAGE_OSC_CAL "$OSC,"                  /* Acknowledge receipt of OSC message */
 #define LB_MESSAGE_TIME "TIM"
 #define LB_MESSAGE_TIME_SET "$TIM,"                 /* Prefix for sending RTC time setting to ATMEGA */
 #define LB_MESSAGE_TIME_REQUEST "$TIM?"             /* Request the current time */

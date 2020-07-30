@@ -250,12 +250,12 @@ void __attribute__((optimize("O1"))) wdt_init(WDReset resetType)
 	ISR( INT1_vect )
 #endif
 {
-/*	if(g_sleeping) */
-/*	{ */
-/*		g_seconds_left_to_sleep = 0; */
-/*		g_go_to_sleep = FALSE; */
-/*		g_sleeping = FALSE; */
-/*	} */
+/*	if(g_sleeping)
+ *	{
+ *		g_seconds_left_to_sleep = 0;
+ *		g_go_to_sleep = FALSE;
+ *		g_sleeping = FALSE;
+ *	} */
 	BOOL ant = antennaIsConnected();
 
 	if(!ant)    /* immediately detect disconnection */
@@ -632,15 +632,17 @@ ISR( TIMER2_COMPB_vect )
 	else if(!( ADCSRA & (1 << ADSC) ))                                                                                          /* wait for conversion to complete */
 	{
 		uint16_t hold = ADC;
-		uint16_t holdConversionResult = (uint16_t)(((uint32_t)hold * ADC_REF_VOLTAGE_mV) >> 10);                                /* millivolts at ADC pin */
+		static uint16_t holdConversionResult;
+		holdConversionResult = (uint16_t)(((uint32_t)hold * ADC_REF_VOLTAGE_mV) >> 10);                                /* millivolts at ADC pin */
 		uint16_t lastResult = g_lastConversionResult[indexConversionInProcess];
-		BOOL directionUP = holdConversionResult > lastResult;
-		uint16_t delta = directionUP ? holdConversionResult - lastResult : lastResult - holdConversionResult;
 
 		g_adcUpdated[indexConversionInProcess] = TRUE;
 
 		if(indexConversionInProcess == BATTERY_READING)
 		{
+			BOOL directionUP = holdConversionResult > lastResult;
+			uint16_t delta = directionUP ? holdConversionResult - lastResult : lastResult - holdConversionResult;
+
 			if(delta > g_filterADCValue[indexConversionInProcess])
 			{
 				lastResult = holdConversionResult;
@@ -669,11 +671,15 @@ ISR( TIMER2_COMPB_vect )
 				}
 			}
 		}
-/*		else if(indexConversionInProcess == PA_VOLTAGE_READING) */
-/*		{ */
-/*			lastResult = holdConversionResult; */
-/*			g_PA_voltage = holdConversionResult; */
-/*		} */
+		else if(indexConversionInProcess == V12V_VOLTAGE_READING)
+		{
+			lastResult = holdConversionResult;
+		}
+/*		else if(indexConversionInProcess == PA_VOLTAGE_READING)
+ *		{
+ *			lastResult = holdConversionResult;
+ *			g_PA_voltage = holdConversionResult;
+ *		} */
 		else
 		{
 			lastResult = holdConversionResult;
@@ -1012,28 +1018,28 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 
 		/** Hardware rev P1.10
 		 * Set up PortB  */
-		/* PB0 = VHF_ENABLE */
-		/* PB1 = HF_ENABLE */
-		/* PB2 = 3V3_PWR_ENABLE */
-		/* PB3 = MOSI */
-		/* PB4 = MISO */
-		/* PB5 = SCK */
-		/* PB6 = Tx Final Voltage Enable */
-		/* PB7 = Main Power Enable */
+		/* PB0 = VHF_ENABLE
+		 * PB1 = HF_ENABLE
+		 * PB2 = 3V3_PWR_ENABLE
+		 * PB3 = MOSI
+		 * PB4 = MISO
+		 * PB5 = SCK
+		 * PB6 = Tx Final Voltage Enable
+		 * PB7 = Main Power Enable */
 
 		DDRB |= (1 << PORTB0) | (1 << PORTB1) | (1 << PORTB2) | (1 << PORTB6) | (1 << PORTB7);
 		PORTB |= (1 << PORTB2) | (1 << PORTB7); /* Turn on main power */
 
 		/** Hardware rev P1.10
 		 * Set up PortD */
-		/* PD0 = RXD */
-		/* PD1 = TXD */
-		/* PD2 = RTC interrupt */
-		/* PD3 = Antenna Connect Interrupt */
-		/* PD4 = 80M_ANTENNA_DETECT */
-		/* PD5 = 2M_ANTENNA_DETECT */
-		/* PD6 = WIFI_RESET */
-		/* PD7 = WIFI_ENABLE */
+		/* PD0 = RXD
+		 * PD1 = TXD
+		 * PD2 = RTC interrupt
+		 * PD3 = Antenna Connect Interrupt
+		 * PD4 = 80M_ANTENNA_DETECT
+		 * PD5 = 2M_ANTENNA_DETECT
+		 * PD6 = WIFI_RESET
+		 * PD7 = WIFI_ENABLE */
 
 		/*	DDRD  = 0b00000010;     / * Set PORTD pin data directions * / */
 		DDRD  |= (1 << PORTD6) | (1 << PORTD7);                                 /* Set PORTD pin data directions */
@@ -1041,17 +1047,17 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 
 		/** Hardware rev P1.10
 		 * Set up PortC */
-		/* PC0 = ADC - 80M_ANTENNA_DETECT */
-		/* PC1 = ADC - 2M_ANTENNA_DETECT */
-		/* PC2 = n/c */
-		/* PC3 = n/c */
-		/* PC4 = SDA */
-		/* PC5 = SCL */
-		/* PC6 = Reset */
-		/* PC7 = N/A */
+		/* PC0 = ADC - 80M_ANTENNA_DETECT
+		 * PC1 = ADC - 2M_ANTENNA_DETECT
+		 * PC2 = ADC - 12V Input Voltage
+		 * PC3 = Output: VHF clock select
+		 * PC4 = SDA
+		 * PC5 = SCL
+		 * PC6 = Reset
+		 * PC7 = N/A */
 
-		DDRC = 0x00;
-		PORTC = I2C_PINS | (1 << PORTC2) | (1 << PORTC3);
+		DDRC = (1 << PORTC3);
+		PORTC = I2C_PINS;
 
 		/**
 		 * TIMER2 is for periodic interrupts */
@@ -1067,13 +1073,13 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 
 		/**
 		 * Set up pin interrupts */
-		/* Enable pin change interrupts PCINT8 - 80m, PCINT9 - 2m, */
-		/* TODO */
+		/* Enable pin change interrupts PCINT8 - 80m, PCINT9 - 2m,
+		 * TODO */
 
-		/*	PCICR |= (1 << PCIE2) | (1 << PCIE1) | (1 << PCIE0);  / * Enable pin change interrupts PCI2, PCI1 and PCI0 * / */
-		/*	PCMSK2 |= 0b10001000;                                   / * Enable port D pin change interrupts * / */
-		/*	PCMSK1 |= (1 << PCINT10);                               / * Enable port C pin change interrupts on pin PC2 * / */
-		/*	PCMSK0 |= (1 << PORTB2);                                / * Do not enable interrupts until HW is ready * / */
+		/*	PCICR |= (1 << PCIE2) | (1 << PCIE1) | (1 << PCIE0);  / * Enable pin change interrupts PCI2, PCI1 and PCI0 * /
+		 *	PCMSK2 |= 0b10001000;                                   / * Enable port D pin change interrupts * /
+		 *	PCMSK1 |= (1 << PCINT10);                               / * Enable port C pin change interrupts on pin PC2 * /
+		 *	PCMSK0 |= (1 << PORTB2);                                / * Do not enable interrupts until HW is ready * / */
 
 /*		EICRA  |= ((1 << ISC01) | (1 << ISC00));	/ * Configure INT0 rising edge for RTC 1-second interrupts * / */
 		EICRA  |= ((1 << ISC01) | (1 << ISC10));    /* Configure INT0 falling edge for RTC 1-second interrupts, and INT1 any logic change */
@@ -1085,42 +1091,42 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 	{
 		/** Hardware rev P1.10
 		 * Set up PortB  */
-		/* PB0 = VHF_ENABLE */
-		/* PB1 = HF_ENABLE */
-		/* PB2 = Testpoint W306 */
-		/* PB3 = MOSI */
-		/* PB4 = MISO */
-		/* PB5 = SCK */
-		/* PB6 = Tx Final Voltage Enable */
-		/* PB7 = Main Power Enable */
+		/* PB0 = VHF_ENABLE
+		 * PB1 = HF_ENABLE
+		 * PB2 = Testpoint W306
+		 * PB3 = MOSI
+		 * PB4 = MISO
+		 * PB5 = SCK
+		 * PB6 = Tx Final Voltage Enable
+		 * PB7 = Main Power Enable */
 
 		DDRB = 0x00;    /* Set PORTD pin data directions */
 		PORTB = 0x00;
 
 		/** Hardware rev P1.10
 		 * Set up PortD */
-		/* PD0 = RXD */
-		/* PD1 = TXD */
-		/* PD2 = RTC interrupt */
-		/* PD3 = Antenna Connect Interrupt */
-		/* PD4 = 80M_ANTENNA_DETECT */
-		/* PD5 = 2M_ANTENNA_DETECT */
-		/* PD6 = WIFI_RESET */
-		/* PD7 = WIFI_ENABLE */
+		/* PD0 = RXD
+		 * PD1 = TXD
+		 * PD2 = RTC interrupt
+		 * PD3 = Antenna Connect Interrupt
+		 * PD4 = 80M_ANTENNA_DETECT
+		 * PD5 = 2M_ANTENNA_DETECT
+		 * PD6 = WIFI_RESET
+		 * PD7 = WIFI_ENABLE */
 
 		DDRD = 0x00;
 		PORTD = ((1 << PORTD2) | (1 << PORTD3) | (1 << PORTD4) | (1 << PORTD5));    /* Allow RTC and antenna-connect interrupts to continue */
 
 		/** Hardware rev P1.10
 		 * Set up PortC */
-		/* PC0 = ADC - 80M_ANTENNA_DETECT */
-		/* PC1 = ADC - 2M_ANTENNA_DETECT */
-		/* PC2 = n/c */
-		/* PC3 = n/c */
-		/* PC4 = SDA */
-		/* PC5 = SCL */
-		/* PC6 = Reset */
-		/* PC7 = N/A */
+		/* PC0 = ADC - 80M_ANTENNA_DETECT
+		 * PC1 = ADC - 2M_ANTENNA_DETECT
+		 * PC2 = n/c
+		 * PC3 = n/c
+		 * PC4 = SDA
+		 * PC5 = SCL
+		 * PC6 = Reset
+		 * PC7 = N/A */
 
 		DDRC = 0x00;
 		PORTC = (1 << PORTC0) | (1 << PORTC1) | (1 << PORTC2) | (1 << PORTC3);
@@ -1142,8 +1148,8 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 
 		/**
 		 * Set up pin interrupts */
-		/* Enable pin change interrupts PCINT8, PCINT9, */
-		/* TODO */
+		/* Enable pin change interrupts PCINT8, PCINT9,
+		 * TODO */
 
 		PCICR = 0;
 		PCMSK0 = 0;
@@ -1153,8 +1159,8 @@ void __attribute__((optimize("O1"))) set_ports(InitActionType initType)
 		EICRA  |= ((1 << ISC01) | (1 << ISC11));    /* Configure INT0 and INT1 falling edge for RTC 1-second interrupts */
 		EIMSK |= ((1 << INT0) | (1 << INT1));
 
-		/* Configure INT1 for antenna connect interrupts */
-		/* TODO */
+		/* Configure INT1 for antenna connect interrupts
+		 * TODO */
 
 		/**
 		 *  Turn off UART
@@ -1312,7 +1318,7 @@ int main( void )
 			if(code)    /* avoid unnecessarily clearing any pre-existing error code */
 			{
 				/*  If the  hardware fails to initialize, report the failure to
-				 *   the user over WiFi by sending an appropriate error code. */
+				*   the user over WiFi by sending an appropriate error code. */
 				g_last_error_code = code;
 			}
 		}
@@ -1331,7 +1337,7 @@ int main( void )
 
 				while(g_go_to_sleep)
 				{
-					set_ports(POWER_SLEEP); /* Sleep occurs here */
+					set_ports(POWER_SLEEP);     /* Sleep occurs here */
 				}
 				set_ports(POWER_UP);
 				linkbus_enable();
@@ -1601,13 +1607,13 @@ void __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					{
 						g_calibrate_baud = FALSE;
 					}
-					else if (val == 255)
+					else if(val == 255)
 					{
 						eeprom_update_byte(&ee_clock_OSCCAL, 0xFF); /* erase any existing value */
 					}
 					else
 					{
-						if(abs(val - lastVal) > 10) /* Gap identified */
+						if(abs(val - lastVal) > 10)                 /* Gap identified */
 						{
 							calcOSCCAL(255);
 							valCount = 0;
@@ -1652,8 +1658,8 @@ void __attribute__((optimize("O0"))) handleLinkBusMsgs()
 					{
 						if(f1 == '1')
 						{
-							/* ESP8266 is ready with event data */
-							/* Prepare to receive new event configuration settings */
+							/* ESP8266 is ready with event data
+							 * Prepare to receive new event configuration settings */
 							suspendEvent();
 							initializeAllEventSettings(TRUE);
 						}
@@ -1897,7 +1903,7 @@ void __attribute__((optimize("O0"))) handleLinkBusMsgs()
 
 			case MESSAGE_SET_STATION_ID:
 			{
-				event_parameter_count++; /* Any ID or no ID is acceptable */
+				event_parameter_count++;    /* Any ID or no ID is acceptable */
 
 				if(lb_buff->fields[FIELD1][0])
 				{
@@ -2067,11 +2073,21 @@ void __attribute__((optimize("O0"))) handleLinkBusMsgs()
 
 			case MESSAGE_BAT:
 			{
-				uint16_t bat = (uint16_t)CLAMP(0, BATTERY_PERCENTAGE(g_lastConversionResult[BATTERY_READING], (int32_t)g_battery_empty_mV), 100);
+				uint16_t bat;
+
+				if(g_lastConversionResult[BATTERY_READING] > VOLTS_3_0) /* Send % of internal battery charge remaining */
+				{
+					bat = (uint16_t)CLAMP(0, BATTERY_PERCENTAGE(g_lastConversionResult[BATTERY_READING], (int32_t)g_battery_empty_mV), 100);
+				}
+				else /* Send the voltage of the external battery */
+				{
+					bat = VEXT(g_lastConversionResult[V12V_VOLTAGE_READING]);
+				}
+
 				lb_broadcast_num(bat, "!BAT");
 
-				/* The system clock gets re-initialized whenever a battery message is received. This is
-				 *           just to ensure the two stay closely in sync while the user interface is active */
+				/* The system clock gets re-initialized whenever a battery message is received. This
+				 * is just to ensure the two stay closely in sync while the user interface is active */
 				set_system_time(ds3231_get_epoch(NULL));    /* update system clock */
 			}
 			break;
@@ -2083,6 +2099,12 @@ void __attribute__((optimize("O0"))) handleLinkBusMsgs()
 				{
 					lb_broadcast_num(v, "!TEM");
 				}
+			}
+			break;
+
+			case MESSAGE_VER:
+			{
+				lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_VER_LABEL, SW_REVISION);
 			}
 			break;
 
@@ -2132,8 +2154,8 @@ BOOL __attribute__((optimize("O0"))) eventEnabled(BOOL noSleep, time_t* time_bef
 		return( TRUE);
 	}
 
-	/* If we reach here, we have an event that has not yet started, and a sleep time needs to be calculated */
-	/* consider if there is time for sleep prior to the event start */
+	/* If we reach here, we have an event that has not yet started, and a sleep time needs to be calculated
+	 * consider if there is time for sleep prior to the event start */
 	if(time_before_start)
 	{
 		*time_before_start = (-dif) - 60;   /* sleep until 60 seconds before its start time */
@@ -2188,27 +2210,27 @@ EC activateEventUsingCurrentSettings(SC* statusCode)
 	{
 		return( ERROR_CODE_EVENT_MISSING_START_TIME);
 	}
-	
+
 	if(!g_on_air_seconds)
 	{
 		return( ERROR_CODE_EVENT_MISSING_TRANSMIT_DURATION);
 	}
-	
+
 	if(g_intra_cycle_delay_time > (g_off_air_seconds + g_on_air_seconds))
 	{
 		return( ERROR_CODE_EVENT_TIMING_ERROR);
 	}
-	
+
 	if(g_messages_text[PATTERN_TEXT][0] == '\0')
 	{
 		return( ERROR_CODE_EVENT_PATTERN_NOT_SPECIFIED);
 	}
-	
+
 	if(!g_pattern_codespeed)
 	{
 		return( ERROR_CODE_EVENT_PATTERN_CODE_SPEED_NOT_SPECIFIED);
 	}
-	
+
 	if(g_messages_text[STATION_ID][0] != '\0')
 	{
 		if((!g_id_codespeed || !g_ID_period_seconds))
@@ -2223,7 +2245,7 @@ EC activateEventUsingCurrentSettings(SC* statusCode)
 		g_time_needed_for_ID = 0;                   /* ID will never be sent */
 	}
 
-	if(g_event_start_time >= g_event_finish_time)    /* the event never ends */
+	if(g_event_start_time >= g_event_finish_time)   /* the event never ends */
 	{
 		g_event_finish_time = MAX_TIME;
 	}
@@ -2335,7 +2357,7 @@ void initializeEEPROMVars()
 		if((temp > 10) && (temp < 240))
 		{
 			OSCCAL = temp;
-			g_OSCCAL_inhibit = TRUE; /* flag to prevent recalibration */
+			g_OSCCAL_inhibit = TRUE;    /* flag to prevent recalibration */
 		}
 
 		for(i = 0; i < 20; i++)

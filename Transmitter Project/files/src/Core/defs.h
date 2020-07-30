@@ -32,7 +32,7 @@
 
 /******************************************************
  * Set the text that gets displayed to the user */
-#define SW_REVISION "P1.3"
+#define SW_REVISION "1.1"
 
 //#define TRANQUILIZE_WATCHDOG
 
@@ -128,6 +128,8 @@ typedef enum {
 #define PA_VOLTAGE_MAX_MV 14100L
 #define VPA(x)((x * PA_VOLTAGE_MAX_MV) / 1023L)
 
+#define VEXT(x) (10000L + ((14L * x + 310) / 100))
+
 typedef uint16_t BatteryLevel;  /* in milliVolts */
 
 #define VOLTS_5 (((5000L - BATTERY_DROP) * 1023L) / BATTERY_VOLTAGE_MAX_MV)
@@ -152,7 +154,7 @@ typedef uint16_t BatteryLevel;  /* in milliVolts */
 
 /******************************************************
  * EEPROM definitions */
-#define EEPROM_INITIALIZED_FLAG 0xC3
+#define EEPROM_INITIALIZED_FLAG 0xC4
 #define EEPROM_UNINITIALIZED 0x00
 
 #define EEPROM_STATION_ID_DEFAULT "FOXBOX"
