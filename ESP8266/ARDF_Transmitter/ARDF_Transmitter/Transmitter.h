@@ -196,7 +196,8 @@ typedef enum
 #define SLAVE_CONNECT "C"
 #define SLAVE_WAITING_FOR_UPDATES "U"
 #define SLAVE_READY_FOR_FILE "RDY"
-
+#define SLAVE_WAITING_FOR_FILES "WFF"
+#define SLAVE_NO_MORE_FILES "NMF"
 
 
 /* LinkBus Messages */
@@ -254,7 +255,7 @@ typedef enum
   WSClientConnecting,
   WSClientSyncClock,
   WSClientWaitForSyncAck,
-  WSClientWaitForUpdates,
+//  WSClientWaitForUpdates,
   WSClientPrepForFileData,
   WSClientReceiveFileData,
   WSClientValidateFile,
@@ -263,6 +264,10 @@ typedef enum
   WSClientProgramWaitForATMEGA,
   WSClientClose,
   WSClientCleanup,
+  WSClientWaitingForFiles,
+  WSClientFilesComplete,
+  WSClientReceiveFileUpdate,
+  WSClientExitSuccess,
   WSClientError
 } WebSocketSlaveState;
 
@@ -277,6 +282,7 @@ typedef enum
   TX_RECD_START_EVENT_REQUEST,
   TX_WAITING_FOR_INSTRUCTIONS,
   TX_MASTER_SEND_ACTIVE_FILE,
+  TX_MASTER_SEND_EVENT_FILES,
   TX_INVALID_STATE
 } TxCommState;
 

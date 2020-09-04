@@ -180,12 +180,13 @@ bool Event::isSoonerEvent(EventFileRef a, EventFileRef b, unsigned long currentE
 }
 
 
-bool Event::isNotFinishedEvent(unsigned long currentEpoch)
+bool Event::isNotDisabledEvent(unsigned long currentEpoch)
 {
-  bool runsForever = convertTimeStringToEpoch(this->eventData->event_start_date_time) >= convertTimeStringToEpoch(this->eventData->event_finish_date_time);
-  bool finishedInThePast = (convertTimeStringToEpoch(this->eventData->event_finish_date_time) <= currentEpoch) && !runsForever;
+  bool isDisabled = convertTimeStringToEpoch(this->eventData->event_start_date_time) >= convertTimeStringToEpoch(this->eventData->event_finish_date_time);
+    
+  isDisabled = isDisabled || (convertTimeStringToEpoch(this->eventData->event_finish_date_time) <= currentEpoch);
 
-  return (!finishedInThePast);
+  return (!isDisabled);
 }
 
 
@@ -1177,7 +1178,7 @@ void Event::setEventStartDateTime(String str)
   }
 
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
-  if (g_debug_prints_enabled)
+  if (debug_prints_enabled)
   {
     Serial.println(String("Setting start = \"" + str + "\""));
   }
@@ -1246,7 +1247,7 @@ void Event::setEventFinishDateTime(String str)
   }
 
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
-  if (g_debug_prints_enabled)
+  if (debug_prints_enabled)
   {
     Serial.println(String("Setting finish = \"" + str + "\""));
   }

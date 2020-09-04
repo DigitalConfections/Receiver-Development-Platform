@@ -37,9 +37,10 @@
 //#define SERIAL_BAUD_RATE 19200
 
 #define MAX_NUMBER_OF_WEB_CLIENTS WEBSOCKETS_SERVER_CLIENT_MAX
-#define MAX_TIME ((time_t)4294967295)
+#define MAX_TIME ((unsigned long)4294967294)
 #define FEB_7_2106 (MAX_TIME)
-#define JAN_1_2020 ((time_t)1577836800)
+#define JAN_1_2020 ((unsigned long)1577836800)
+
 /*
 #define HOTSPOT_SSID1_DEFAULT ("myRouter1")
 #define HOTSPOT_PW1_DEFAULT ("router1PW")

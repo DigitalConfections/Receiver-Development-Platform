@@ -202,8 +202,8 @@ class Event {
     static bool extractLineData(String s, EventLineData* result);
     static bool isSoonerEvent(EventFileRef a, EventFileRef b, unsigned long currentEpoch);
     static bool extractMeFileData(String path, EventFileRef* eventRef);
-    bool isNotFinishedEvent(unsigned long currentEpoch);
-    
+    bool isNotDisabledEvent(unsigned long currentEpoch);
+
   private:
 
     bool parseStringData(String txt);
