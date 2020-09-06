@@ -194,7 +194,6 @@ typedef enum
 #define SLAVE_FREE "0"
 #define SLAVE_CONFIRMED "1"
 #define SLAVE_CONNECT "C"
-#define SLAVE_WAITING_FOR_UPDATES "U"
 #define SLAVE_READY_FOR_FILE "RDY"
 #define SLAVE_WAITING_FOR_FILES "WFF"
 #define SLAVE_NO_MORE_FILES "NMF"
@@ -255,7 +254,6 @@ typedef enum
   WSClientConnecting,
   WSClientSyncClock,
   WSClientWaitForSyncAck,
-//  WSClientWaitForUpdates,
   WSClientPrepForFileData,
   WSClientReceiveFileData,
   WSClientValidateFile,
@@ -281,6 +279,7 @@ typedef enum
   TX_READ_ALL_EVENTS_FILES,
   TX_RECD_START_EVENT_REQUEST,
   TX_WAITING_FOR_INSTRUCTIONS,
+  TX_SET_ENUNCIATORS_SUCCESS,
   TX_MASTER_SEND_ACTIVE_FILE,
   TX_MASTER_SEND_EVENT_FILES,
   TX_INVALID_STATE

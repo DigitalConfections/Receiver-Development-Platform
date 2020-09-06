@@ -949,7 +949,7 @@
 
                                     case 0xF6: // ERROR_CODE_NO_ANTENNA_PREVENTS_POWER_SETTING = 0xF6
                                         {
-                                            text = "Missing antenna prevents setting transmit power";
+                                            text = "Missing antenna prevents transmissions";
                                         }
                                         break;
 
@@ -1382,7 +1382,7 @@
                                 }
 
                                 if (role.length || event.length) {
-                                    var e = "Success: " + role + " synced for " + event;
+                                    var e = "Success: " + role + " synced. Next up: " + event;
                                     var elem = document.getElementById("statusreport");
                                     if (elem != null) {
                                         elem.innerHTML = e;
@@ -2312,7 +2312,7 @@
         <h1 id="mainHeading" style="font-family:verdana; font-size:30px; color:Black; text-align:center;">Transmitter Settings</h1>
         <p id="wifiVersion" style="font-family:verdana; font-size:12px; color:Black; text-align:center;"></p>
         <p id="ATMEGAVersion" style="font-family:verdana; font-size:12px; color:Black; text-align:center;"></p>
-        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">events.html Version: 0.2 - 1 Sep 2020</p>
+        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">events.html Version: 0.2.1 - 5 Sep 2020</p>
 
         <div>
             <table>

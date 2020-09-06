@@ -35,149 +35,150 @@ Blinkies::Blinkies()
 
 void Blinkies::setLEDs(LEDPattern pattern, bool leds_enabled)
 {
-    if((!leds_enabled) || (pattern == LEDS_OFF))
-    {
-        digitalWrite(BLUE_LED, HIGH);    /* Turn off blue LED */
-        digitalWrite(RED_LED, HIGH);     /* Turn off red LED */
-    }
-    else if(pattern == RED_LED_ONLY)
-    {
-        digitalWrite(BLUE_LED, HIGH);    /* Turn on blue LED */
-        digitalWrite(RED_LED, LOW);     /* Turn on red LED */
-    }
-    else if(pattern == BLUE_LED_ONLY)
-    {
-        digitalWrite(BLUE_LED, LOW);    /* Turn on blue LED */
-        digitalWrite(RED_LED, HIGH);     /* Turn on red LED */
-    }
-    else if(pattern == RED_BLUE_TOGETHER)
-    {
-        digitalWrite(BLUE_LED, LOW);    /* Turn on blue LED */
-        digitalWrite(RED_LED, LOW);     /* Turn on red LED */
-    }
+  if ((!leds_enabled) || (pattern == LEDS_OFF))
+  {
+    digitalWrite(BLUE_LED, HIGH);    /* Turn off blue LED */
+    digitalWrite(RED_LED, HIGH);     /* Turn off red LED */
+  }
+  else if (pattern == RED_LED_ONLY)
+  {
+    digitalWrite(BLUE_LED, HIGH);    /* Turn on blue LED */
+    digitalWrite(RED_LED, LOW);     /* Turn on red LED */
+  }
+  else if (pattern == BLUE_LED_ONLY)
+  {
+    digitalWrite(BLUE_LED, LOW);    /* Turn on blue LED */
+    digitalWrite(RED_LED, HIGH);     /* Turn on red LED */
+  }
+  else if (pattern == RED_BLUE_TOGETHER)
+  {
+    digitalWrite(BLUE_LED, LOW);    /* Turn on blue LED */
+    digitalWrite(RED_LED, LOW);     /* Turn on red LED */
+  }
 }
 
 bool Blinkies::blinkLEDs(int blinkPeriodMillis, LEDPattern pattern, bool leds_enabled)
 {
-    unsigned long blinkTimeSeconds;
-    
-    blinkTimeSeconds = millis() / blinkPeriodMillis;
+  unsigned long blinkTimeSeconds;
 
-    if (holdTime_ != blinkTimeSeconds)
+  blinkTimeSeconds = millis() / blinkPeriodMillis;
+  unsigned int debounceCounts = max(3, (1500 / blinkPeriodMillis));
+
+  if (holdTime_ != blinkTimeSeconds)
+  {
+    holdTime_ = blinkTimeSeconds;
+    toggle_ = !toggle_;
+
+    if ((progButtonPressed_) || (pattern == LEDS_ON))
     {
-      holdTime_ = blinkTimeSeconds;
-      toggle_ = !toggle_;
-
-      if ((progButtonPressed_) || (pattern == LEDS_ON))
+      digitalWrite(BLUE_LED, LOW);    /* Turn on blue LED */
+      digitalWrite(RED_LED, LOW);     /* Turn on red LED */
+    }
+    else if (!leds_enabled || (pattern == LEDS_OFF))
+    {
+      digitalWrite(BLUE_LED, HIGH);   /* Turn off blue LED */
+      digitalWrite(RED_LED, HIGH);    /* Turn off red LED */
+    }
+    else
+    {
+      if (pattern == RED_BLUE_ALTERNATING)
       {
-        digitalWrite(BLUE_LED, LOW);    /* Turn on blue LED */
-        digitalWrite(RED_LED, LOW);     /* Turn on red LED */
-      }
-      else if (!leds_enabled || (pattern == LEDS_OFF))
-      {
-        digitalWrite(BLUE_LED, HIGH);   /* Turn off blue LED */
-        digitalWrite(RED_LED, HIGH);    /* Turn off red LED */
-      }
-      else
-      {
-        if (pattern == RED_BLUE_ALTERNATING)
+        digitalWrite(BLUE_LED, toggle_); /* Blink blue LED */
+        digitalWrite(RED_LED, !toggle_); /* Blink red LED */
+        if (toggle_)
         {
-          digitalWrite(BLUE_LED, toggle_); /* Blink blue LED */
-          digitalWrite(RED_LED, !toggle_); /* Blink red LED */
-          if (toggle_)
-          {
-            pinMode(RED_LED, INPUT);    /* Allow GPIO0 to be read */
-            if (!digitalRead(RED_LED))
-            {
-              debounceProgButton_--;
-              if (!debounceProgButton_)
-              {
-                progButtonPressed_ = true;
-                debounceProgButton_ = 3;
-              }
-            }
-            else
-            {
-              debounceProgButton_ = 3;
-            }
-
-            pinMode(RED_LED, OUTPUT);
-          }
-        }
-        else if (pattern == BLUE_LED_ONLY)
-        {
-          digitalWrite(BLUE_LED, toggle_); /* Blink blue LED */
-
-          digitalWrite(RED_LED, LOW);     /* Turn on red LED */
-          pinMode(RED_LED, INPUT);        /* Allow GPIO0 to be read */
+          pinMode(RED_LED, INPUT);    /* Allow GPIO0 to be read */
           if (!digitalRead(RED_LED))
           {
             debounceProgButton_--;
             if (!debounceProgButton_)
             {
               progButtonPressed_ = true;
-              debounceProgButton_ = 3;
+              debounceProgButton_ = debounceCounts;
             }
           }
           else
           {
-            debounceProgButton_ = 3;
+            debounceProgButton_ = debounceCounts;
           }
 
           pinMode(RED_LED, OUTPUT);
-          digitalWrite(RED_LED, HIGH);    /* Turn off red LED */
         }
-        else if (pattern == RED_LED_ONLY)
+      }
+      else if (pattern == BLUE_LED_ONLY)
+      {
+        digitalWrite(BLUE_LED, toggle_); /* Blink blue LED */
+
+        digitalWrite(RED_LED, LOW);     /* Turn on red LED */
+        pinMode(RED_LED, INPUT);        /* Allow GPIO0 to be read */
+        if (!digitalRead(RED_LED))
         {
-          digitalWrite(RED_LED, toggle_);  /* Blink red LED */
-          digitalWrite(BLUE_LED, HIGH);   /* Turn off blue LED */
-
-          if (!toggle_)
+          debounceProgButton_--;
+          if (!debounceProgButton_)
           {
-            pinMode(RED_LED, INPUT);    /* Allow GPIO0 to be read */
-            if (!digitalRead(RED_LED))
-            {
-              debounceProgButton_--;
-              if (!debounceProgButton_)
-              {
-                progButtonPressed_ = true;
-                debounceProgButton_ = 3;
-              }
-            }
-            else
-            {
-              debounceProgButton_ = 3;
-            }
-
-            pinMode(RED_LED, OUTPUT);
+            progButtonPressed_ = true;
+            debounceProgButton_ = debounceCounts;
           }
         }
-        else if(pattern == RED_BLUE_TOGETHER)
+        else
         {
-          digitalWrite(BLUE_LED, toggle_); /* Blink blue LED */
-          digitalWrite(RED_LED, toggle_); /* Blink red LED */
-          if (!toggle_)
-          {
-            pinMode(RED_LED, INPUT);    /* Allow GPIO0 to be read */
-            if (!digitalRead(RED_LED))
-            {
-              debounceProgButton_--;
-              if (!debounceProgButton_)
-              {
-                progButtonPressed_ = true;
-                debounceProgButton_ = 3;
-              }
-            }
-            else
-            {
-              debounceProgButton_ = 3;
-            }
+          debounceProgButton_ = debounceCounts;
+        }
 
-            pinMode(RED_LED, OUTPUT);
+        pinMode(RED_LED, OUTPUT);
+        digitalWrite(RED_LED, HIGH);    /* Turn off red LED */
+      }
+      else if (pattern == RED_LED_ONLY)
+      {
+        digitalWrite(RED_LED, toggle_);  /* Blink red LED */
+        digitalWrite(BLUE_LED, HIGH);   /* Turn off blue LED */
+
+        if (!toggle_)
+        {
+          pinMode(RED_LED, INPUT);    /* Allow GPIO0 to be read */
+          if (!digitalRead(RED_LED))
+          {
+            debounceProgButton_--;
+            if (!debounceProgButton_)
+            {
+              progButtonPressed_ = true;
+              debounceProgButton_ = debounceCounts;
+            }
           }
+          else
+          {
+            debounceProgButton_ = debounceCounts;
+          }
+
+          pinMode(RED_LED, OUTPUT);
+        }
+      }
+      else if (pattern == RED_BLUE_TOGETHER)
+      {
+        digitalWrite(BLUE_LED, toggle_); /* Blink blue LED */
+        digitalWrite(RED_LED, toggle_); /* Blink red LED */
+        if (!toggle_)
+        {
+          pinMode(RED_LED, INPUT);    /* Allow GPIO0 to be read */
+          if (!digitalRead(RED_LED))
+          {
+            debounceProgButton_--;
+            if (!debounceProgButton_)
+            {
+              progButtonPressed_ = true;
+              debounceProgButton_ = debounceCounts;
+            }
+          }
+          else
+          {
+            debounceProgButton_ = debounceCounts;
+          }
+
+          pinMode(RED_LED, OUTPUT);
         }
       }
     }
-    
-    return progButtonPressed_;
+  }
+
+  return progButtonPressed_;
 }

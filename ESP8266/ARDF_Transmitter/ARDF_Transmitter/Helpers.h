@@ -45,6 +45,10 @@
 #define min(x, y)  ((x) < (y) ? (x) : (y))
 #endif
 
+#ifndef max
+#define max(x, y)  ((x) > (y) ? (x) : (y))
+#endif
+
 #define CLAMP(low, x, high) ({\
     __typeof__(x) __x = (x); \
     __typeof__(low) __low = (low);\

@@ -151,39 +151,27 @@ bool Event::parseStringData(String s)
 */
 bool Event::isSoonerEvent(EventFileRef a, EventFileRef b, unsigned long currentEpoch)
 {
-  bool aRunsForever = a.startDateTimeEpoch >= a.finishDateTimeEpoch;
-  bool bRunsForever = b.startDateTimeEpoch >= b.finishDateTimeEpoch;
-  bool aStartedInThePast = a.startDateTimeEpoch <= currentEpoch;
-  /*bool bStartedInThePast = b.startDateTimeEpoch <= currentEpoch; */
-  bool aFinishedInThePast = (a.finishDateTimeEpoch <= currentEpoch) && !aRunsForever;
-  bool bFinishedInThePast = (b.finishDateTimeEpoch <= currentEpoch) && !bRunsForever;
+  bool aIsEnabled = (currentEpoch < a.finishDateTimeEpoch) && (a.startDateTimeEpoch < a.finishDateTimeEpoch);
+  bool bIsEnabled = (currentEpoch < b.finishDateTimeEpoch) && (b.startDateTimeEpoch < b.finishDateTimeEpoch);
 
-  if (aStartedInThePast)                                      /*a started in the past */
+  if (!aIsEnabled)
   {
-    if (aFinishedInThePast)
-    {
-      return ( false);                                    /*a finished in the past so is disabled */
-    }
-    if (bFinishedInThePast)
-    {
-      return ( true);                                     /*b finished in the past so is disabled, and a is still running */
-    }
-    return (a.startDateTimeEpoch > b.startDateTimeEpoch);   /*if a started later than b then it is closer */
+    return (false); /* a is disabled */
   }
 
-  /*a starts in the future */
-  if (bFinishedInThePast)
+  if (!bIsEnabled)
   {
-    return ( true);                                     /*b finished in the past so is disabled, and a has yet to start */
+    return (true); /* b is disabled and a is not */
   }
-  return (a.startDateTimeEpoch < b.startDateTimeEpoch);   /*a will start sooner than b */
+
+  return (a.startDateTimeEpoch < b.startDateTimeEpoch);   /* a did/will start sooner than b */
 }
 
 
 bool Event::isNotDisabledEvent(unsigned long currentEpoch)
 {
   bool isDisabled = convertTimeStringToEpoch(this->eventData->event_start_date_time) >= convertTimeStringToEpoch(this->eventData->event_finish_date_time);
-    
+
   isDisabled = isDisabled || (convertTimeStringToEpoch(this->eventData->event_finish_date_time) <= currentEpoch);
 
   return (!isDisabled);
@@ -230,11 +218,6 @@ String Event::readMeFile(String path)
   if (path == NULL)
   {
     return ( "");
-  }
-
-  if (!path.startsWith("/"))
-  {
-    path = "/" + path;
   }
 
   if (path.endsWith(".event"))
@@ -299,11 +282,6 @@ bool Event::extractMeFileData(String path, EventFileRef *eventRef)
   if (path == NULL)
   {
     return ( fail);
-  }
-
-  if (!path.startsWith("/"))
-  {
-    path = "/" + path;
   }
 
   if (path.endsWith(".event"))
@@ -387,11 +365,6 @@ bool Event::validEventFile(String path, String* filename)
   int linesInFile = 0;
   EventLineData lineData;
   int checksum;
-
-  if (!path.startsWith("/"))
-  {
-    path = "/" + path;
-  }
 
   if (LittleFS.exists(path))
   {
@@ -478,11 +451,6 @@ bool Event::readEventFile(String path)
   bool startFound = false;
   bool endFound = false;
   int linesInFile = 0;
-
-  if (!path.startsWith("/"))
-  {
-    path = "/" + path;
-  }
 
   if (LittleFS.exists(path))
   {
@@ -700,14 +668,6 @@ bool Event::writeEventFile(String path)
     path = this->myPath;
   }
 
-  if (!path.startsWith("/"))
-  {
-    path = "/" + path;
-  }
-  /*  if (LittleFS.exists(path)) {      // version of that file must be deleted (if it exists) */
-  /*    LittleFS.remove(path); */
-  /*  } */
-
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
   if (debug_prints_enabled)
   {
@@ -890,6 +850,17 @@ bool Event::setTxAssignment(String role_slot)
   }
 
   return ( false);
+}
+
+String Event::getPath(void)
+{
+  String path = this->myPath;
+  if (path.startsWith("/"))
+  {
+    path = path.substring(1);
+  }
+
+  return (path);
 }
 
 String Event::getTxAssignment(void)

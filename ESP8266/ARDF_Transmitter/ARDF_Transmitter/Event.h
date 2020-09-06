@@ -142,7 +142,7 @@ class Event {
 
     Event(bool);
     ~Event();
-
+    String getPath(void);
     String readMeFile(String path);
     void saveMeData(String newAssignment);
     bool setTxAssignment(String role_slot);
