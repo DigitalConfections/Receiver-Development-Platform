@@ -209,7 +209,6 @@ typedef enum
 #define LB_MESSAGE_VER_REQUEST "$VER?"              /* Request ATMEGA SW version */
 #define LB_MESSAGE_OSC_CAL "OSC"                    /* ATMEGA oscillator calibration message */
 #define LB_MESSAGE_ESP_WAKEUP "$ESP,0;"             /* Wake up from reset */
-#define LB_MESSAGE_ESP_ACTIVE "$ESP,1;"             /* Ready with active event data */
 #define LB_MESSAGE_ESP_RETAINPOWER "$ESP,2;"        /* Save settings changes to file (keeps power up) */
 #define LB_MESSAGE_ESP_SHUTDOWN "$ESP,3;"           /* Shut down in 3 seconds */
 #define LB_MESSAGE_ESP_KEEPALIVE "$ESP,Z;"          /* Keep alive for 2 minutes */

@@ -93,7 +93,7 @@ String g_bridgePW = BRIDGE_PW_DEFAULT;  /* minimum 8 characters */
 /* Access Point */
 String g_masterSSID = MASTER_SSID;
 String g_masterSSID_PWD = BRIDGE_PW_DEFAULT;
-bool g_masterEnabled = MASTER_ENABLE_DEFAULT;
+bool g_IamMaster = MASTER_ENABLE_DEFAULT;
 
 /* Time Retrieval */
 /*
@@ -149,6 +149,7 @@ bool g_slave_released = true;
 bool g_slave_received_new_event_file = false;
 int g_slave_socket_number = -1;
 int g_files_sent_to_slave = 0;
+bool g_onlyUpdateEvent = false;
 
 #define NO_ACTIVITY_TIMEOUT (60 * 5)
 int g_noActivityTimeoutSeconds = NO_ACTIVITY_TIMEOUT;
@@ -482,7 +483,7 @@ bool setupHTTP_AP()
 
   /*  WiFi.mode(WIFI_AP); */
 
-  if (g_masterEnabled)
+  if (g_IamMaster)
   {
     g_AP_NameString = MASTER_SSID;
   }
@@ -654,7 +655,6 @@ void onStationDisconnect(WiFiEventSoftAPModeStationDisconnected sta_info)
 
   g_numberOfWebClients = WiFi.softAPgetStationNum();
   g_numberOfSocketClients = g_webSocketServer.connectedClients(false);
-  /* g_LBOutputBuff->put(LB_MESSAGE_ESP_RETAINPOWER); */
 
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
   if (g_debug_prints_enabled)
@@ -850,32 +850,6 @@ bool setupWiFiAPConnection()
 }
 
 
-bool autoBaud(void)
-{
-  unsigned long holdMillis;
-  bool done = false;
-  bool failure = true;
-
-  lights->setLEDs(RED_BLUE_TOGETHER, true);
-
-  holdMillis = millis();
-
-  while (!done)
-  {
-    linkbusLoop();
-    done = g_baud_sync_success;
-    failure = !done;
-
-    if (abs(millis() - holdMillis) > 60000)
-    {
-      done = true;
-    }
-  }
-
-  return (failure);
-}
-
-
 void loop()
 {
   String arg1, arg2;
@@ -891,32 +865,17 @@ void loop()
   }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
 
-  lights->setLEDs(LEDS_OFF, g_LEDs_enabled);
+  lights->setLEDs(LEDS_ON, g_LEDs_enabled);
 
-  if (autoBaud())
-  {
-#if TRANSMITTER_COMPILE_DEBUG_PRINTS
-    if (g_debug_prints_enabled)
-    {
-      Serial.println("Baud rate calibration timeout");
-    }
-#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
-  }
-  else
-  {
-#if TRANSMITTER_COMPILE_DEBUG_PRINTS
-    if (g_debug_prints_enabled)
-    {
-      Serial.println("Baud rate calibrated");
-    }
-#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
-  }
+  waitForTimeLoop(); /* Wait for baud calibration and time update from ATMEGA */
 
-  if (g_masterEnabled)
+  if (g_IamMaster)
   {
     populateEventFileList();   /* read files into the event list */
-    waitForTimeLoop();
-
+    g_numberOfScheduledEvents = numberOfEventsScheduled(g_timeOfDayFromTx);
+    g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
+    linkbusLoop();
+    
     if (g_numberOfScheduledEvents)
     {
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
@@ -937,6 +896,8 @@ void loop()
       }
 
       g_activeEvent->readEventFile(g_eventList[0].path);
+      g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
+        
       if (!loadActiveEventFile(g_eventList[0].path))
       {
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
@@ -950,6 +911,7 @@ void loop()
       }
       else
       {
+        blinkPeriodMillis = 100;
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
         if (g_debug_prints_enabled)
         {
@@ -960,6 +922,7 @@ void loop()
     }
     else
     {
+      blinkPeriodMillis = 100;
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
       if (g_debug_prints_enabled)
       {
@@ -968,9 +931,9 @@ void loop()
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     }
   }
-  else
+  else /* IamSlave */
   {
-    if (!setupWiFiAPConnection())
+    if (!g_onlyUpdateEvent && !setupWiFiAPConnection())
     {
       g_webSocketLocalClient.begin("73.73.73.73", 81);
       g_webSocketLocalClient.onEvent(webSocketClientEvent);
@@ -986,14 +949,18 @@ void loop()
 
       if (!clientConnectLoop())
       {
+        g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
+          
         if (!clientUpdateEventFilesLoop())
         {
+          g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
           populateEventFileList();   /* read files into the event list */
           g_numberOfScheduledEvents = numberOfEventsScheduled(g_timeOfDayFromTx);
           linkbusLoop();
 
           if (g_numberOfScheduledEvents)
           {
+            g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
             if (!loadActiveEventFile(g_eventList[0].path))
             {
               g_activeEventIndex = 0;
@@ -1017,6 +984,14 @@ void loop()
 
           g_webSocketServer.loop();
         }
+        else
+        {
+            blinkPeriodMillis = 100;
+        }
+      }
+      else
+      {
+          blinkPeriodMillis = 100;
       }
     }
     else
@@ -1040,9 +1015,25 @@ void loop()
     }
   }
 
-  if (setupHTTP_AP())
+  if (g_onlyUpdateEvent)
   {
-    httpWebServerLoop(blinkPeriodMillis);
+    unsigned long last = 0;
+
+    while (1)
+    {
+      linkbusLoop();
+      yield();
+      if (abs(millis() - last) > 5000)
+      {
+        last = millis();
+        String msgOut = String(LB_MESSAGE_ESP_SHUTDOWN); /* Tell ATMEGA to shut down WiFi */
+        g_LBOutputBuff->put(msgOut);
+      }
+    }
+  }
+  else if (setupHTTP_AP())
+  {
+    httpWebServerLoop(blinkPeriodMillis); /* Pass the blink rate to the next loop */
   }
 
   Serial.println("Escaped!");
@@ -1115,21 +1106,40 @@ void shutDownSlave()
 
   return;
 }
+               
 
 bool waitForTimeLoop()
 {
   bool failure = true;
-  int times2try = 10;
+  int times2try = 60; /* Allow time for baud calibration */
   bool ready = false;
   unsigned long last = millis();
+  bool baudSet = false;
+  bool sentComsOFF = false;
 
-  g_LBOutputBuff->put(LB_MESSAGE_TIME_REQUEST);
+  /* Inform the ATMEGA that WiFi power up is complete */
+  g_LBOutputBuff->put(LB_MESSAGE_ESP_WAKEUP);
 
   while (!ready)
   {
     g_webSocketLocalClient.loop();
     linkbusLoop();
     yield();
+    if(lights->blinkLEDs(500, RED_BLUE_TOGETHER, true))
+    {
+      if (!sentComsOFF)
+      {
+        lights->setLEDs(RED_BLUE_TOGETHER, true);
+        Serial.printf(LB_MESSAGE_WIFI_COMS_OFF);    /* send immediate */
+        sentComsOFF = true;
+      }
+    }
+     
+    if(!baudSet && g_baud_sync_success)
+    {
+        baudSet = true;
+        times2try = 10;
+    }
 
     if (g_timeOfDayFromTx)
     {
@@ -1173,7 +1183,6 @@ bool clientConnectLoop()
 {
   bool failure = true;
   String temp;
-  bool sentComsOFF = false;
   LEDPattern ledPattern = RED_BLUE_TOGETHER;
   String errorMessage = String("");
 
@@ -1210,7 +1219,7 @@ bool clientConnectLoop()
           {
             if (!g_slave_released)
             {
-              blinkPeriodMillis = 100;
+              blinkPeriodMillis = 500;
               times2try = 5;
               g_webSocketSlaveState = WSClientSyncClock;
 
@@ -1262,6 +1271,7 @@ bool clientConnectLoop()
         {
           if (g_slave_released)
           {
+            blinkPeriodMillis = 100;
             g_webSocketSlaveState = WSClientClose;
 
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
@@ -1375,7 +1385,7 @@ bool clientConnectLoop()
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
             if (g_debug_prints_enabled)
             {
-              Serial.println("WSc: Closed");
+              Serial.println("WSc: Closed (1)");
             }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
             WiFi.disconnect();
@@ -1455,6 +1465,7 @@ bool loadActiveEventFile(String updatedFileName)
                 }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
 
+                g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
                 if (g_activeEvent->readEventFile(updatedFileName))
                 {
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
@@ -1543,7 +1554,7 @@ bool loadActiveEventFile(String updatedFileName)
 
       case WSClientClose:
         {
-          if (g_masterEnabled)
+          if (g_IamMaster)
           {
             busy = false;
           }
@@ -1595,7 +1606,7 @@ bool loadActiveEventFile(String updatedFileName)
 
       case WSClientExitSuccess:
         {
-          if (failure && !g_masterEnabled)
+          if (failure && !g_IamMaster)
           {
             g_webSocketSlaveState = WSClientCleanup;
           }
@@ -1621,7 +1632,7 @@ bool loadActiveEventFile(String updatedFileName)
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
             if (g_debug_prints_enabled)
             {
-              Serial.println("WSc: Closed");
+              Serial.println("WSc: Closed (2)");
             }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
             WiFi.disconnect();
@@ -1643,7 +1654,6 @@ bool clientUpdateEventFilesLoop()
   File tempFile;
   String updatedFileName;
   String temp;
-  bool sentComsOFF = false;
   LEDPattern ledPattern = RED_BLUE_TOGETHER;
   String errorMessage = String("");
 
@@ -1979,7 +1989,7 @@ bool clientUpdateEventFilesLoop()
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
             if (g_debug_prints_enabled)
             {
-              Serial.println("WSc: Closed");
+              Serial.println("WSc: Closed (3)");
             }
 #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
             WiFi.disconnect();
@@ -2189,8 +2199,6 @@ void httpWebServerLoop(int blinkRate)
 
           g_ESP_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
 
-          /* Inform the ATMEGA that WiFi power up is complete */
-          g_LBOutputBuff->put(LB_MESSAGE_ESP_WAKEUP);
           g_LBOutputBuff->put(LB_MESSAGE_VER_REQUEST);
           g_linkBusAckTimeoutCountdown = 10;
         }
@@ -2599,7 +2607,6 @@ void httpWebServerLoop(int blinkRate)
 
           String err = String("");
           sendEventToATMEGA(&err);
-
 
           if (err.length())
           {
@@ -4093,17 +4100,17 @@ void webSocketServerEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t 
 
             if ((setting.equalsIgnoreCase("1") || setting.equalsIgnoreCase("TRUE")))
             {
-              g_masterEnabled = true;
+              g_IamMaster = true;
               saveDefaultsFile();
               ESP.reset();
             }
             else if ((setting.equalsIgnoreCase("0") || setting.equalsIgnoreCase("FALSE")))
             {
-              g_masterEnabled = false;
+              g_IamMaster = false;
               saveDefaultsFile();
             }
 
-            String msg = String( String(SOCK_COMMAND_MASTER) + "," + String(g_masterEnabled));
+            String msg = String( String(SOCK_COMMAND_MASTER) + "," + String(g_IamMaster));
             g_webSocketServer.broadcastTXT(stringObjToConstCharString(&msg), msg.length());
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
             if (g_debug_prints_enabled)
@@ -4297,21 +4304,13 @@ bool readEventTimes(String path, EventFileRef * fileRef)
 
     if (file)
     {
-      //      if (!g_activeEvent)
-      //      {
-      //#if TRANSMITTER_COMPILE_DEBUG_PRINTS
-      //        g_activeEvent = new Event(g_debug_prints_enabled);
-      //#else
-      //        g_activeEvent = new Event(false);
-      //#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
-      //      }
-
       yield();
       String s = file.readStringUntil('\n');
       int count = 0;
 
       while (s.length() && (count++ < MAXIMUM_NUMBER_OF_EVENT_FILE_LINES) && (data_count < 5))
       {
+        lights->blinkLEDs(500, RED_BLUE_TOGETHER, true);
         if (s.indexOf("EVENT_START_DATE_TIME") >= 0)
         {
           EventLineData data;
@@ -4417,6 +4416,7 @@ bool populateEventFileList(void)
   Dir dir = LittleFS.openDir("/");
   while (dir.next())
   {
+    lights->blinkLEDs(500, RED_BLUE_TOGETHER, true);
     String fileName = dir.fileName();
 
 #if TRANSMITTER_COMPILE_DEBUG_PRINTS
@@ -4521,11 +4521,11 @@ bool readDefaultsFile()
         {
           if (value.charAt(0) == 'T' || value.charAt(0) == 't' || value.charAt(0) == '1')
           {
-            g_masterEnabled = 1;
+            g_IamMaster = 1;
           }
           else
           {
-            g_masterEnabled = 0;
+            g_IamMaster = 0;
           }
         }
         else if (settingID.equalsIgnoreCase("LEDS_ENABLE"))
@@ -4623,7 +4623,7 @@ void saveDefaultsFile()
         {
           case MASTER_ENABLE:
             {
-              if (g_masterEnabled)
+              if (g_IamMaster)
               {
                 file.println("MASTER_ENABLE,TRUE");
               }
@@ -4900,7 +4900,7 @@ void showSettings()
     {
       case MASTER_ENABLE:
         {
-          Serial.println(String("Master Enabled (MASTER_ENABLE) = ") + String(g_masterEnabled));
+          Serial.println(String("Master Enabled (MASTER_ENABLE) = ") + String(g_IamMaster));
         }
         break;
 
@@ -4995,13 +4995,20 @@ void handleLBMessage(String message)
   {
     if (payload.equals("1")) /* Atmega is asking to receive the next active event */
     {
-      if (g_numberOfScheduledEvents && (g_activeEvent != NULL))
+      if (g_ESP_Comm_State == TX_WAITING_FOR_INSTRUCTIONS)
       {
-        if (g_activeEvent->isNotDisabledEvent(g_timeOfDayFromTx))
+        if (g_numberOfScheduledEvents && (g_activeEvent != NULL))
         {
-          g_ESP_Comm_State = TX_RECD_START_EVENT_REQUEST;
-          g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
+          if (g_activeEvent->isNotDisabledEvent(g_timeOfDayFromTx))
+          {
+            g_ESP_Comm_State = TX_RECD_START_EVENT_REQUEST;
+            g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
+          }
         }
+      }
+      else
+      {
+        g_onlyUpdateEvent = true;
       }
     }
     else if (payload.equals("2"))
