@@ -214,7 +214,6 @@
 
         var g_loading_data = true;
         var g_event_changes_saved = true;
-        var g_event_has_unsaved_time_changes = false;
 
         ///////////////////////////////
         // Settings
@@ -319,12 +318,16 @@
             x = document.getElementById("statusreport");
             if (x != null) x.style.display = "none";
 
-            if (g_event_has_unsaved_time_changes) {
-                newStartTime();
-                newFinishTime();
-                g_event_has_unsaved_time_changes = false;
-            } else {
-                executeEvent();
+            x = document.getElementById("activeRunButton");
+
+            if (x != null) {
+                if (x.value == "Enable") {
+                    enableStartFinishTimes();
+                    newStartTime();
+                    newFinishTime();
+                } else {
+                    executeEvent();
+                }
             }
         }
 
@@ -416,15 +419,7 @@
                 btn.className = "button";
                 if (g_selectedEvent == rowData.name) {
                     btn.id = "activeRunButton";
-
-                    if (rowData.saved) {
-                        btn.value = "Run";
-                        g_event_has_unsaved_time_changes = false;
-                    } else {
-                        btn.value = "Enable";
-                        g_event_has_unsaved_time_changes = true;
-                    }
-
+                    btn.value = "Apply";
                     btn.onclick = (function(entry) {
                         return function() {
                             eventRunSelect(entry);
@@ -517,12 +512,12 @@
                 row.appendChild(cell0);
 
                 cell0 = document.createElement("td");
-                var stat = "*";
+                var stat = statusMessageText(rowData.start, rowData.finish);
                 if (g_selectedEvent == rowData.name) {
-                    stat = statusMessageText(rowData.start, rowData.finish);
                     cell0.setAttribute("id", "statusCell");
                     console.log("Status: ", stat);
                 }
+
                 cellText = document.createTextNode(stat);
                 cell0.setAttribute("border", "1px solid black");
                 cell0.setAttribute("style", "font-family:verdana; font-size:15px; font-weight:bold; color:black;");
@@ -867,6 +862,7 @@
                             }
                             break;
 
+
                         case "ERR_CODE":
                             {
                                 var text;
@@ -953,7 +949,7 @@
 
                                     case 0xF6: // ERROR_CODE_NO_ANTENNA_PREVENTS_POWER_SETTING = 0xF6
                                         {
-                                            text = "Missing antenna prevents setting transmit power";
+                                            text = "Missing antenna prevents transmissions";
                                         }
                                         break;
 
@@ -1124,21 +1120,6 @@
                                     freq: arr[8],
                                     saved: true
                                 };
-
-                                if (eventLine.start != eventLine.finish) {
-                                    var now = new Date().getTime();
-                                    if (eventLine.start > eventLine.finish) {
-                                        if (now > eventLine.start) {
-                                            eventLine.start = now;
-                                        }
-                                        eventLine.finish = eventLine.start;
-                                        eventLine.saved = false;
-                                    } else if (eventLine.finish < now) {
-                                        eventLine.start = now;
-                                        eventLine.finish = now;
-                                        eventLine.saved = false;
-                                    }
-                                }
 
                                 g_eventTableData.push(eventLine);
                             }
@@ -1401,7 +1382,7 @@
                                 }
 
                                 if (role.length || event.length) {
-                                    var e = "Success: " + role + " synced for " + event;
+                                    var e = "Success: " + role + " synced. Next up: " + event;
                                     var elem = document.getElementById("statusreport");
                                     if (elem != null) {
                                         elem.innerHTML = e;
@@ -1729,6 +1710,48 @@
             }
         }
 
+        function enableStartFinishTimes() {
+            var dtsText = document.getElementById("datetimeStart");
+
+            if (dtsText) {
+                var dtfText = document.getElementById("datetimeFinish");
+
+                if (dtfText) {
+                    var dts = dtsText.value;
+                    var dtf = dtfText.value;
+                    var now = new Date().getTime();
+                    now += 90000;
+                    now = now - (now % 60000);
+
+                    var locals = forceValueToLocalTime(dts);
+                    var localsEpoch = new Date(dts);
+                    localsEpoch = localsEpoch.getTime();
+
+                    var localf = forceValueToLocalTime(dtf);
+                    var localfEpoch = new Date(dtf);
+                    localfEpoch = localfEpoch.getTime();
+
+                    if (localsEpoch > now) {
+                        localfEpoch = localsEpoch + 36000000;
+                        var local = epochToLocalDateTimeFormat(localfEpoch);
+                        applyNewFinishTime(local);
+                    } else {
+                        var dif = 36000000;
+                        if (localfEpoch > localsEpoch) {
+                            dif = localfEpoch - localsEpoch;
+                        }
+
+                        localsEpoch = now;
+                        var local = epochToLocalDateTimeFormat(localsEpoch);
+                        applyNewStartTime(local);
+                        localfEpoch = localsEpoch + dif;
+                        local = epochToLocalDateTimeFormat(localfEpoch);
+                        applyNewFinishTime(local);
+                    }
+                }
+            }
+        }
+
         function newStartTime() {
             if (g_starttimeDateUpdateTimer != 0) {
                 clearTimeout(g_starttimeDateUpdateTimer);
@@ -1840,35 +1863,35 @@
                 g_finishtimeDateUpdateTimer = 0;
             }
 
-            var dtText = document.getElementById("datetimeFinish");
+            var dtfText = document.getElementById("datetimeFinish");
 
-            if (dtText) {
+            if (dtfText) {
                 g_event_changes_saved = false;
 
-                var dt = dtText.value;
-                var local;
+                var dtf = dtfText.value;
+                var localf;
                 var msgText = "";
 
-                if (!validateTimeStructure(dt)) {
-                    local = Date();
+                if (!validateTimeStructure(dtf)) {
+                    localf = Date();
                 } else {
-                    local = forceValueToLocalTime(dt);
+                    localf = forceValueToLocalTime(dtf);
                 }
 
                 var now = new Date().getTime();
-                var localEpoch = new Date(dt);
-                localEpoch = localEpoch.getTime();
+                var localfEpoch = new Date(dtf);
+                localfEpoch = localfEpoch.getTime();
                 var utc;
 
-                if (now > localEpoch) {
-                    local = epochToLocalDateTimeFormat(now);
-                    utc = localTimeToUTC(local, false);
+                if (now > localfEpoch) {
+                    localf = epochToLocalDateTimeFormat(now);
+                    utc = localTimeToUTC(localf, false);
                 } else {
-                    utc = localTimeToUTC(local, false);
+                    utc = localTimeToUTC(localf, false);
                 }
 
                 g_finishtimeDateUpdateTimer = setTimeout(function() {
-                    applyNewFinishTime(local);
+                    applyNewFinishTime(localf);
                     msgText = "FINISH_TIME," + utc;
 
                     console.log(msgText);
@@ -1888,8 +1911,8 @@
                     var localsEpoch = new Date(dts);
                     localsEpoch = localsEpoch.getTime();
 
-                    if (localsEpoch > localEpoch) {
-                        applyNewStartTime(local);
+                    if (localsEpoch > localfEpoch) {
+                        applyNewStartTime(localf);
                         msgText = "START_TIME," + utc;
                         console.log(msgText);
                         sendToSocket(msgText);
@@ -1939,12 +1962,12 @@
             if (n > 946684800000) n /= 1000;
             if (f > 946684800000) f /= 1000;
 
-            if ((n >= s) && (f <= s)) {
-                statusMsg = "Running\nForever";
+            if (f <= s) {
+                statusMsg = "Disabled";
             } else if ((n > s) && (n < f)) {
                 statusMsg = "Running";
             } else if ((n > s) && (n >= f)) {
-                statusMsg = "Finished";
+                statusMsg = "Disabled";
             } else {
                 statusMsg = "Starts";
 
@@ -1953,8 +1976,8 @@
 
                 if (del > 3600) {
                     var h = del / 3600;
-                    del = (del % 3600) / 60;
-                    h = h.toFixed();
+                    del = (del / 60) % 60;
+                    h = Math.floor(h).toFixed();
                     del = del.toFixed();
                     statusMsg += " in " + h + "h" + del + "m";
                 } else if (del > 60) {
@@ -1967,13 +1990,13 @@
                 }
 
                 if (f <= s) {
-                    statusMsg += "\nRuns\nForever";
+                    statusMsg += "\nDisabled";
                 } else {
                     del = (f - s);
                     if (del > 3600) {
-                        var h = Math.floor(del / 3600);
-                        del = (del % 3600) / 60;
-                        h = h.toFixed();
+                        var h = del / 3600;
+                        del = (del / 60) % 60;
+                        h = Math.floor(h).toFixed();
                         del = del.toFixed();
                         statusMsg += " Runs " + h + "h" + del + "m";
                     } else if (del > 60) {
@@ -2016,16 +2039,16 @@
                 var runButton = document.getElementById("activeRunButton");
 
                 if (runButton) {
-                    if (g_event_has_unsaved_time_changes && (stat != "Finished")) {
+                    if (stat == "Disabled") {
                         runButton.value = "Enable";
                         runButton.disabled = false;
                         runButton.style.backgroundColor = "orange";
-                    } else if (!g_event_has_unsaved_time_changes) {
-                        runButton.value = "Run";
+                    } else {
+                        runButton.value = "Apply";
                     }
 
-                    if (runButton.value == "Run") {
-                        if (!g_event_changes_saved || (stat == "Finished")) {
+                    if (runButton.value == "Apply") {
+                        if (!g_event_changes_saved) {
                             runButton.disabled = true;
                             runButton.style.backgroundColor = "gray";
                         } else {
@@ -2289,7 +2312,7 @@
         <h1 id="mainHeading" style="font-family:verdana; font-size:30px; color:Black; text-align:center;">Transmitter Settings</h1>
         <p id="wifiVersion" style="font-family:verdana; font-size:12px; color:Black; text-align:center;"></p>
         <p id="ATMEGAVersion" style="font-family:verdana; font-size:12px; color:Black; text-align:center;"></p>
-        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">events.html Version: 0.8 - 29 Jul 2020</p>
+        <p id="version" style="font-family:verdana; font-size:12px; color:Black; text-align:center;">events.html Version: 0.2.1 - 5 Sep 2020</p>
 
         <div>
             <table>
