@@ -194,7 +194,6 @@ typedef enum
 #define SLAVE_FREE "0"
 #define SLAVE_CONFIRMED "1"
 #define SLAVE_CONNECT "C"
-#define SLAVE_READY_FOR_FILE "RDY"
 #define SLAVE_WAITING_FOR_FILES "WFF"
 #define SLAVE_NO_MORE_FILES "NMF"
 
@@ -209,7 +208,6 @@ typedef enum
 #define LB_MESSAGE_VER_REQUEST "$VER?"              /* Request ATMEGA SW version */
 #define LB_MESSAGE_OSC_CAL "OSC"                    /* ATMEGA oscillator calibration message */
 #define LB_MESSAGE_ESP_WAKEUP "$ESP,0;"             /* Wake up from reset */
-#define LB_MESSAGE_ESP_RETAINPOWER "$ESP,2;"        /* Save settings changes to file (keeps power up) */
 #define LB_MESSAGE_ESP_SHUTDOWN "$ESP,3;"           /* Shut down in 3 seconds */
 #define LB_MESSAGE_ESP_KEEPALIVE "$ESP,Z;"          /* Keep alive for 2 minutes */
 #define LB_MESSAGE_TIME "TIM"
@@ -273,11 +271,11 @@ typedef enum
   TX_WAKE_UP,
   TX_HTML_PAGE_SERVED,
   TX_HTML_NEXT_EVENT,
-  TX_HTML_REFRESH_EVENTS,
   TX_HTML_SAVE_CHANGES,
   TX_READ_ALL_EVENTS_FILES,
   TX_RECD_START_EVENT_REQUEST,
   TX_WAITING_FOR_INSTRUCTIONS,
+  TX_SET_ENUNCIATORS_FAILURE,
   TX_SET_ENUNCIATORS_SUCCESS,
   TX_MASTER_SEND_ACTIVE_FILE,
   TX_MASTER_SEND_EVENT_FILES,
