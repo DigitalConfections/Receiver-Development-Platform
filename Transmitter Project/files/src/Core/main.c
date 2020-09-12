@@ -119,10 +119,11 @@ static volatile time_t g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
 static volatile BOOL g_event_enabled = EEPROM_EVENT_ENABLED_DEFAULT;                        /* indicates that the conditions for executing the event are set */
 static volatile BOOL g_event_commenced = FALSE;
 static volatile BOOL g_check_for_next_event = FALSE;
+static volatile BOOL g_waiting_for_next_event = FALSE;
 static volatile uint16_t g_battery_empty_mV = EEPROM_BATTERY_EMPTY_MV;
 
 static volatile int32_t g_on_the_air = 0;
-static volatile uint16_t g_time_to_send_ID_countdown = 0;
+static volatile int g_sendID_seconds_countdown = 0;
 static volatile uint16_t g_code_throttle = 50;
 static volatile uint8_t g_WiFi_shutdown_seconds = 120;
 static volatile BOOL g_report_seconds = FALSE;
@@ -333,48 +334,48 @@ void __attribute__((optimize("O1"))) wdt_init(WDReset resetType)
 	{
 		time_t temp_time;
 
+		if(g_event_finish_time > 0)
+		{
+			time(&temp_time);
+
+			if(temp_time >= g_event_finish_time)
+			{
+				g_last_status_code = STATUS_CODE_EVENT_FINISHED;
+				g_on_the_air = 0;
+				keyTransmitter(OFF);
+				g_event_enabled = FALSE;
+				g_event_commenced = FALSE;
+				g_check_for_next_event = TRUE;
+				if(g_wifi_active)
+				{
+					g_WiFi_shutdown_seconds = 60;
+				}
+			}
+		}
+
 		if(g_event_enabled)
 		{
 			if(g_event_commenced)
 			{
 				BOOL repeat;
 
-				if(g_time_to_send_ID_countdown)
+				if(g_sendID_seconds_countdown)
 				{
-					g_time_to_send_ID_countdown--;
+					g_sendID_seconds_countdown--;
 				}
 
 				if(g_on_the_air)
 				{
-					if(g_event_finish_time > 0)
-					{
-						time(&temp_time);
-
-						if(temp_time >= g_event_finish_time)
-						{
-							if(g_event_enabled)
-							{
-								g_last_status_code = STATUS_CODE_EVENT_FINISHED;
-							}
-							g_on_the_air = 0;
-							g_event_finish_time = EEPROM_FINISH_TIME_DEFAULT;
-							keyTransmitter(OFF);
-							g_event_enabled = FALSE;
-							g_event_commenced = FALSE;
-							g_check_for_next_event = TRUE;
-						}
-					}
-
 					if(g_on_the_air > 0)    /* on the air */
 					{
 						g_on_the_air--;
 
-						if(!g_time_to_send_ID_countdown && g_time_needed_for_ID)
+						if(!g_sendID_seconds_countdown && g_time_needed_for_ID)
 						{
 							if(g_on_the_air == g_time_needed_for_ID)    /* wait until the end of a transmission */
 							{
 								g_last_status_code = STATUS_CODE_SENDING_ID;
-								g_time_to_send_ID_countdown = g_ID_period_seconds;
+								g_sendID_seconds_countdown = g_ID_period_seconds;
 								g_code_throttle = throttleValue(g_id_codespeed);
 								repeat = FALSE;
 								makeMorse(g_messages_text[STATION_ID], &repeat, NULL);  /* Send only once */
@@ -397,6 +398,7 @@ void __attribute__((optimize("O1"))) wdt_init(WDReset resetType)
 								{
 									g_seconds_to_sleep = (time_t)(g_off_air_seconds - 10);
 									g_go_to_sleep = TRUE;
+									g_sendID_seconds_countdown = MAX(0, g_sendID_seconds_countdown-(int)g_seconds_to_sleep);
 								}
 							}
 							else
@@ -431,13 +433,13 @@ void __attribute__((optimize("O1"))) wdt_init(WDReset resetType)
 					{
 						g_last_status_code = STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT;
 						g_on_the_air = -g_intra_cycle_delay_time;
-						g_time_to_send_ID_countdown = g_intra_cycle_delay_time + g_on_air_seconds - g_time_needed_for_ID;
+						g_sendID_seconds_countdown = g_intra_cycle_delay_time + g_on_air_seconds - g_time_needed_for_ID;
 					}
 					else
 					{
 						g_last_status_code = STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING;
 						g_on_the_air = g_on_air_seconds;
-						g_time_to_send_ID_countdown = g_on_air_seconds - g_time_needed_for_ID;
+						g_sendID_seconds_countdown = g_on_air_seconds - g_time_needed_for_ID;
 						g_code_throttle = throttleValue(g_pattern_codespeed);
 						BOOL repeat = TRUE;
 						makeMorse(g_messages_text[PATTERN_TEXT], &repeat, NULL);
@@ -1528,16 +1530,20 @@ int main( void )
 			}
 		}
 
-		if(g_check_for_next_event)
+		if(g_check_for_next_event && !g_waiting_for_next_event)
 		{
-			if(!g_WiFi_shutdown_seconds)    /* For now just go to sleep forever */
+			if(!g_WiFi_shutdown_seconds)    /* Power up WiFi to receive next event */
 			{
-				g_go_to_sleep = TRUE;
-				g_seconds_to_sleep = MAX_TIME;
+				wifi_power(ON);     /* power on WiFi */
+				wifi_reset(OFF);    /* bring WiFi out of reset */
+			}
+			else /* WiFi is already powered up */
+			{
+				lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ESP_LABEL, "1");
 			}
 
-			/* If WiFi is powered up, send it a request for the next active event */
-
+			g_WiFi_shutdown_seconds = 60;
+			g_waiting_for_next_event = TRUE;
 			g_check_for_next_event = FALSE;
 		}
 
@@ -1648,37 +1654,20 @@ void __attribute__((optimize("O0"))) handleLinkBusMsgs()
 				}
 				else
 				{
-					if(f1 == '0')                   /* I'm awake message */
+					if(f1 == '0')                   /* ESP says "I'm awake" */
 					{
-						/* WiFi is awake. Send it the current time */
+						if(g_waiting_for_next_event)
+						{
+							calibrateOscillator(0); /* Abort baud calibration */
+							lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ESP_LABEL, "1"); /* Request next scheduled event */
+						}
+						/* Send WiFi the current time */
 						sprintf(g_tempStr, "%lu", time(NULL));
 						lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_CLOCK_LABEL, g_tempStr);
 					}
-					else
+					else if(f1 == '3') /* ESP is ready for power off" */
 					{
-						if(f1 == '1')
-						{
-							/* ESP8266 is ready with event data
-							 * Prepare to receive new event configuration settings */
-							suspendEvent();
-							initializeAllEventSettings(TRUE);
-						}
-						else
-						{
-							if(f1 == '2')                                               /* ESP module needs continuous power to save data */
-							{
-								/*suspendEvent(); */
-								g_WiFi_shutdown_seconds = 0;                            /* disable sleep */
-								lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_ESP_LABEL, "2"); /* Save data now */
-							}
-							else
-							{
-								if(f1 == '3')
-								{
-									g_WiFi_shutdown_seconds = 3;    /* Shut down WiFi in 3 seconds */
-								}
-							}
-						}
+						g_WiFi_shutdown_seconds = 3;    /* Shut down WiFi in 3 seconds */
 					}
 				}
 			}
@@ -1765,7 +1754,7 @@ void __attribute__((optimize("O0"))) handleLinkBusMsgs()
 								g_on_air_seconds = 9999;                    /* on period is very long */
 								g_off_air_seconds = 0;                      /* off period is very short */
 								g_on_the_air = 9999;                        /*  start out transmitting */
-								g_time_to_send_ID_countdown = MAX_UINT16;   /* wait a long time to send the ID */
+								g_sendID_seconds_countdown = MAX_UINT16;   /* wait a long time to send the ID */
 								g_event_commenced = TRUE;                   /* get things running immediately */
 								g_event_enabled = TRUE;                     /* get things running immediately */
 								g_last_status_code = STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING;
@@ -1848,6 +1837,8 @@ void __attribute__((optimize("O0"))) handleLinkBusMsgs()
 
 			case MESSAGE_CLOCK:
 			{
+				g_wifi_active = TRUE;
+
 				if(lb_buff->type == LINKBUS_MSG_COMMAND)    /* ignore replies since, as the time source, we should never be sending queries anyway */
 				{
 					if(lb_buff->fields[FIELD1][0])
@@ -2140,10 +2131,9 @@ BOOL __attribute__((optimize("O0"))) eventEnabled(BOOL noSleep, time_t* time_bef
 	if(isDisabled)
 	{
 		return( FALSE);         /* completed events are never enabled */
-
 	}
 	dif = timeDif(now, g_event_start_time);
-	hasStarted = (dif >= -60);  /* consider it started if it is withing 60 seconds of its start time */
+	hasStarted = (dif >= -60);  /* consider it started if it is within 60 seconds of its start time */
 
 	if(hasStarted || noSleep)   /* running events, or if we don't care about sleep before they start, are always enabled */
 	{
@@ -2211,6 +2201,11 @@ EC activateEventUsingCurrentSettings(SC* statusCode)
 		return( ERROR_CODE_EVENT_MISSING_START_TIME);
 	}
 
+	if(g_event_start_time >= g_event_finish_time)   /* Finish must be later than start */
+	{
+		return( ERROR_CODE_EVENT_NOT_CONFIGURED);
+	}
+
 	if(!g_on_air_seconds)
 	{
 		return( ERROR_CODE_EVENT_MISSING_TRANSMIT_DURATION);
@@ -2245,11 +2240,6 @@ EC activateEventUsingCurrentSettings(SC* statusCode)
 		g_time_needed_for_ID = 0;                   /* ID will never be sent */
 	}
 
-	if(g_event_start_time >= g_event_finish_time)   /* the event never ends */
-	{
-		g_event_finish_time = MAX_TIME;
-	}
-
 	time_t now = time(NULL);
 	if(g_event_finish_time < now)   /* the event has already finished */
 	{
@@ -2278,7 +2268,11 @@ EC activateEventUsingCurrentSettings(SC* statusCode)
 					{
 						*statusCode = STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT;
 					}
-					g_time_to_send_ID_countdown = (g_on_air_seconds - g_on_the_air) - g_time_needed_for_ID;
+
+					if(!g_event_enabled)
+					{
+						g_sendID_seconds_countdown = (g_on_air_seconds - g_on_the_air) - g_time_needed_for_ID;
+					}
 				}
 				else    /* we should be transmitting right now */
 				{
@@ -2288,9 +2282,13 @@ EC activateEventUsingCurrentSettings(SC* statusCode)
 					{
 						*statusCode = STATUS_CODE_EVENT_STARTED_NOW_TRANSMITTING;
 					}
-					if(g_time_needed_for_ID < g_on_the_air)
+
+					if(!g_event_enabled)
 					{
-						g_time_to_send_ID_countdown = g_on_the_air - g_time_needed_for_ID;
+						if(g_time_needed_for_ID < g_on_the_air)
+						{
+							g_sendID_seconds_countdown = g_on_the_air - g_time_needed_for_ID;
+						}
 					}
 				}
 			}
@@ -2301,7 +2299,11 @@ EC activateEventUsingCurrentSettings(SC* statusCode)
 				{
 					*statusCode = STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT;
 				}
-				g_time_to_send_ID_countdown = timeTillTransmit + g_on_air_seconds - g_time_needed_for_ID;
+
+				if(!g_event_enabled)
+				{
+					g_sendID_seconds_countdown = timeTillTransmit + g_on_air_seconds - g_time_needed_for_ID;
+				}
 			}
 
 			if(turnOnTransmitter)
@@ -2327,6 +2329,8 @@ EC activateEventUsingCurrentSettings(SC* statusCode)
 			}
 			keyTransmitter(OFF);
 		}
+
+		g_waiting_for_next_event = FALSE;
 	}
 
 	return( ERROR_CODE_NO_ERROR);

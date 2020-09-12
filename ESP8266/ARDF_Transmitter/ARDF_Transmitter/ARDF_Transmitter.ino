@@ -2453,7 +2453,67 @@ void httpWebServerLoop(int blinkRate)
           g_ESP_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
         }
         break;
+            
+            
+      case TX_SEND_NEXT_EVENT_TO_ATMEGA:
+        {
+            g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
+            g_numberOfScheduledEvents = numberOfEventsScheduled(g_timeOfDayFromTx);
 
+            if (g_numberOfScheduledEvents)
+            {
+        #if TRANSMITTER_COMPILE_DEBUG_PRINTS
+              if (g_debug_prints_enabled)
+              {
+                String msg = String("Scheduled event(s): ") + g_numberOfScheduledEvents;
+                Serial.println(msg);
+              }
+        #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+
+              if (!g_activeEvent)
+              {
+        #if TRANSMITTER_COMPILE_DEBUG_PRINTS
+                g_activeEvent = new Event(g_debug_prints_enabled);
+        #else
+                g_activeEvent = new Event(false);
+        #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+              }
+
+              g_activeEvent->readEventFile(g_eventList[0].path);
+
+              if (!loadActiveEventFile(g_eventList[0].path))
+              {
+                blinkPeriodMillis = 500;
+        #if TRANSMITTER_COMPILE_DEBUG_PRINTS
+                if (g_debug_prints_enabled)
+                {
+                  String msg = String("Scheduled event loaded: ");
+                  msg = msg + g_activeEvent->getEventName();
+                  Serial.println(msg);
+                }
+        #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+              }
+              else
+              {
+                blinkPeriodMillis = 100;
+        #if TRANSMITTER_COMPILE_DEBUG_PRINTS
+                if (g_debug_prints_enabled)
+                {
+                  Serial.println("Scheduled event load failed.");
+                }
+        #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
+              }
+            }
+            else
+            {
+                blinkPeriodMillis = 100;
+            }
+            
+            g_ESP_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
+        }
+        break;
+            
+            
       case TX_RECD_START_EVENT_REQUEST:
         {
           g_http_server.handleClient();
@@ -4869,18 +4929,18 @@ void handleLBMessage(String message)
   }
   else if (type.equals(LB_MESSAGE_ESP))
   {
+#if TRANSMITTER_COMPILE_DEBUG_PRINTS
+    if (g_debug_prints_enabled)
+    {
+      Serial.println(String("Rcvd ESP Msg w/ payload: ") + payload);
+    }
+#endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
     if (payload.equals("1")) /* Atmega is asking to receive the next active event */
     {
       if (g_ESP_Comm_State == TX_WAITING_FOR_INSTRUCTIONS)
       {
-        if (g_numberOfScheduledEvents && (g_activeEvent != NULL))
-        {
-          if (g_activeEvent->isNotDisabledEvent(g_timeOfDayFromTx))
-          {
-            g_ESP_Comm_State = TX_RECD_START_EVENT_REQUEST;
-            g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
-          }
-        }
+        g_ESP_Comm_State = TX_SEND_NEXT_EVENT_TO_ATMEGA;
+        g_LBOutputBuff->put(LB_MESSAGE_ESP_KEEPALIVE);
       }
       else
       {
