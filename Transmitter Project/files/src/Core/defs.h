@@ -32,7 +32,7 @@
 
 /******************************************************
  * Set the text that gets displayed to the user */
-#define SW_REVISION "1.4"
+#define SW_REVISION "1.6"
 
 //#define TRANQUILIZE_WATCHDOG
 
@@ -108,6 +108,14 @@ typedef enum {
 	STATUS_CODE_EVENT_STARTED_WAITING_FOR_TIME_SLOT = 0xFE,
 	STATUS_CODE_WAITING_FOR_EVENT_START = 0xFF
 	} SC;
+
+typedef enum {
+	NOT_SLEEPING,
+	SLEEP_UNTIL_START_TIME,
+	SLEEP_UNTIL_NEXT_XMSN,
+	SLEEP_AFTER_WIFI_GOES_OFF,
+	SLEEP_FOREVER
+	} SleepType;
 
 /*******************************************************/
 /*******************************************************
@@ -239,12 +247,6 @@ typedef enum
 	ANT_80M_CONNECTED,
 	ANT_2M_AND_80M_CONNECTED
 } AntConnType;
-
-typedef enum
-{
-	POWER_UP,
-	POWER_SLEEP
-} InitActionType;
 
 #define QUAD_MASK 0xC0
 #define QUAD_A 7
