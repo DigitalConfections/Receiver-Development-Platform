@@ -2503,13 +2503,13 @@ void httpWebServerLoop(int blinkRate)
                 }
         #endif // TRANSMITTER_COMPILE_DEBUG_PRINTS
               }
+            
+              g_ESP_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
             }
             else
             {
-                blinkPeriodMillis = 100;
+              g_ESP_Comm_State = TX_POWER_DOWN_NOW;
             }
-            
-            g_ESP_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
         }
         break;
             
@@ -2955,6 +2955,30 @@ void httpWebServerLoop(int blinkRate)
         {
           blinkPeriodMillis = 500;
           g_ESP_Comm_State = TX_WAITING_FOR_INSTRUCTIONS;
+        }
+        break;
+
+
+      case TX_POWER_DOWN_NOW:
+        {
+          int secs2try = 5;
+          static unsigned long last = 0;
+          if (secs2try)
+          {
+            if (abs(millis() - last) > 1000)
+            {
+                last = millis();
+                secs2try--;
+
+                if(!secs2try)
+                {
+                    g_LBOutputBuff->put(LB_MESSAGE_ESP_SHUTDOWN);
+                    secs2try = 5;
+                }
+            }
+          }
+            
+          blinkPeriodMillis = 100;
         }
         break;
 
