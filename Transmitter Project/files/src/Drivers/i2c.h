@@ -66,20 +66,28 @@
 #ifdef INCLUDE_DAC081C085_SUPPORT
 
 	#define DAC081C_I2C_SLAVE_ADDR_A0 0x18 /* 24dec: ADR0 = FLT, ADR1 = FLT */
-	#define DAC081C_I2C_SLAVE_ADDR_A1 0x1A /* 26dec: ADR0 = GND, ADR1 = FLT */
-	#define DAC081C_I2C_SLAVE_ADDR_A2 0x10 /* 16dec: ADR0 = FLT, ADR1 = GND */
+//	#define DAC081C_I2C_SLAVE_ADDR_A1 0x1A /* 26dec: ADR0 = GND, ADR1 = FLT */
+//	#define DAC081C_I2C_SLAVE_ADDR_A2 0x10 /* 16dec: ADR0 = FLT, ADR1 = GND */
+	#define MCP4552_I2C_SLAVE_ADDR_A0 0x58
 
 	/**
 	   Set the DAC to the value passed in setting.
 	*/
 	BOOL dac081c_set_dac(uint8_t setting, uint8_t addr);
 
+#ifdef READ_DAC_SUPPORT
 	/**
 	   Get the current DAC setting.
 	*/
 	BOOL dac081c_read_dac(uint8_t *val, uint8_t addr);
-
+#endif // READ_DAC_SUPPORT
 
 #endif // INCLUDE_DAC081C085_SUPPORT
+
+	/**
+	   Set the POT to the value passed in setting.
+	*/
+	BOOL mcp4552_set_pot(uint16_t setting, uint8_t addr);
+
 
 #endif  /* I2C_H_ */

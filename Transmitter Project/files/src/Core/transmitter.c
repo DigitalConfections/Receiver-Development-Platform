@@ -35,15 +35,10 @@
 	extern uint8_t g_mod_up;
 	extern uint8_t g_mod_down;
 	extern volatile BatteryType g_battery_type;
-	EC (*g_txTask)(BiasStateMachineCommand* smCommand) = NULL;  /* allows the transmitter to specify functions to run in the foreground */
-/*	extern EC (*g_txTask)(BiasStateMachineCommand* smCommand);  / * allow the transmitter to specify functions to run in the foreground * / */
-	static volatile uint8_t g_new_2m_power_DAC_setting = 0;
-	static volatile uint16_t g_new_power_level_mW = 0;
-	static volatile RadioBand g_new_band_setting = BAND_INVALID;
-	static volatile BOOL g_new_AM_mod_setting = FALSE;
-	static volatile BOOL g_new_power_enable_setting = FALSE;
-	static volatile BOOL g_new_2m_power_level_received = FALSE;
-	static volatile BOOL g_new_parameters_received = FALSE;
+
+#ifdef SUPPORT_STATE_MACHINE
+		EC (*g_txTask)(BiasStateMachineCommand* smCommand) = NULL;  /* allows the transmitter to specify functions to run in the foreground */
+#endif /* SUPPORT_STATE_MACHINE */
 
 	static volatile BOOL g_tx_initialized = FALSE;
 	static volatile Frequency_Hz g_2m_frequency = DEFAULT_TX_2M_FREQUENCY;
@@ -53,7 +48,6 @@
 	static volatile Frequency_Hz g_rtty_offset = DEFAULT_RTTY_OFFSET_FREQUENCY;
 	static volatile RadioBand g_activeBand = DEFAULT_TX_ACTIVE_BAND;
 	static volatile Modulation g_2m_modulationFormat = DEFAULT_TX_2M_MODULATION;
-	volatile BOOL g_am_modulation_enabled = FALSE;
 	static volatile uint8_t g_am_drive_level_high = DEFAULT_AM_DRIVE_LEVEL_HIGH;
 	static volatile uint8_t g_am_drive_level_low = DEFAULT_AM_DRIVE_LEVEL_LOW;
 /*	static volatile uint8_t g_cw_drive_level = DEFAULT_CW_DRIVE_LEVEL; */
@@ -94,11 +88,11 @@
 
 	/**
 	 */
-	void txGet2mModulationLevels(uint8_t *high, uint8_t *low);
+	void txSet2mModulationGlobals(uint8_t *high, uint8_t *low);
 
 	/**
 	 */
-	EC tx2mBiasStateMachine(BiasStateMachineCommand* smCommand);
+/*	EC tx2mBiasStateMachine(BiasStateMachineCommand* smCommand); */
 
 /*
  *       This function sets the VFO frequency (CLK0 of the Si5351) based on the intended frequency passed in by the parameter (freq),
@@ -130,6 +124,7 @@
 			if(bandSet == BAND_2M)
 			{
 				si5351_set_freq(*freq, TX_CLOCK_VHF, leaveClockOff);
+				si5351_set_freq(*freq + 10000, TX_CLOCK_VHF_FM, leaveClockOff);
 			}
 			else
 			{
@@ -159,7 +154,7 @@
 		return( FREQUENCY_NOT_SPECIFIED);
 	}
 
-	void txGet2mModulationLevels(uint8_t *high, uint8_t *low)
+	void txSet2mModulationGlobals(uint8_t *high, uint8_t *low)
 	{
 		if(g_activeBand != BAND_2M)
 		{
@@ -196,9 +191,6 @@
 			{
 				PORTB &= ~(1 << PORTB0);    /* Turn VHF off */
 				PORTB |= (1 << PORTB1);     /* Turn HF on */
-
-				uint16_t pwr_mW = g_80m_power_level_mW;
-				result = txSetParameters(&pwr_mW, NULL, NULL, NULL);
 			}
 			else
 			{
@@ -208,17 +200,24 @@
 		}
 		else
 		{
-			PORTB &= ~((1 << PORTB0) | (1 << PORTB1));  /* Turn off both bands */
+			BOOL err;
+			PORTB &= ~(1 << PORTB1);  /* Turn off 80m band */
 
-			if(g_activeBand == BAND_80M)
+			if(g_activeBand == BAND_2M)
 			{
-				BOOL err = dac081c_set_dac(0, PA_DAC);
+				err = mcp4552_set_pot(0, BIAS_POT);
 				if(err)
 				{
-					result = ERROR_CODE_DAC1_NONRESPONSIVE;
+					result = ERROR_CODE_DAC2_NONRESPONSIVE;
 				}
+			}
 
-				PORTB &= ~(1 << PORTB6);    /* Turn off Tx power */
+			PORTB &= ~(1 << PORTB0);
+
+			err = dac081c_set_dac(0, PA_DAC);
+			if(err)
+			{
+				result = ERROR_CODE_DAC1_NONRESPONSIVE;
 			}
 		}
 
@@ -238,6 +237,7 @@
 				else
 				{
 					si5351_clock_enable(TX_CLOCK_VHF, SI5351_CLK_ENABLED);
+					si5351_clock_enable(TX_CLOCK_VHF_FM, SI5351_CLK_ENABLED);
 				}
 
 				g_transmitter_keyed = TRUE;
@@ -252,28 +252,24 @@
 			else
 			{
 				si5351_clock_enable(TX_CLOCK_VHF, SI5351_CLK_DISABLED);
+				si5351_clock_enable(TX_CLOCK_VHF_FM, SI5351_CLK_DISABLED);
 			}
 
 			g_transmitter_keyed = FALSE;
 		}
 	}
 
-	EC __attribute__((optimize("O0"))) txSetParameters(uint16_t* power_mW, RadioBand* band, BOOL* enableAM, BOOL* enableDriverPwr)
-/*	EC txSetParameters(uint16_t* power_mW, RadioBand* band, BOOL* enableAM, BOOL* enableDriverPwr) */
+	EC __attribute__((optimize("O0"))) txSetParameters(uint16_t* power_mW, RadioBand* band, Modulation* modulationType, BOOL* enableDriverPwr)
+/*	EC txSetParameters(uint16_t* power_mW, RadioBand* band, Modulation* modulationType, BOOL* enableDriverPwr) */
 	{
 		BOOL err = FALSE;
 		EC code = ERROR_CODE_NO_ERROR;
-		uint16_t power;
-
-		BOOL isNewBand = FALSE;
+		uint16_t power = 0;
+		Modulation modulation = MODE_INVALID;
 
 		if(power_mW)
 		{
 			power = *power_mW;
-		}
-		else
-		{
-			power = g_80m_power_level_mW;
 		}
 
 		if(band != NULL)
@@ -281,97 +277,54 @@
 			/* Handle Band Setting */
 			if(g_activeBand != *band)
 			{
-				isNewBand = TRUE;
 				keyTransmitter(OFF);
 				powerToTransmitter(OFF);
+				g_activeBand = *band;
 
-				if(*band == BAND_80M)
+				Frequency_Hz f = FREQUENCY_NOT_SPECIFIED;
+
+				if(g_activeBand == BAND_2M)
 				{
-					g_new_AM_mod_setting = FALSE;
-					g_new_power_enable_setting = TRUE;
-
-					if(g_activeBand == BAND_2M) /* Must power off 2m before setting new band */
-					{
-						g_new_parameters_received = TRUE;
-						g_new_2m_power_DAC_setting = 0;
-						g_new_power_level_mW = power;
-						g_new_band_setting = BAND_80M;
-
-						if(enableAM != NULL)
-						{
-							g_new_AM_mod_setting = *enableAM;
-						}
-
-						if(enableDriverPwr != NULL)
-						{
-							g_new_power_enable_setting = *enableDriverPwr;
-						}
-
-						BiasStateMachineCommand bsmc = BIAS_SM_STABILITY_CHECK;
-						code = tx2mBiasStateMachine(&bsmc);
-
-						if(code == ERROR_CODE_NO_ERROR)
-						{
-							g_activeBand = BAND_INVALID;    /* prevent this branch from executing next time, when called by the SM */
-							g_txTask = tx2mBiasStateMachine;
-						}
-
-						return( code);
-					}
-					else
-					{
-						g_activeBand = BAND_80M;
-					}
-				}
-				else if(*band == BAND_2M)
-				{
-					g_activeBand = *band;
-					Frequency_Hz f = g_2m_frequency;
-					txSetFrequency(&f, TRUE);
+					f = g_2m_frequency;
 
 					if(power_mW == NULL)
 					{
 						power = g_2m_power_level_mW;
 					}
 
-					if(enableAM == NULL)
+					if(modulationType == NULL)
 					{
-						enableAM = (BOOL*)&g_am_modulation_enabled;
+						modulation = g_2m_modulationFormat;
 					}
 				}
+				else if (g_activeBand == BAND_80M)
+				{
+					f = g_80m_frequency;
+					modulation = MODE_CW;
+				}
+
+				txSetFrequency(&f, TRUE);
 			}
 		}
 
-		if(enableAM != NULL)
+		if(modulationType != NULL)
 		{
-			/* Handle Modulation Setting */
-			if(isNewBand || (*enableAM != g_am_modulation_enabled))
+			if(g_activeBand	== BAND_2M)
 			{
-				if((g_activeBand == BAND_2M) && *enableAM)
+				modulation = *modulationType;
+				g_2m_modulationFormat = modulation;
+
+				if(power_mW == NULL)
 				{
-					g_2m_modulationFormat = MODE_AM;
-					g_am_modulation_enabled = TRUE;
-					if(power_mW == NULL)
-					{
-						power = g_2m_power_level_mW;
-					}
+					power = g_2m_power_level_mW;
 				}
-				else
+			}
+			else
+			{
+				modulation = MODE_CW;
+				if(power_mW == NULL)
 				{
-					g_am_modulation_enabled = FALSE;
-					if(g_activeBand == BAND_2M)
-					{
-						g_2m_modulationFormat = MODE_CW;
-						g_am_modulation_enabled = FALSE;
-						if(power_mW == NULL)
-						{
-							power = g_2m_power_level_mW;
-						}
-					}
-					else if(power_mW == NULL)
-					{
-						power = g_80m_power_level_mW;
-					}
+					power = g_80m_power_level_mW;
 				}
 			}
 		}
@@ -380,90 +333,85 @@
 		{
 			if(power <= MAX_TX_POWER_80M_MW)
 			{
+				uint8_t drainVoltageDAC, modLevelHigh, modLevelLow;
+				code = txMilliwattsToSettings(&power, &drainVoltageDAC, &modLevelHigh, &modLevelLow);
+				err = (code == ERROR_CODE_SW_LOGIC_ERROR);
+
+				g_tx_power_is_zero = (power == 0);
+
 				if(!err)
 				{
-					uint8_t biasDAC, modLevelHigh, modLevelLow;
-					code = txMilliwattsToSettings(&power, &biasDAC, &modLevelHigh, &modLevelLow);
-					err = (code == ERROR_CODE_SW_LOGIC_ERROR);
-
-					g_tx_power_is_zero = (power == 0);
-
-					if(!err)
+					if(g_activeBand == BAND_2M)
 					{
-						if(g_activeBand == BAND_2M)
+						powerToTransmitter(ON);
+						txSet2mModulationGlobals(&modLevelHigh, &modLevelLow);
+						g_2m_power_level_mW = power;
+
+						if(txIsAntennaForBand())
 						{
-							if(g_new_2m_power_level_received)   /* check to see if last power level change completed */
+							err = dac081c_set_dac(drainVoltageDAC, PA_DAC);
+							if(err)
 							{
-								code = ERROR_CODE_2M_BIAS_SM_NOT_READY;
-								err = TRUE;
+								code = ERROR_CODE_DAC1_NONRESPONSIVE;
 							}
 							else
 							{
-								txGet2mModulationLevels(&modLevelHigh, &modLevelLow);
-
-								g_new_power_level_mW = power;
-								g_new_2m_power_DAC_setting = biasDAC;
-
-								if(txIsAntennaForBand())
-								{
-									BiasStateMachineCommand smc = BIAS_SM_STABILITY_CHECK;
-									code = tx2mBiasStateMachine(&smc);
-
-									if(code == ERROR_CODE_NO_ERROR)
-									{
-										g_new_2m_power_level_received = TRUE;
-										g_txTask = tx2mBiasStateMachine;
-									}
-
-									if(g_2m_modulationFormat == MODE_CW)
-									{
-										err = dac081c_set_dac(modLevelHigh, AM_DAC);
-										if(err)
-										{
-											code = ERROR_CODE_DAC2_NONRESPONSIVE;
-										}
-									}
-								}
-								else
-								{
-									g_tx_power_is_zero = TRUE;
-									err = TRUE;
-									code = ERROR_CODE_NO_ANTENNA_PREVENTS_POWER_SETTING;
-								}
+								code = txSet2mGateBias(modLevelLow);
+								err = (code != ERROR_CODE_NO_ERROR);
 							}
 						}
 						else
 						{
-							g_80m_power_level_mW = power;
+							g_tx_power_is_zero = TRUE;
+							err = TRUE;
+							code = ERROR_CODE_NO_ANTENNA_PREVENTS_POWER_SETTING;
+						}
 
-							if(txIsAntennaForBand())
-							{
-								err = dac081c_set_dac(biasDAC, PA_DAC);
-								if(err)
-								{
-									code = ERROR_CODE_DAC1_NONRESPONSIVE;
-								}
-							}
-							else
-							{
-								g_tx_power_is_zero = TRUE;
-								err = TRUE;
-								code = ERROR_CODE_NO_ANTENNA_PREVENTS_POWER_SETTING;
-							}
-
-							if(g_tx_power_is_zero || err || (biasDAC == 0))
-							{
-								PORTB &= ~(1 << PORTB6);    /* Turn off Tx power */
-							}
-							else
-							{
-								PORTB |= (1 << PORTB6);     /* Turn on Tx power */
-							}
+						if(g_tx_power_is_zero || err || (drainVoltageDAC == 0))
+						{
+							PORTB &= ~(1 << PORTB6);    /* Turn off Tx power */
+						}
+						else
+						{
+							PORTB |= (1 << PORTB6);     /* Turn on Tx power */
 						}
 					}
+					else // BAND_80M
+					{
+						g_80m_power_level_mW = power;
 
-					*power_mW = power;
+						if(txIsAntennaForBand())
+						{
+							err = dac081c_set_dac(drainVoltageDAC, PA_DAC);
+							if(err)
+							{
+								code = ERROR_CODE_DAC1_NONRESPONSIVE;
+							}
+						}
+						else
+						{
+							g_tx_power_is_zero = TRUE;
+							err = TRUE;
+							code = ERROR_CODE_NO_ANTENNA_PREVENTS_POWER_SETTING;
+						}
+
+						if(g_tx_power_is_zero || err || (drainVoltageDAC == 0))
+						{
+							PORTB &= ~(1 << PORTB6);    /* Turn off Tx power */
+						}
+						else
+						{
+							PORTB |= (1 << PORTB6);     /* Turn on Tx power */
+						}
+					}
 				}
+
+				*power_mW = power;
+			}
+			else
+			{
+				err = TRUE;
+				code = ERROR_CODE_POWER_LEVEL_NOT_SUPPORTED;
 			}
 		}
 
@@ -479,19 +427,28 @@
 	}
 
 
+	EC txSet2mGateBias(uint8_t bias)
+	{
+		EC code = ERROR_CODE_NO_ERROR;
+		BOOL err = mcp4552_set_pot(bias, BIAS_POT); // set rheostat
+
+		if(err)
+		{
+			code = ERROR_CODE_DAC2_NONRESPONSIVE;
+		}
+
+		return(code);
+	}
+
+
 	Modulation txGetModulation(void)
 	{
 		if(g_activeBand == BAND_2M)
 		{
-			return( g_2m_modulationFormat);
+			return(g_2m_modulationFormat);
 		}
 
-		return( MODE_INVALID);
-	}
-
-	BOOL txAMModulationEnabled(void)
-	{
-		return( g_am_modulation_enabled);
+		return(MODE_CW);
 	}
 
 	EC init_transmitter(void)
@@ -499,14 +456,6 @@
 		EC code;
 		RadioBand bnd;
 
-		BiasStateMachineCommand bsmc = BIAS_SM_IS_POWER_OFF;
-
-		code = tx2mBiasStateMachine(&bsmc);
-		if(code != ERROR_CODE_NO_ERROR)
-		{
-			return(code);   /* never initialize if bias to 2m module is not turned off */
-
-		}
 		if((code = si5351_init(SI5351_CRYSTAL_LOAD_6PF, 0)))
 		{
 			return( code);
@@ -581,7 +530,6 @@
 			g_rtty_offset = eeprom_read_dword(&ee_cw_offset_frequency);
 			g_am_drive_level_high = eeprom_read_byte(&ee_am_drive_level_high);
 			g_am_drive_level_low = eeprom_read_byte(&ee_am_drive_level_low);
-/*			g_cw_drive_level = eeprom_read_byte(&ee_cw_drive_level); */
 			g_2m_modulationFormat = eeprom_read_byte(&ee_active_2m_modulation);
 		}
 		else
@@ -796,7 +744,7 @@ EC txMilliwattsToSettings(uint16_t* powerMW, uint8_t* driveLevel, uint8_t* modLe
 			*modLevelLow = *modLevelHigh;
 		}
 
-		*driveLevel = MAX(*driveLevel, MIN_2M_BIAS_SETTING);
+		*driveLevel = MIN(*driveLevel, MAX_2M_PWR_SETTING);
 	}
 
 	return(ec);
@@ -843,186 +791,3 @@ BOOL __attribute__((optimize("O0"))) txIsAntennaForBand(void)
 
 	return( result);
 }
-
-
-BOOL txSleeping(BOOL enableSleep)
-{
-	BiasStateMachineCommand bsmc = BIAS_SM_IS_POWER_OFF;
-	EC ec = tx2mBiasStateMachine(&bsmc);
-
-	if(ec == ERROR_CODE_NO_ERROR)
-	{
-		uint8_t val;
-		static uint8_t timeOut = 30;            /* don't wait forever for success */
-
-		if(!dac081c_read_dac(&val, BIAS_DAC))   /* ensure the DAC is set to zero */
-		{
-			if(!val)
-			{
-				return( TRUE);
-			}
-			else
-			{
-				if(timeOut)
-				{
-					timeOut--;
-				}
-
-				if(!timeOut)
-				{
-					timeOut = 10;
-					return( TRUE);
-				}
-			}
-		}
-		else
-		{
-			if(timeOut)
-			{
-				timeOut--;
-			}
-
-			if(!timeOut)
-			{
-				timeOut = 10;
-				return( TRUE);
-			}
-		}
-	}
-	else if(enableSleep)
-	{
-		g_new_2m_power_DAC_setting = 0;
-		g_new_2m_power_level_received = TRUE;
-		g_txTask = tx2mBiasStateMachine;
-	}
-
-	return( FALSE);
-}
-
-
-/**
- *  State machine for setting 2m Power Amplifier bias.
- *  Note: This function is executed by the TIMER2_COMPB interrupt service routine.
- */
-/*EC __attribute__((optimize("O0"))) tx2mBiasStateMachine(BiasStateMachineCommand* smCommand) */
-EC tx2mBiasStateMachine(BiasStateMachineCommand* smCommand)
-{
-	static volatile BiasState bias_state = BIAS_POWERED_OFF;
-	static volatile BOOL smFailed = FALSE;
-	static volatile uint8_t hold_new_bias_DAC_setting = 0;
-	static volatile uint16_t hold_new_power_setting_MW = 0;
-	EC ec = ERROR_CODE_NO_ERROR;
-
-	if(smCommand || smFailed)
-	{
-		if(smFailed)
-		{
-			dac081c_set_dac(BIAS_MINUS_2V, BIAS_DAC);   /* set negative bias for safety */
-			PORTB &= ~(1 << PORTB6);                    /* Turn off Tx power */
-			dac081c_set_dac(BUCK_0V, PA_DAC);
-			bias_state = BIAS_POWERED_OFF;
-		}
-
-		if(*smCommand == BIAS_SM_COMMAND_INIT)
-		{
-			smFailed = FALSE;
-			bias_state = BIAS_POWERED_OFF;
-		}
-		else if(*smCommand == BIAS_SM_STABILITY_CHECK)
-		{
-			if(!((bias_state == BIAS_POWERED_OFF) || (bias_state == BIAS_POWERED_UP)))
-			{
-				ec = ERROR_CODE_2M_BIAS_SM_NOT_READY;
-			}
-		}
-		else if(*smCommand == BIAS_SM_IS_POWER_OFF)
-		{
-			if(bias_state != BIAS_POWERED_OFF)
-			{
-				ec = ERROR_CODE_2M_BIAS_SM_NOT_READY;
-			}
-		}
-	}
-	else
-	{
-		if(bias_state == BIAS_POWERED_OFF)
-		{
-			if(g_new_parameters_received)
-			{
-				g_new_parameters_received = FALSE;
-				txSetParameters((uint16_t*)&g_new_power_level_mW, (uint8_t*)&g_new_band_setting, (BOOL*)&g_new_AM_mod_setting, (BOOL*)&g_new_power_enable_setting);
-				return( ec);
-			}
-			else if(g_new_2m_power_level_received)
-			{
-				g_new_2m_power_level_received = FALSE;
-				if(g_new_2m_power_DAC_setting > 0)
-				{
-					dac081c_set_dac(BIAS_MINUS_2V, BIAS_DAC);   /* set negative bias for safety */
-					hold_new_bias_DAC_setting = g_new_2m_power_DAC_setting;
-					hold_new_power_setting_MW = g_new_power_level_mW;
-					bias_state = BIAS_POWER_UP_STEP1;
-				}
-				return( ec);
-			}
-
-			dac081c_set_dac(0, BIAS_DAC);   /* set negative bias to zero */
-			g_txTask = NULL;
-		}
-		else if(bias_state == BIAS_POWER_UP_STEP1)
-		{
-			if(hold_new_power_setting_MW == 0)  /* Leave power to PA turned off if power setting is zero */
-			{
-				bias_state = BIAS_POWER_UP_STEP2;
-			}
-			else
-			{
-				BOOL err = dac081c_set_dac(BUCK_5V, PA_DAC);    /* set to 9V max for the MAAP-011232 */
-
-				if(err)
-				{
-					PORTB &= ~(1 << PORTB6);                    /* Turn off Tx power */
-					bias_state = BIAS_POWERED_OFF;
-					ec = ERROR_CODE_DAC1_NONRESPONSIVE;
-				}
-				else
-				{
-					PORTB |= (1 << PORTB6); /* Turn on Tx power */
-					bias_state = BIAS_POWER_UP_STEP2;
-				}
-			}
-		}
-		else if(bias_state == BIAS_POWER_UP_STEP2)
-		{
-			dac081c_set_dac(hold_new_bias_DAC_setting, BIAS_DAC);   /* set negative bias for correct power output */
-			g_2m_power_level_mW = hold_new_power_setting_MW;
-			bias_state = BIAS_POWERED_UP;
-		}
-		else if(bias_state == BIAS_POWERED_UP)
-		{
-			if((g_new_parameters_received) || (g_new_2m_power_level_received))
-			{
-				bias_state = BIAS_POWER_OFF_STEP1;
-			}
-			else
-			{
-				g_txTask = NULL;
-			}
-		}
-		else if(bias_state == BIAS_POWER_OFF_STEP1)
-		{
-			dac081c_set_dac(BIAS_MINUS_2V, BIAS_DAC);   /* set negative bias for safety */
-			bias_state = BIAS_POWER_OFF_STEP2;
-		}
-		else if(bias_state == BIAS_POWER_OFF_STEP2)
-		{
-			dac081c_set_dac(BUCK_0V, PA_DAC);   /* set to 0V for the MAAP-011232 */
-
-			PORTB &= ~(1 << PORTB6);            /* Turn off Tx power */
-			bias_state = BIAS_POWERED_OFF;
-		}
-	}
-
-	return( ec);
-}
-

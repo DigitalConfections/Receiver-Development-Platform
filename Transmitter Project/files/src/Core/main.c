@@ -81,10 +81,12 @@ volatile BatteryType g_battery_type = BATTERY_UNKNOWN;
 
 static volatile BOOL g_antenna_connection_changed = TRUE;
 volatile AntConnType g_antenna_connect_state = ANT_CONNECTION_UNDETERMINED;
-static volatile uint16_t g_2m_bias_delay = 0;
 
+#ifdef SUPPORT_STATE_MACHINE
 /*EC (*g_txTask)(BiasStateMachineCommand* smCommand) = NULL; / * allows the transmitter to specify functions to run in the foreground * / */
 extern EC (*g_txTask)(BiasStateMachineCommand* smCommand);  /* allow the transmitter to specify functions to run in the foreground */
+#endif // SUPPORT_STATE_MACHINE
+
 volatile uint8_t g_mod_up = MAX_2M_CW_DRIVE_LEVEL;
 volatile uint8_t g_mod_down = MAX_2M_CW_DRIVE_LEVEL;
 
@@ -164,7 +166,6 @@ static volatile uint16_t g_lastConversionResult[NUMBER_OF_POLLED_ADC_CHANNELS];
 extern volatile BOOL g_i2c_not_timed_out;
 static volatile BOOL g_sufficient_power_detected = FALSE;
 static volatile BOOL g_enableHardwareWDResets = FALSE;
-extern BOOL g_am_modulation_enabled;
 extern volatile BOOL g_tx_power_is_zero;
 
 static volatile BOOL g_go_to_sleep = FALSE;
@@ -416,7 +417,7 @@ void __attribute__((optimize("O1"))) wdt_init(WDReset resetType)
 								}
 
 								/* Don't sleep for the last cycle to ensure that the event doesn't end while
-								 *  the transmitter is sleeping - which can cause problems with loading the next event */
+								 * the transmitter is sleeping - which can cause problems with loading the next event */
 								if(timeRemaining > (g_off_air_seconds + g_on_air_seconds + 15))
 								{
 									if((g_off_air_seconds > 15) && !g_WiFi_shutdown_seconds)
@@ -547,17 +548,14 @@ ISR( TIMER2_COMPB_vect )
 	static BOOL conversionInProcess = FALSE;
 	static int8_t indexConversionInProcess;
 	static uint16_t codeInc = 0;
-	static uint8_t amModulation = 0;
+	static uint8_t modulationToggle = 0;
 	BOOL repeat, finished;
 
 	if(g_util_tick_countdown)
 	{
 		g_util_tick_countdown--;
 	}
-	if(g_2m_bias_delay)
-	{
-		g_2m_bias_delay--;
-	}
+
 	if(g_baud_count)
 	{
 		g_baud_count--;
@@ -610,20 +608,35 @@ ISR( TIMER2_COMPB_vect )
 		}
 	}
 
-	if(g_am_modulation_enabled)
-	{
-		amModulation = !amModulation;
+	Modulation m = txGetModulation();
 
-		if(amModulation)
+	if(m != MODE_CW)
+	{
+		modulationToggle = !modulationToggle;
+
+		if(modulationToggle)
 		{
-			dac081c_set_dac(g_mod_up, AM_DAC);
+			if(m == MODE_AM)
+			{
+				txSet2mGateBias(g_mod_up);
+			}
+			else if(m == MODE_FM)
+			{
+				PORTC = I2C_PINS | (1 << PORTC3);
+			}
 		}
 		else
 		{
-			dac081c_set_dac(g_mod_down, AM_DAC);
+			if(m == MODE_AM)
+			{
+				txSet2mGateBias(g_mod_down);
+			}
+			else if(m == MODE_FM)
+			{
+				PORTC = I2C_PINS;
+			}
 		}
 	}
-
 
 	/**
 	 * Handle Periodic ADC Readings
@@ -1084,11 +1097,11 @@ void __attribute__((optimize("O1"))) set_ports(SleepType initType)
 		 * PC7 = N/A */
 
 		DDRC = (1 << PORTC3);
-		PORTC = I2C_PINS;
+		PORTC = I2C_PINS | (1 << PORTC3);
 
 		/**
 		 * TIMER2 is for periodic interrupts */
-		OCR2A = 0x0C;                                       /* set frequency to ~300 Hz (0x0c) */
+		OCR2A = OCR2A_OVF_BASE_FREQ;                         /* set frequency to ~300 Hz (0x0c) */
 		TCCR2A |= (1 << WGM01);                             /* set CTC with OCRA */
 		TCCR2B |= (1 << CS22) | (1 << CS21) | (1 << CS20);  /* 1024 Prescaler - why are we setting CS21?? */
 		TIMSK2 |= (1 << OCIE0B);                            /* enable compare interrupt */
@@ -1269,7 +1282,7 @@ int main( void )
 
 	wdt_reset();    /* HW watchdog */
 
-	g_util_tick_countdown = 20;
+	g_util_tick_countdown = 40;
 	while(linkbusTxInProgress() && g_util_tick_countdown)
 	{
 		;                       /* wait until transmit finishes */
@@ -1360,36 +1373,33 @@ int main( void )
 		 ******************************/
 		if(g_go_to_sleep)
 		{
-			if(txSleeping(TRUE))
+			init_hardware = FALSE;                  /* ensure failing attempts are canceled */
+			g_sufficient_power_detected = FALSE;    /* init hardware on return from sleep */
+			g_seconds_left_to_sleep = g_seconds_to_sleep;
+			linkbus_disable();
+
+			while(g_go_to_sleep)
 			{
-				init_hardware = FALSE;                  /* ensure failing attempts are canceled */
-				g_sufficient_power_detected = FALSE;    /* init hardware on return from sleep */
-				g_seconds_left_to_sleep = g_seconds_to_sleep;
-				linkbus_disable();
+				set_ports(g_sleepType); /* Sleep occurs here */
+			}
 
-				while(g_go_to_sleep)
-				{
-					set_ports(g_sleepType); /* Sleep occurs here */
-				}
+			set_ports(NOT_SLEEPING);
+			linkbus_enable();
+			wdt_init(WD_HW_RESETS);         /* enable hardware interrupts */
+			wdt_reset();                    /* HW watchdog */
+			g_i2c_not_timed_out = FALSE;    /* unstick I2C */
 
-				set_ports(NOT_SLEEPING);
-				linkbus_enable();
-				wdt_init(WD_HW_RESETS);         /* enable hardware interrupts */
-				wdt_reset();                    /* HW watchdog */
-				g_i2c_not_timed_out = FALSE;    /* unstick I2C */
-
-				if((g_sleepType == SLEEP_UNTIL_NEXT_XMSN) || (g_sleepType == SLEEP_UNTIL_START_TIME))
-				{
-					hw_tries = 10;              /* give up after too many failures */
-					init_hardware = TRUE;
-				}
-				else
-				{
-					g_wifi_enable_delay = 2;
-					g_WiFi_shutdown_seconds = 120;
-					g_last_status_code = STATUS_CODE_RETURNED_FROM_SLEEP;
-					g_check_for_next_event = TRUE;
-				}
+			if((g_sleepType == SLEEP_UNTIL_NEXT_XMSN) || (g_sleepType == SLEEP_UNTIL_START_TIME))
+			{
+				hw_tries = 10;              /* give up after too many failures */
+				init_hardware = TRUE;
+			}
+			else
+			{
+				g_wifi_enable_delay = 2;
+				g_WiFi_shutdown_seconds = 120;
+				g_last_status_code = STATUS_CODE_RETURNED_FROM_SLEEP;
+				g_check_for_next_event = TRUE;
 			}
 		}
 
@@ -1398,7 +1408,7 @@ int main( void )
 			if(!g_baud_count)
 			{
 				static uint8_t calVal = 10;
-				g_baud_count = 300;
+				g_baud_count = 3600 / OCR2A;
 				g_WiFi_shutdown_seconds = 240;
 
 				if(g_OSCCAL_inhibit)
@@ -1411,7 +1421,7 @@ int main( void )
 					else
 					{
 						calibrateOscillator(0); /* Tell WiFi that calibration finished */
-						g_baud_count = 3000;
+						g_baud_count = 36000 / OCR2A;
 					}
 				}
 				else if(calVal > 240)
@@ -1427,7 +1437,7 @@ int main( void )
 					}
 
 					calVal = 0;
-					g_baud_count = 500;
+					g_baud_count = 6000 / OCR2A;
 					init_hardware = TRUE;
 				}
 				else
@@ -1547,20 +1557,18 @@ int main( void )
 			}
 		}
 
+#ifdef SUPPORT_STATE_MACHINE
 		/* Perform tasks specified by the transmitter */
 		if(g_txTask)
 		{
-			if(!g_2m_bias_delay)
+			EC ec;
+			ec = (*g_txTask)(NULL);
+			if(ec)
 			{
-				EC ec;
-				g_2m_bias_delay = 16;   /* Adjust so that the state machine takes about 100 ms to step through all states */
-				ec = (*g_txTask)(NULL);
-				if(ec)
-				{
-					g_last_error_code = ec;
-				}
+				g_last_error_code = ec;
 			}
 		}
+#endif // SUPPORT_STATE_MACHINE
 
 		if(g_check_for_next_event && !g_waiting_for_next_event && !g_shutting_down_wifi)
 		{
@@ -1716,14 +1724,20 @@ void __attribute__((optimize("O0"))) handleLinkBusMsgs()
 			{
 				if(lb_buff->fields[FIELD1][0] == 'A')   /* AM */
 				{
-					BOOL setAMmodulation = TRUE;
-					txSetParameters(NULL, NULL, &setAMmodulation, NULL);
+					Modulation setModulation = MODE_AM;
+					txSetParameters(NULL, NULL, &setModulation, NULL);
 					event_parameter_count++;
 				}
 				else if(lb_buff->fields[FIELD1][0] == 'C')  /* CW */
 				{
-					BOOL setAMmodulation = FALSE;
-					txSetParameters(NULL, NULL, &setAMmodulation, NULL);
+					Modulation setModulation = MODE_CW;
+					txSetParameters(NULL, NULL, &setModulation, NULL);
+					event_parameter_count++;
+				}
+				else if(lb_buff->fields[FIELD1][0] == 'F')  /* FM */
+				{
+					Modulation setModulation = MODE_FM;
+					txSetParameters(NULL, NULL, &setModulation, NULL);
 					event_parameter_count++;
 				}
 			}
@@ -1979,7 +1993,7 @@ void __attribute__((optimize("O0"))) handleLinkBusMsgs()
 						speed = atol(lb_buff->fields[FIELD2]);
 						g_pattern_codespeed = CLAMP(5, speed, 20);
 						event_parameter_count++;
-						g_code_throttle = (7042 / g_pattern_codespeed) / 10;
+						g_code_throttle = throttleValue(g_pattern_codespeed);
 					}
 				}
 			}
@@ -2142,6 +2156,52 @@ void __attribute__((optimize("O0"))) handleLinkBusMsgs()
 			case MESSAGE_VER:
 			{
 				lb_send_msg(LINKBUS_MSG_REPLY, MESSAGE_VER_LABEL, SW_REVISION);
+			}
+			break;
+
+
+			case MESSAGE_BIAS:
+			{
+				if(lb_buff->fields[FIELD1][0])  /* value field */
+				{
+					EC ec = ERROR_CODE_ILLEGAL_COMMAND_RCVD;
+					char a = lb_buff->fields[FIELD1][0];
+
+					if(a == 'U')
+					{
+						int b = atoi(lb_buff->fields[FIELD2]);
+
+						if((b >= 0) && (b < 256))
+						{
+							g_mod_up = b;
+							ec = ERROR_CODE_NO_ERROR;
+						}
+					}
+					else if(a == 'D')
+					{
+						int b = atoi(lb_buff->fields[FIELD2]);
+
+						if((b >= 0) && (b < 256))
+						{
+							g_mod_down = b;
+							ec = ERROR_CODE_NO_ERROR;
+						}
+					}
+					else
+					{
+						int b = atoi(lb_buff->fields[FIELD1]);
+
+						if((b >= 0) && (b < 256))
+						{
+							ec = txSet2mGateBias(b);
+						}
+					}
+
+					if(ec)
+					{
+						g_last_error_code = ec;
+					}
+				}
 			}
 			break;
 
@@ -2477,10 +2537,10 @@ void saveAllEEPROM()
 
 uint16_t throttleValue(uint8_t speed)
 {
-	uint16_t temp;
+	uint16_t temp = 0x0C / OCR2A;
 
 	speed = CLAMP(5, (int8_t)speed, 20);
-	temp = (7042L / (uint16_t)speed) / 10L;
+	temp *= (7042L / (uint16_t)speed) / 10L;
 	return( temp);
 }
 
