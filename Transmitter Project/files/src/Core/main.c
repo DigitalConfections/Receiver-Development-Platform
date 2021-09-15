@@ -1101,7 +1101,7 @@ void __attribute__((optimize("O1"))) set_ports(SleepType initType)
 
 		/**
 		 * TIMER2 is for periodic interrupts */
-		OCR2A = OCR2A_OVF_BASE_FREQ;                         /* set frequency to ~300 Hz (0x0c) */
+		OCR2A = OCR2A_OVF_BASE_FREQ;                        /* set frequency to ~300 Hz (0x0c) */
 		TCCR2A |= (1 << WGM01);                             /* set CTC with OCRA */
 		TCCR2B |= (1 << CS22) | (1 << CS21) | (1 << CS20);  /* 1024 Prescaler - why are we setting CS21?? */
 		TIMSK2 |= (1 << OCIE0B);                            /* enable compare interrupt */
@@ -1521,10 +1521,13 @@ int main( void )
 
 							if(connection == ANT_80M_CONNECTED)
 							{
-								/*txSetBand(BAND_80M, OFF); */
 								g_last_status_code = STATUS_CODE_80M_ANT_ATTACHED;
-
-								/* TODO: re-enable transmitter power and state if it is currently operating */
+								/* Re-enable transmitter power and state if it is currently operating */
+								if(g_event_commenced)
+								{
+									hw_tries = 10;              /* give up after too many failures */
+									init_hardware = TRUE;
+								}
 							}
 							else if(connection == ANT_2M_CONNECTED)
 							{

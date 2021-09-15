@@ -500,7 +500,9 @@
 
 		if(bnd == BAND_80M)
 		{
+			uint16_t pwr_mW = g_80m_power_level_mW;
 			txSetFrequency((Frequency_Hz*)&g_80m_frequency, TRUE);
+			txSetParameters(&pwr_mW, NULL, NULL, NULL);
 		}
 		else if(bnd == BAND_2M)
 		{
