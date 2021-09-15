@@ -40,8 +40,8 @@ typedef int16_t Attenuation;
 #define RADIO_MINIMUM_RECEIVE_FREQ ((Frequency_Hz)3500000)
 #define MAX_TX_POWER_80M_MW 5000
 #define MAX_TX_POWER_80M_4r2V_MW 2000
-#define MAX_TX_POWER_2M_MW 1000
-#define MAX_TX_POWER_2M_4r2V_MW 100
+#define MAX_TX_POWER_2M_MW 2000
+#define MAX_TX_POWER_2M_4r2V_MW 1000
 
 /*
  * Define clock pins
@@ -59,8 +59,9 @@ typedef enum
 
 typedef enum
 {
-	MODE_CW = 0,
-	MODE_AM = 1,
+	MODE_AM = 0,
+	MODE_CW = 1,
+	MODE_FM = 2,
 	MODE_INVALID
 } Modulation;
 
@@ -116,14 +117,14 @@ typedef enum
 #define DEFAULT_TX_2M_POWER_MW 100
 #define DEFAULT_TX_80M_POWER_MW 500
 
-#define MIN_2M_BIAS_SETTING 80 /* minimum safe BIAS DAC setting = -0.8V*/
+#define MAX_2M_PWR_SETTING 255 /* maximum safe DAC setting */
 #define MAX_80M_PWR_SETTING 255 /* maximum safe DAC setting */
 
-#define DEFAULT_AM_DRIVE_LEVEL_HIGH 195
+#define DEFAULT_AM_DRIVE_LEVEL_HIGH 180
 #define DEFAULT_AM_DRIVE_LEVEL_LOW 0
 #define DEFAULT_CW_DRIVE_LEVEL 195
 
-#define MAX_2M_AM_DRIVE_LEVEL 240
+#define MAX_2M_AM_DRIVE_LEVEL 180
 #define MAX_2M_CW_DRIVE_LEVEL 240
 
 #define BUCK_9V 175
@@ -132,19 +133,16 @@ typedef enum
 #define BUCK_6V 100
 #define BUCK_5V 75
 #define BUCK_0V 0
-
-#define BIAS_MINUS_1V 90
-#define BIAS_MINUS_2V 255
-#define BIAS_MINUS_MAX 255
-
-                                                 /*  0,  10,  100,  200,  300,  400,   500,   600,  800,   1000,  1500,  2000,    2500,   3000,  4000,  5000 */
+                                               /*  0,10,100,200,300,400,500,600,800,1000,1500,2000,2500,3000,4000,5000 */
 #define DEFAULT_80M_POWER_TABLE ((const uint8_t[]){0, 2, 20, 40, 54, 62, 70, 78, 91, 100, 130, 155, 180, 200, 245, 254})
 
-#define DEFAULT_2M_AM_POWER_TABLE ((const uint8_t[]){250, 240, 230, 220, 210, 200, 190, 180, 170, 170, 170, 170, 170, 170, 170, 170})
-#define DEFAULT_2M_AM_DRIVE_HIGH_TABLE ((const uint8_t[]){150, 160, 170, 180, 190, 200, 210, 220, 230, 240, 240, 240, 240, 240, 240, 240})
-#define DEFAULT_2M_AM_DRIVE_LOW_TABLE ((const uint8_t[]){150, 150, 150, 150, 150, 150, 150, 150, 150, 150, 240, 240, 240, 240, 240, 240})
+                                                 /*  0,10,100,200,300,400,500,600,800,1000,1500,2000,2500,3000,4000,5000 */
+#define DEFAULT_2M_AM_POWER_TABLE ((const uint8_t[]){0, 4, 30, 43, 63, 80,100,115,135, 155, 200, 240, 240, 240, 240, 254})
+#define DEFAULT_2M_AM_DRIVE_HIGH_TABLE ((const uint8_t[]){180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180, 180})
+#define DEFAULT_2M_AM_DRIVE_LOW_TABLE  ((const uint8_t[]){ 50,  50,  50,  50,  50,  50,  50,  50,  50,  50,  50,  50,  50,  50,  50,  50})
 
-#define DEFAULT_2M_CW_POWER_TABLE ((const uint8_t[]){250, 240, 220, 200, 180, 160, 140, 120, 100, 100, 100, 100, 100, 100, 100, 100})
+                                                 /*  0,10,100,200,300,400,500,600,800,1000,1500,2000,2500,3000,4000,5000 */
+#define DEFAULT_2M_CW_POWER_TABLE ((const uint8_t[]){0, 4, 30, 43, 63, 80,100,115,135, 155, 200, 240, 240, 240, 240, 254})
 #define DEFAULT_2M_CW_DRIVE_TABLE ((const uint8_t[]){250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250, 250})
 
 #define TX_MINIMUM_2M_FREQUENCY 144000000
@@ -199,10 +197,6 @@ typedef enum {
 	EC init_transmitter(void);
 
 /**
-*/
-	BOOL txSleeping(BOOL enableSleep);
-
-/**
  */
 	void storeTransmitterValues(void);
 
@@ -224,11 +218,7 @@ typedef enum {
 
 /**
  */
-	BOOL txAMModulationEnabled(void);
-
-/**
- */
-	EC txSetParameters(uint16_t* power_mW, RadioBand* band, BOOL* enableAM, BOOL* enableDriverPwr);
+	EC txSetParameters(uint16_t* power_mW, RadioBand* band, Modulation* modulationType, BOOL* enableDriverPwr);
 
 /**
  */
@@ -264,5 +254,10 @@ BOOL txIsAntennaForBand(void);
 /**
  */
 void initializeTransmitterEEPROMVars(void);
+
+/**
+ */
+BOOL txSet2mGateBias(uint8_t bias);
+
 
 #endif  /* TRANSMITTER_H_ */

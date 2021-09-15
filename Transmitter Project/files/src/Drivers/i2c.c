@@ -275,7 +275,7 @@ uint8_t i2c_read_ack(void)
 		{
 			;
 		}
-		
+
 		return(TWDR);
 #else
 		TWCR = _BV(TWINT) | _BV(TWEN) | _BV(TWEA);
@@ -283,7 +283,7 @@ uint8_t i2c_read_ack(void)
 		{
 			;
 		}
-		
+
 		return( TWDR);
 #endif
 }
@@ -296,7 +296,7 @@ uint8_t i2c_read_nack(void)
 		{
 			;
 		}
-		
+
 		return( TWDR);
 #else
 		TWCR = _BV(TWINT) | _BV(TWEN);
@@ -304,7 +304,7 @@ uint8_t i2c_read_nack(void)
 		{
 			;
 		}
-		
+
 		return( TWDR);
 #endif
 }
@@ -333,10 +333,10 @@ BOOL i2c_status(uint8_t status)
 			{
 				return TRUE;
 			}
-		
+
 			g_i2c_access_semaphore = 0;
 		}
-	
+
 		#ifndef DEBUG_WITHOUT_I2C
 		uint8_t index = 0;
 
@@ -388,10 +388,10 @@ BOOL i2c_status(uint8_t status)
 			{
 				return TRUE;
 			}
-		
+
 			g_i2c_access_semaphore = 0;
 		}
-	
+
 		#ifndef DEBUG_WITHOUT_I2C
 		uint8_t index = 0;
 
@@ -420,7 +420,7 @@ BOOL i2c_status(uint8_t status)
 			g_i2c_access_semaphore = 1;
 			return(TRUE);
 		}
-		
+
 		if(i2c_write_success((slaveAddr | TW_READ), TW_MR_SLA_ACK))
 		{
 			g_i2c_access_semaphore = 1;
@@ -458,9 +458,24 @@ BOOL i2c_status(uint8_t status)
 }
 
 /************************************************************************/
-/* DAC081C085 Support                                                                              */
+/* MCP4552 Support  (8-bit rheostat)                                    */
 /************************************************************************/
 
+BOOL mcp4552_set_pot(uint16_t setting, uint8_t addr)
+{
+	BOOL result;
+	uint8_t byte1=0, byte2=0;
+
+	byte1 |= ((0x0100 & setting) >> 8);
+	byte2 |= (uint8_t)(setting & 0x00FF);
+	result = i2c_device_write(addr, byte1, &byte2, 1);
+
+	return result;
+}
+
+/************************************************************************/
+/* DAC081C085 Support                                                   */
+/************************************************************************/
 
 BOOL dac081c_set_dac(uint8_t setting, uint8_t addr)
 {
@@ -470,10 +485,11 @@ BOOL dac081c_set_dac(uint8_t setting, uint8_t addr)
 	byte1 |= (setting >> 4);
 	byte2 |= (setting << 4);
 	result = i2c_device_write(addr, byte1, &byte2, 1);
-	
+
 	return result;
 }
 
+#ifdef READ_DAC_SUPPORT
 #ifdef SELECTIVELY_DISABLE_OPTIMIZATION
 BOOL __attribute__((optimize("O0"))) dac081c_read_dac(uint8_t *val, uint8_t addr)
 #else
@@ -490,10 +506,10 @@ BOOL dac081c_read_dac(uint8_t *val, addr)
 		{
 			return TRUE;
 		}
-		
+
 		g_i2c_access_semaphore = 0;
 	}
-	
+
 	i2c_start();
 	if(i2c_status(TW_START))
 	{
@@ -530,7 +546,7 @@ BOOL dac081c_read_dac(uint8_t *val, addr)
 	}
 
 	i2c_stop();
-	
+
 	bytes[0] = (bytes[0] << 4);
 	bytes[0] |= (bytes[1] >> 4);
 
@@ -538,4 +554,4 @@ BOOL dac081c_read_dac(uint8_t *val, addr)
 	*val = bytes[0];
 	return(FALSE);
 }
-
+#endif // READ_DAC_SUPPORT

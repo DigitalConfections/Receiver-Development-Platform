@@ -53,9 +53,10 @@
 
 #ifdef INCLUDE_DAC081C085_SUPPORT
    #define PA_DAC DAC081C_I2C_SLAVE_ADDR_A0
-   #define AM_DAC DAC081C_I2C_SLAVE_ADDR_A1
-   #define BIAS_DAC DAC081C_I2C_SLAVE_ADDR_A2
 #endif
+
+//   #define AM_DAC DAC081C_I2C_SLAVE_ADDR_A1
+   #define BIAS_POT MCP4552_I2C_SLAVE_ADDR_A0
 
 /*******************************************************/
 /* Error Codes                                                                   */
@@ -162,7 +163,7 @@ typedef uint16_t BatteryLevel;  /* in milliVolts */
 
 /******************************************************
  * EEPROM definitions */
-#define EEPROM_INITIALIZED_FLAG 0xC4
+#define EEPROM_INITIALIZED_FLAG 0xC9
 #define EEPROM_UNINITIALIZED 0x00
 
 #define EEPROM_STATION_ID_DEFAULT "FOXBOX"
@@ -268,10 +269,14 @@ typedef enum
 #define SEND_ID_DELAY 4100
 
 /* Periodic TIMER2 interrupt timing definitions */
-#define TIMER2_57HZ 10
-#define TIMER2_20HZ 49
-#define TIMER2_5_8HZ 100
-#define TIMER2_0_5HZ 1000
+#define OCR2A_OVF_FREQ_300 0x0C
+#define OCR2A_OVF_FREQ_600 0x06
+#define OCR2A_OVF_FREQ_720 0x05
+#define OCR2A_OVF_BASE_FREQ OCR2A_OVF_FREQ_720
+#define TIMER2_57HZ (120/OCR2A_OVF_BASE_FREQ)
+#define TIMER2_20HZ (588/OCR2A_OVF_BASE_FREQ)
+#define TIMER2_5_8HZ (1200/OCR2A_OVF_BASE_FREQ)
+#define TIMER2_0_5HZ (12000/OCR2A_OVF_BASE_FREQ)
 
 #define BEEP_SHORT 100
 #define BEEP_LONG 65535

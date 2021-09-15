@@ -116,7 +116,7 @@ typedef enum
 	/* UTILITY MESSAGES */
 	MESSAGE_RESET = 'R' * 100 + 'S' * 10 + 'T',		/* Processor reset */
 	MESSAGE_WIFI = 'W' * 10 + 'I',					/* Enable/disable WiFi */
-
+	MESSAGE_BIAS = 'B',
 	INVALID_MESSAGE = UINT16_MAX					/* This value must never overlap a valid message ID */
 } LBMessageID;
 
